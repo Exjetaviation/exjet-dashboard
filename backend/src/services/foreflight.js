@@ -10,22 +10,12 @@ const ff = axios.create({
   }
 });
 
-export const getAircraft = async () => {
-  const res = await ff.get('/public/api/aircraft');
-  return res.data;
-};
-
-export const getCrew = async () => {
-  const res = await ff.get('/public/api/crew');
-  return res.data;
-};
-
-export const getFlights = async () => {
-  const res = await ff.get('/public/api/Flights/flights');
-  return res.data;
-};
-
-export const getFlight = async (flightId) => {
-  const res = await ff.get(`/public/api/Flights/${flightId}`);
-  return res.data;
-};
+export const getAircraft = async () => (await ff.get('/public/api/aircraft')).data;
+export const getCrew = async () => (await ff.get('/public/api/crew')).data;
+export const getFlights = async () => (await ff.get('/public/api/Flights/flights')).data;
+export const getFlight = async (id) => (await ff.get(`/public/api/Flights/${id}`)).data;
+export const getFlightBriefing = async (id) => (await ff.get(`/public/api/Flights/${id}/briefing`)).data;
+export const getFlightNavlog = async (id) => (await ff.get(`/public/api/Flights/${id}/navlog`)).data;
+export const getFlightWb = async (id) => (await ff.get(`/public/api/Flights/${id}/wb`)).data;
+export const getFlightOverflight = async (id) => (await ff.get(`/public/api/Flights/${id}/overflight`)).data;
+export const getFlightIcao = async (id) => (await ff.get(`/public/api/Flights/${id}/icao`)).data;
