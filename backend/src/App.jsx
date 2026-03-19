@@ -2,12 +2,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Overview from './pages/Overview';
 import Flights from './pages/Flights';
-import FlightDetail from './pages/FlightDetail';
-import Crew from './pages/Crew';
-import CrewDetail from './pages/CrewDetail';
-import Aircraft from './pages/Aircraft';
-import Clients from './pages/Clients';
-import ClientDetail from './pages/ClientDetail';
 
 export default function App() {
   return (
@@ -18,12 +12,6 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/flights" element={<Flights />} />
-            <Route path="/flights/:id" element={<FlightDetail />} />
-            <Route path="/crew" element={<Crew />} />
-            <Route path="/crew/:id" element={<CrewDetail />} />
-            <Route path="/aircraft" element={<Aircraft />} />
-            <Route path="/clients" element={<Clients />} />
-            <Route path="/clients/:id" element={<ClientDetail />} />
           </Routes>
         </main>
       </div>
