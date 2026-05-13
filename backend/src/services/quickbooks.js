@@ -36,10 +36,7 @@ const qbFetch = async (path, params = {}) => {
   const qs = new URLSearchParams({ minorversion: '65', ...params }).toString();
   const url = `https://quickbooks.api.intuit.com/v3/company/${realmId}/${path}?${qs}`;
   const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-    },
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
   if (!res.ok) {
     const text = await res.text();
@@ -64,17 +61,11 @@ export const getOutstandingInvoices = async () => {
 };
 
 export const getRevenueByCustomer = async (startDate, endDate) => {
-  return qbFetch('reports/CustomerSales', {
-    start_date: startDate,
-    end_date: endDate,
-  });
+  return qbFetch('reports/CustomerSales', { start_date: startDate, end_date: endDate });
 };
 
 export const getExpensesByVendor = async (startDate, endDate) => {
-  return qbFetch('reports/VendorExpenses', {
-    start_date: startDate,
-    end_date: endDate,
-  });
+  return qbFetch('reports/VendorExpenses', { start_date: startDate, end_date: endDate });
 };
 
 export const getAccountBalances = async () => {
@@ -82,22 +73,6 @@ export const getAccountBalances = async () => {
     query: `SELECT * FROM Account WHERE AccountType = 'Bank' MAXRESULTS 20`,
   });
   return data.QueryResponse?.Account || [];
-};
-
-export const getPLByClass = async (startDate, endDate) => {
-  return qbFetch('reports/ProfitAndLoss', {
-    start_date: startDate,
-    end_date: endDate,
-    summarize_column_by: 'Class',
-    accounting_method: 'Accrual',
-  });
-};
-
-export const getClassList = async () => {
-  const data = await qbFetch('query', {
-    query: `SELECT * FROM Class WHERE Active = true MAXRESULTS 20`,
-  });
-  return data.QueryResponse?.Class || [];
 };
 
 export const getClassList = async () => {
