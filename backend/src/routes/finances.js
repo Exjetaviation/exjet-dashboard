@@ -29,7 +29,6 @@ router.get('/summary', async (req, res) => {
     const today = now.toISOString().split('T')[0];
     const lastYearStart = `${now.getFullYear() - 1}-01-01`;
     const lastYearEnd = `${now.getFullYear() - 1}-12-31`;
-
     const AIRCRAFT = ['N69FP', 'N408JS'];
 
     const [plThis, plLast, invoices, customers, expenses, accounts, ...txResults] = await Promise.allSettled([
@@ -45,11 +44,6 @@ router.get('/summary', async (req, res) => {
     const byClass = txResults.map((r, i) => ({
       name: AIRCRAFT[i],
       transactions: r.status === 'fulfilled' ? r.value : { error: r.reason?.message },
-    }));
-
-    const byClass = classResults.map((r, i) => ({
-      name: AIRCRAFT[i],
-      pl: r.status === 'fulfilled' ? r.value : { error: r.reason?.message },
     }));
 
     res.json({
