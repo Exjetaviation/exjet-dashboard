@@ -26,44 +26,49 @@ const parseTransactions = (txData) => {
   const rows = txData?.Rows?.Row || [];
   const cols = txData?.Columns?.Column || [];
 
-  const getColIdx = (key) => cols.findIndex(c => c.MetaData?.[0]?.Value === key);
-  const dateIdx    = getColIdx('tx_date');
-  const typeIdx    = getColIdx('txn_type');
-  const accountIdx = getColIdx('account_name');
-  const creditIdx  = getColIdx('credit_amt');
-  const debitIdx   = getColIdx('debit_amt');
-
   let revenue = 0, fuel = 0, crew = 0, landing = 0, maintenance = 0, totalExpenses = 0;
   const expenseMap = {};
   const monthlyMap = {};
 
   rows.forEach(row => {
     if (!row.ColData) return;
-    const credit  = parseFloat(row.ColData[creditIdx]?.value || 0);
-    const debit   = parseFloat(row.ColData[debitIdx]?.value  || 0);
-    const account = row.ColData[accountIdx]?.value || '';
-    const txType  = row.ColData[typeIdx]?.value    || '';
-    const date    = row.ColData[dateIdx]?.value    || '';
-    const month   = date.slice(0, 7);
-    const amount  = credit > 0 ? credit : debit;
+    const data = row.ColData;
 
+    let date = '', txType = '', account = '', credit = 0, debit = 0;
+
+    cols.forEach((col, i) => {
+      const key = col.MetaData?.[0]?.Value || '';
+      const val = data[i]?.value || '';
+      if (key === 'tx_date')    date    = val;
+      if (key === 'txn_type')   txType  = val;
+      if (key === 'account_name') account = val;
+      if (key === 'credit_amt') credit  = parseFloat(val) || 0;
+      if (key === 'debit_amt')  debit   = parseFloat(val) || 0;
+    });
+
+    const month = date.slice(0, 7);
     if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, expenses: 0 };
 
-    const isIncome = txType === 'Invoice' || txType === 'Sales Receipt' || account.toLowerCase().includes('income') || account.toLowerCase().includes('charter sales');
-    const isExpense = txType === 'Bill' || txType === 'Check' || txType === 'Expense' || txType === 'Credit Card Expense';
+    const accLower = account.toLowerCase();
+    const isIncome = txType === 'Invoice' || txType === 'Sales Receipt' || accLower.includes('charter sales') || accLower.includes('income');
+    const isExpense = ['Bill', 'Check', 'Expense', 'Credit Card Expense', 'Credit Card Credit'].includes(txType);
 
     if (isIncome && credit > 0) {
       revenue += credit;
       monthlyMap[month].revenue += credit;
-    } else if (isExpense && debit > 0) {
-      totalExpenses += debit;
-      monthlyMap[month].expenses += debit;
-      expenseMap[account] = (expenseMap[account] || 0) + debit;
-      const acc = account.toLowerCase();
-      if (acc.includes('fuel'))        fuel        += debit;
-      else if (acc.includes('crew') || acc.includes('pilot') || acc.includes('flight attendant')) crew += debit;
-      else if (acc.includes('landing') || acc.includes('ramp')) landing     += debit;
-      else if (acc.includes('repair') || acc.includes('maintenance') || acc.includes('parts'))   maintenance += debit;
+    }
+
+    if (isExpense) {
+      const amount = debit > 0 ? debit : credit;
+      if (amount > 0) {
+        totalExpenses += amount;
+        monthlyMap[month].expenses += amount;
+        expenseMap[account] = (expenseMap[account] || 0) + amount;
+        if (accLower.includes('fuel'))                                       fuel        += amount;
+        else if (accLower.includes('crew') || accLower.includes('pilot') || accLower.includes('flight attendant') || accLower.includes('co-pilot')) crew += amount;
+        else if (accLower.includes('landing') || accLower.includes('ramp'))  landing     += amount;
+        else if (accLower.includes('repair') || accLower.includes('maintenance') || accLower.includes('parts')) maintenance += amount;
+      }
     }
   });
 
@@ -74,22 +79,23 @@ const parseTransactions = (txData) => {
 
   const monthly = Object.entries(monthlyMap)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, vals]) => ({ month, ...vals }));
+    .map(([month, vals]) => ({ month, revenue: Math.round(vals.revenue), expenses: Math.round(vals.expenses) }));
 
   const net = revenue - totalExpenses;
   const margin = revenue > 0 ? Math.round((net / revenue) * 100) : 0;
 
   return {
-    revenue:      Math.round(revenue),
+    revenue:       Math.round(revenue),
     totalExpenses: Math.round(totalExpenses),
-    fuel:         Math.round(fuel),
-    crew:         Math.round(crew),
-    landing:      Math.round(landing),
-    maintenance:  Math.round(maintenance),
-    net:          Math.round(net),
+    fuel:          Math.round(fuel),
+    crew:          Math.round(crew),
+    landing:       Math.round(landing),
+    maintenance:   Math.round(maintenance),
+    net:           Math.round(net),
     margin,
     expenseBreakdown,
     monthly,
+    txCount: rows.length,
   };
 };
 
