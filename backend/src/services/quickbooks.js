@@ -89,5 +89,28 @@ export const getPLByClass = async (startDate, endDate) => {
     start_date: startDate,
     end_date: endDate,
     summarize_column_by: 'Class',
+    accounting_method: 'Accrual',
+  });
+};
+
+export const getClassList = async () => {
+  const data = await qbFetch('query', {
+    query: `SELECT * FROM Class WHERE Active = true MAXRESULTS 20`,
+  });
+  return data.QueryResponse?.Class || [];
+};
+
+export const getClassList = async () => {
+  const data = await qbFetch('query', {
+    query: `SELECT * FROM Class WHERE Active = true MAXRESULTS 20`,
+  });
+  return data.QueryResponse?.Class || [];
+};
+
+export const getPLForClass = async (startDate, endDate, className) => {
+  return qbFetch('reports/ProfitAndLoss', {
+    start_date: startDate,
+    end_date: endDate,
+    class_name: className,
   });
 };
