@@ -83,3 +83,11 @@ export const getAccountBalances = async () => {
   });
   return data.QueryResponse?.Account || [];
 };
+
+export const getPLByClass = async (startDate, endDate) => {
+  return qbFetch('reports/ProfitAndLoss', {
+    start_date: startDate,
+    end_date: endDate,
+    summarize_column_by: 'Class',
+  });
+};
