@@ -3,7 +3,7 @@ import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
-  getAccountBalances, getClassList, getPLForClass
+  getAccountBalances, getPLForClass
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -30,25 +30,22 @@ router.get('/summary', async (req, res) => {
     const lastYearStart = `${now.getFullYear() - 1}-01-01`;
     const lastYearEnd = `${now.getFullYear() - 1}-12-31`;
 
-    const [plThis, plLast, invoices, customers, expenses, accounts, classes] = await Promise.allSettled([
+    const AIRCRAFT = ['N69FP', 'N408JS'];
+
+    const [plThis, plLast, invoices, customers, expenses, accounts, ...classResults] = await Promise.allSettled([
       getProfitAndLoss(startOfYear, today),
       getProfitAndLoss(lastYearStart, lastYearEnd),
       getOutstandingInvoices(),
       getRevenueByCustomer(startOfYear, today),
       getExpensesByVendor(startOfYear, today),
       getAccountBalances(),
-      getClassList(),
+      ...AIRCRAFT.map(name => getPLForClass(startOfYear, today, name)),
     ]);
 
-    const classList = classes.status === 'fulfilled' ? classes.value : [];
-
-    const byClassResults = await Promise.allSettled(
-      classList.map(c => getPLForClass(startOfYear, today, c.Name).then(pl => ({ name: c.Name, id: c.Id, pl })))
-    );
-
-    const byClass = byClassResults
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value);
+    const byClass = classResults.map((r, i) => ({
+      name: AIRCRAFT[i],
+      pl: r.status === 'fulfilled' ? r.value : { error: r.reason?.message },
+    }));
 
     res.json({
       profitAndLoss:   plThis.status    === 'fulfilled' ? plThis.value    : { error: plThis.reason?.message },
@@ -57,7 +54,6 @@ router.get('/summary', async (req, res) => {
       customers:       customers.status === 'fulfilled' ? customers.value : { error: customers.reason?.message },
       expenses:        expenses.status  === 'fulfilled' ? expenses.value  : { error: expenses.reason?.message },
       accounts:        accounts.status  === 'fulfilled' ? accounts.value  : [],
-      classes:         classList,
       byClass,
     });
   } catch (err) {
