@@ -27,3 +27,4 @@ app.use('/api/finances', financesRoutes);
 app.use('/api/test', testRoutes);
 
 app.listen(PORT, () => console.log(`Exjet backend listening on port ${PORT}`));
+// force redeploy Wed May 13 15:35:00 EDT 2026
