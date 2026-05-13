@@ -104,3 +104,11 @@ export const getInvoicesByClass = async (startDate, endDate) => {
   });
   return data.QueryResponse?.Invoice || [];
 };
+export const getGeneralLedger = async (startDate, endDate, className) => {
+  return qbFetch('reports/GeneralLedger', {
+    start_date: startDate,
+    end_date: endDate,
+    filter_class: className,
+    account_type: 'Income,Expense',
+  });
+};
