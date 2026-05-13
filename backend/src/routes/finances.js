@@ -1,4 +1,4 @@
-
+cat > src/routes/finances.js << 'EOF'
 import express from 'express';
 import {
   getAuthUrl, getTokensFromCode,
