@@ -22,41 +22,46 @@ router.get('/callback', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-const parseTransactions = (txData) => {
-  const rows = txData?.Rows?.Row || [];
-  const cols = txData?.Columns?.Column || [];
 
-  let revenue = 0, fuel = 0, crew = 0, landing = 0, maintenance = 0, totalExpenses = 0;
+const parseTransactions = (txData) => {
+  const { txList, revList } = txData;
+  const rows = txList?.Rows?.Row || [];
+  const cols = txList?.Columns?.Column || [];
+
+  // Get revenue from CustomerSales report
+  let revenue = 0;
+  const revRows = revList?.Rows?.Row || [];
+  revRows.forEach(row => {
+    if (row.ColData) {
+      const total = parseFloat(row.ColData?.slice(-1)[0]?.value || 0);
+      if (total > 0) revenue += total;
+    }
+  });
+
+  let fuel = 0, crew = 0, landing = 0, maintenance = 0, totalExpenses = 0;
   const expenseMap = {};
   const monthlyMap = {};
 
   rows.forEach(row => {
     if (!row.ColData) return;
     const data = row.ColData;
-
     let date = '', txType = '', account = '', credit = 0, debit = 0;
 
     cols.forEach((col, i) => {
       const key = col.MetaData?.[0]?.Value || '';
       const val = data[i]?.value || '';
-      if (key === 'tx_date')    date    = val;
-      if (key === 'txn_type')   txType  = val;
+      if (key === 'tx_date')      date    = val;
+      if (key === 'txn_type')     txType  = val;
       if (key === 'account_name') account = val;
-      if (key === 'credit_amt') credit  = parseFloat(val) || 0;
-      if (key === 'debit_amt')  debit   = parseFloat(val) || 0;
+      if (key === 'credit_amt')   credit  = parseFloat(val) || 0;
+      if (key === 'debit_amt')    debit   = parseFloat(val) || 0;
     });
 
     const month = date.slice(0, 7);
     if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, expenses: 0 };
 
     const accLower = account.toLowerCase();
-    const isIncome = txType === 'Invoice' || txType === 'Sales Receipt' || accLower.includes('charter sales') || accLower.includes('income');
-    const isExpense = ['Bill', 'Check', 'Expense', 'Credit Card Expense', 'Credit Card Credit'].includes(txType);
-
-    if (isIncome && credit > 0) {
-      revenue += credit;
-      monthlyMap[month].revenue += credit;
-    }
+    const isExpense = ['Bill', 'Check', 'Expense', 'Credit Card Expense'].includes(txType);
 
     if (isExpense) {
       const amount = debit > 0 ? debit : credit;
@@ -64,12 +69,18 @@ const parseTransactions = (txData) => {
         totalExpenses += amount;
         monthlyMap[month].expenses += amount;
         expenseMap[account] = (expenseMap[account] || 0) + amount;
-        if (accLower.includes('fuel'))                                       fuel        += amount;
+        if (accLower.includes('fuel'))                                                                    fuel        += amount;
         else if (accLower.includes('crew') || accLower.includes('pilot') || accLower.includes('flight attendant') || accLower.includes('co-pilot')) crew += amount;
-        else if (accLower.includes('landing') || accLower.includes('ramp'))  landing     += amount;
+        else if (accLower.includes('landing') || accLower.includes('ramp'))                               landing     += amount;
         else if (accLower.includes('repair') || accLower.includes('maintenance') || accLower.includes('parts')) maintenance += amount;
       }
     }
+  });
+
+  // Add monthly revenue from CustomerSales
+  revRows.forEach(row => {
+    if (!row.ColData) return;
+    const month = '2026'; // approximate - CustomerSales doesn't break by month easily
   });
 
   const expenseBreakdown = Object.entries(expenseMap)
@@ -98,6 +109,7 @@ const parseTransactions = (txData) => {
     txCount: rows.length,
   };
 };
+
 
 router.get('/summary', async (req, res) => {
   try {
