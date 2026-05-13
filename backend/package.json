@@ -7,12 +7,17 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "*",
     "axios": "*",
     "cors": "*",
     "dotenv": "*",
-    "express": "*"
+    "express": "*",
+    "googleapis": "*",
+    "intuit-oauth": "^4.2.3",
+    "node-quickbooks": "^2.0.50",
+    "simple-statistics": "*"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "*"
   }
 }
