@@ -77,7 +77,7 @@ export const getAccountBalances = async () => {
 
 export const getClassList = async () => {
   const data = await qbFetch('query', {
-    query: `SELECT * FROM Class WHERE Active = true MAXRESULTS 20`,
+    query: `SELECT * FROM Class MAXRESULTS 20`,
   });
   return data.QueryResponse?.Class || [];
 };
