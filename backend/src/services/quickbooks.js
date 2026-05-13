@@ -82,10 +82,17 @@ export const getClassList = async () => {
   return data.QueryResponse?.Class || [];
 };
 
-export const getPLForClass = async (startDate, endDate, className) => {
-  return qbFetch('reports/ProfitAndLoss', {
+export const getTransactionsByClass = async (startDate, endDate, className) => {
+  return qbFetch('reports/TransactionList', {
     start_date: startDate,
     end_date: endDate,
-    class_name: className,
+    columns: 'tx_date,txn_type,credit_amt,debit_amt,account_name,klass_name',
+    filter_class: className,
   });
+};
+export const getInvoicesByClass = async (startDate, endDate) => {
+  const data = await qbFetch('query', {
+    query: `SELECT * FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}' MAXRESULTS 200`,
+  });
+  return data.QueryResponse?.Invoice || [];
 };

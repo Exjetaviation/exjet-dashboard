@@ -16,14 +16,13 @@ const getMonthlyData = (pl) => {
   if (!pl?.Columns?.Column) return [];
   const cols = pl.Columns.Column.filter(c => c.ColType === 'Money');
   const incomeRow = pl.Rows?.Row?.find(r => r.group === 'Income');
-  const cogsRow = pl.Rows?.Row?.find(r => r.group === 'COGS');
-  const netRow = pl.Rows?.Row?.find(r => r.group === 'NetIncome');
-
+  const cogsRow   = pl.Rows?.Row?.find(r => r.group === 'COGS');
+  const netRow    = pl.Rows?.Row?.find(r => r.group === 'NetIncome');
   return cols.filter(c => c.ColTitle !== 'Total').map((col, i) => ({
-    month: col.ColTitle,
+    month:   col.ColTitle,
     revenue: parseFloat(incomeRow?.Summary?.ColData?.[i + 1]?.value || 0),
-    cogs: parseFloat(cogsRow?.Summary?.ColData?.[i + 1]?.value || 0),
-    net: parseFloat(netRow?.Summary?.ColData?.[i + 1]?.value || 0),
+    cogs:    parseFloat(cogsRow?.Summary?.ColData?.[i + 1]?.value   || 0),
+    net:     parseFloat(netRow?.Summary?.ColData?.[i + 1]?.value    || 0),
   }));
 };
 
@@ -32,22 +31,19 @@ const getExpenseBreakdown = (pl) => {
   const cogsSection = pl.Rows.Row.find(r => r.group === 'COGS');
   const expSection  = pl.Rows.Row.find(r => r.group === 'Expenses');
   const items = [];
-
   const addRows = (section) => {
-    const rows = section?.Rows?.Row || [];
-    rows.forEach(row => {
+    (section?.Rows?.Row || []).forEach(row => {
       if (row.type === 'Data') {
-        const name = row.ColData?.[0]?.value;
+        const name  = row.ColData?.[0]?.value;
         const total = parseFloat(row.ColData?.slice(-1)[0]?.value || 0);
         if (name && total > 0) items.push({ name, total });
       } else if (row.type === 'Section') {
-        const name = row.Header?.ColData?.[0]?.value;
+        const name  = row.Header?.ColData?.[0]?.value;
         const total = parseFloat(row.Summary?.ColData?.slice(-1)[0]?.value || 0);
         if (name && total > 0) items.push({ name, total });
       }
     });
   };
-
   addRows(cogsSection);
   addRows(expSection);
   return items.sort((a, b) => b.total - a.total).slice(0, 10);
@@ -56,10 +52,10 @@ const getExpenseBreakdown = (pl) => {
 const BAR_COLORS = ['#4f8ef7','#22c55e','#a855f7','#f59e0b','#ef4444','#06b6d4','#f97316','#84cc16','#ec4899','#8b5cf6'];
 
 export default function Finances() {
-  const [data, setData]       = useState(null);
+  const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [tab, setTab]         = useState('overview');
+  const [error, setError]   = useState(null);
+  const [tab, setTab]       = useState('overview');
 
   useEffect(() => {
     fetch(`${BASE_URL}/api/finances/summary`)
@@ -81,13 +77,13 @@ export default function Finances() {
   const totalExpenses = getSection(rows, 'Expenses');
   const netIncome     = getSection(rows, 'NetIncome');
 
-  const lyRows       = plLY?.Rows?.Row || [];
-  const lyRevenue    = getSection(lyRows, 'Income');
-  const lyNetIncome  = getSection(lyRows, 'NetIncome');
+  const lyRows      = plLY?.Rows?.Row || [];
+  const lyRevenue   = getSection(lyRows, 'Income');
+  const lyNetIncome = getSection(lyRows, 'NetIncome');
 
-  const monthlyData  = getMonthlyData(pl);
-  const expenses     = getExpenseBreakdown(pl);
-  const customers    = data?.customers?.Rows?.Row?.filter(r => r.ColData)
+  const monthlyData = getMonthlyData(pl);
+  const expenses    = getExpenseBreakdown(pl);
+  const customers   = data?.customers?.Rows?.Row?.filter(r => r.ColData)
     .map(r => ({ name: r.ColData[0]?.value, total: parseFloat(r.ColData[1]?.value || 0) }))
     .filter(c => c.total > 0)
     .sort((a, b) => b.total - a.total) || [];
@@ -114,8 +110,8 @@ export default function Finances() {
             Live data from QuickBooks · {new Date().getFullYear()} YTD
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {['overview', 'expenses', 'clients', 'monthly'].map(t => (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {['overview', 'monthly', 'expenses', 'clients', 'aircraft'].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
               padding: '7px 14px', fontSize: '13px', fontWeight: tab === t ? '600' : '400',
               background: tab === t ? 'var(--accent)' : 'var(--bg-card)',
@@ -127,55 +123,41 @@ export default function Finances() {
         </div>
       </div>
 
-      {/* Summary stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-        {statCard('Total Revenue', totalRevenue, `vs ${fmt$(lyRevenue)} last year`, '#4f8ef7')}
-        {statCard('Gross Profit', grossProfit, `After direct costs`, '#22c55e')}
-        {statCard('Net Income', netIncome, `vs ${fmt$(lyNetIncome)} last year`, parseFloat(netIncome) >= 0 ? '#22c55e' : '#ef4444')}
+        {statCard('Total Revenue',  totalRevenue,  `vs ${fmt$(lyRevenue)} last year`, '#4f8ef7')}
+        {statCard('Gross Profit',   grossProfit,   'After direct costs', '#22c55e')}
+        {statCard('Net Income',     netIncome,     `vs ${fmt$(lyNetIncome)} last year`, parseFloat(netIncome) >= 0 ? '#22c55e' : '#ef4444')}
         {statCard('Total Expenses', totalExpenses, 'Operating expenses', '#f59e0b')}
-        {statCard('Cost of Goods', totalCOGS, 'Fuel, crew, landing fees', '#a855f7')}
+        {statCard('Cost of Goods',  totalCOGS,     'Fuel, crew, landing fees', '#a855f7')}
       </div>
 
       {tab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-
-          {/* YOY comparison */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
             <p style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', margin: '0 0 16px' }}>Year over Year</p>
-            {[
-              ['Revenue', totalRevenue, lyRevenue, '#4f8ef7'],
-              ['Net Income', netIncome, lyNetIncome, '#22c55e'],
-            ].map(([label, thisY, lastY, color]) => {
+            {[['Revenue', totalRevenue, lyRevenue, '#4f8ef7'], ['Net Income', netIncome, lyNetIncome, '#22c55e']].map(([label, thisY, lastY, color]) => {
               const diff = parseFloat(thisY) - parseFloat(lastY);
               const pct  = parseFloat(lastY) !== 0 ? ((diff / Math.abs(parseFloat(lastY))) * 100).toFixed(1) : 'N/A';
+              const maxVal = Math.max(Math.abs(parseFloat(thisY)), Math.abs(parseFloat(lastY)));
               return (
                 <div key={label} style={{ marginBottom: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{label}</span>
-                    <span style={{ fontSize: '12px', color: diff >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: '600' }}>
-                      {diff >= 0 ? '▲' : '▼'} {pct}%
-                    </span>
+                    <span style={{ fontSize: '12px', color: diff >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: '600' }}>{diff >= 0 ? '▲' : '▼'} {pct}%</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '40px' }}>2025</span>
-                    <div style={{ flex: 1, height: '8px', background: 'var(--border)', borderRadius: '4px' }}>
-                      <div style={{ width: `${Math.min(Math.abs(parseFloat(lastY)) / Math.max(Math.abs(parseFloat(thisY)), Math.abs(parseFloat(lastY))) * 100, 100)}%`, height: '100%', background: 'var(--border)', borderRadius: '4px' }} />
+                  {[['2025', lastY, 'var(--border)'], ['2026', thisY, color]].map(([yr, val, clr]) => (
+                    <div key={yr} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '40px' }}>{yr}</span>
+                      <div style={{ flex: 1, height: '8px', background: 'var(--border)', borderRadius: '4px' }}>
+                        <div style={{ width: `${Math.min(Math.abs(parseFloat(val)) / maxVal * 100, 100)}%`, height: '100%', background: clr, borderRadius: '4px' }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: clr === 'var(--border)' ? 'var(--text-secondary)' : clr, fontWeight: '600', width: '80px', textAlign: 'right' }}>{fmt$(val)}</span>
                     </div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '80px', textAlign: 'right' }}>{fmt$(lastY)}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '40px' }}>2026</span>
-                    <div style={{ flex: 1, height: '8px', background: 'var(--border)', borderRadius: '4px' }}>
-                      <div style={{ width: `${Math.min(Math.abs(parseFloat(thisY)) / Math.max(Math.abs(parseFloat(thisY)), Math.abs(parseFloat(lastY))) * 100, 100)}%`, height: '100%', background: color, borderRadius: '4px' }} />
-                    </div>
-                    <span style={{ fontSize: '12px', color, fontWeight: '600', width: '80px', textAlign: 'right' }}>{fmt$(thisY)}</span>
-                  </div>
+                  ))}
                 </div>
               );
             })}
           </div>
-
-          {/* Top expenses */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
             <p style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', margin: '0 0 16px' }}>Top Expense Categories</p>
             {expenses.slice(0, 6).map((e, i) => (
@@ -208,14 +190,8 @@ export default function Finances() {
             ))}
           </div>
           <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '10px', height: '10px', background: '#4f8ef7', borderRadius: '2px' }} />
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Revenue</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '2px' }} />
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Net Income</span>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', background: '#4f8ef7', borderRadius: '2px' }} /><span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Revenue</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '2px' }} /><span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Net Income</span></div>
           </div>
           <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {monthlyData.map((m, i) => (
@@ -258,6 +234,74 @@ export default function Finances() {
               <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent)', width: '100px', textAlign: 'right' }}>{fmt$(c.total)}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'aircraft' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {(data?.byClass || []).map(ac => {
+            const acRows      = ac.pl?.Rows?.Row || [];
+            const acRevenue   = getSection(acRows, 'Income');
+            const acCogs      = getSection(acRows, 'COGS');
+            const acGross     = getSection(acRows, 'GrossProfit');
+            const acExpenses  = getSection(acRows, 'Expenses');
+            const acNet       = getSection(acRows, 'NetIncome');
+            const margin      = parseFloat(acRevenue) > 0 ? Math.round((parseFloat(acNet) / parseFloat(acRevenue)) * 100) : 0;
+
+            const expItems = [];
+            const addRows = (section) => {
+              (section?.Rows?.Row || []).forEach(row => {
+                if (row.type === 'Data') {
+                  const name  = row.ColData?.[0]?.value;
+                  const total = parseFloat(row.ColData?.slice(-1)[0]?.value || 0);
+                  if (name && total > 0) expItems.push({ name, total });
+                } else if (row.type === 'Section') {
+                  const name  = row.Header?.ColData?.[0]?.value;
+                  const total = parseFloat(row.Summary?.ColData?.slice(-1)[0]?.value || 0);
+                  if (name && total > 0) expItems.push({ name, total });
+                }
+              });
+            };
+            addRows(acRows.find(r => r.group === 'COGS'));
+            addRows(acRows.find(r => r.group === 'Expenses'));
+            expItems.sort((a, b) => b.total - a.total);
+            const maxExp = Math.max(...expItems.map(e => e.total), 1);
+
+            return (
+              <div key={ac.name} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)' }}>{ac.name}</span>
+                    <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: parseFloat(acNet) >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: parseFloat(acNet) >= 0 ? 'var(--success)' : 'var(--danger)', border: `1px solid ${parseFloat(acNet) >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, fontWeight: '600' }}>
+                      {margin}% margin
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>YTD {new Date().getFullYear()}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                  {[['Revenue', acRevenue, '#4f8ef7'], ['Gross Profit', acGross, '#22c55e'], ['Net Income', acNet, parseFloat(acNet) >= 0 ? '#22c55e' : '#ef4444'], ['Direct Costs', acCogs, '#f59e0b'], ['Operating Exp', acExpenses, '#a855f7']].map(([label, value, color]) => (
+                    <div key={label} style={{ padding: '14px 18px', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                      <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+                      <p style={{ fontSize: '18px', fontWeight: '700', color, margin: 0 }}>{fmt$(value)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Expense breakdown</p>
+                  {expItems.slice(0, 8).map((e, i) => (
+                    <div key={e.name} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: BAR_COLORS[i % BAR_COLORS.length], flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: '12px', color: 'var(--text-secondary)' }}>{e.name}</span>
+                      <div style={{ width: '100px', height: '5px', background: 'var(--border)', borderRadius: '3px' }}>
+                        <div style={{ width: `${(e.total / maxExp) * 100}%`, height: '100%', background: BAR_COLORS[i % BAR_COLORS.length], borderRadius: '3px' }} />
+                      </div>
+                      <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', width: '80px', textAlign: 'right' }}>{fmt$(e.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

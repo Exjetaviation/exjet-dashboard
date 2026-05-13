@@ -3,7 +3,7 @@ import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
-  getAccountBalances, getPLForClass
+  getAccountBalances, getTransactionsByClass
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -32,15 +32,20 @@ router.get('/summary', async (req, res) => {
 
     const AIRCRAFT = ['N69FP', 'N408JS'];
 
-    const [plThis, plLast, invoices, customers, expenses, accounts, ...classResults] = await Promise.allSettled([
+    const [plThis, plLast, invoices, customers, expenses, accounts, ...txResults] = await Promise.allSettled([
       getProfitAndLoss(startOfYear, today),
       getProfitAndLoss(lastYearStart, lastYearEnd),
       getOutstandingInvoices(),
       getRevenueByCustomer(startOfYear, today),
       getExpensesByVendor(startOfYear, today),
       getAccountBalances(),
-      ...AIRCRAFT.map(name => getPLForClass(startOfYear, today, name)),
+      ...AIRCRAFT.map(name => getTransactionsByClass(startOfYear, today, name)),
     ]);
+
+    const byClass = txResults.map((r, i) => ({
+      name: AIRCRAFT[i],
+      transactions: r.status === 'fulfilled' ? r.value : { error: r.reason?.message },
+    }));
 
     const byClass = classResults.map((r, i) => ({
       name: AIRCRAFT[i],
