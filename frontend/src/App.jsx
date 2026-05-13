@@ -13,18 +13,14 @@ import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
 import RateCards from './pages/RateCards';
 import Quotes from './pages/Quotes';
+import Finances from './pages/Finances';
 
 export default function App() {
   return (
     <BrowserRouter>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
         <Sidebar />
-        <main style={{
-          marginLeft: '220px', flex: 1, padding: '32px',
-          minHeight: '100vh', background: 'var(--bg-primary)',
-          overflowX: 'hidden', maxWidth: 'calc(100vw - 220px)',
-          boxSizing: 'border-box',
-        }}>
+        <main style={{ marginLeft: '220px', flex: 1, padding: '32px', minHeight: '100vh', background: 'var(--bg-primary)', overflowX: 'hidden', maxWidth: 'calc(100vw - 220px)', boxSizing: 'border-box' }}>
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/map" element={<Map />} />
@@ -38,6 +34,7 @@ export default function App() {
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/rate-cards" element={<RateCards />} />
             <Route path="/quotes" element={<Quotes />} />
+            <Route path="/finances" element={<Finances />} />
           </Routes>
         </main>
         <Assistant />

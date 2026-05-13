@@ -2,7 +2,8 @@ import express from 'express';
 import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
-  getRevenueByCustomer, getExpensesByVendor, getAccountBalances
+  getRevenueByCustomer, getExpensesByVendor,
+  getAccountBalances, getPLByClass
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -18,8 +19,9 @@ router.get('/auth-url', (req, res) => {
 
 router.get('/callback', async (req, res) => {
   try {
-    const fullUrl = `${process.env.QB_REDIRECT_URI}${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`;
-    const tokens = await getTokensFromCode(`https://exjet-dashboard-production.up.railway.app/api/finances/callback${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`);
+    const tokens = await getTokensFromCode(
+      `https://exjet-dashboard-production.up.railway.app/api/finances/callback${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`
+    );
     const realmId = req.query.realmId;
     res.json({
       message: 'Copy these to your Railway variables',
@@ -39,13 +41,14 @@ router.get('/summary', async (req, res) => {
     const lastYearStart = `${now.getFullYear() - 1}-01-01`;
     const lastYearEnd = `${now.getFullYear() - 1}-12-31`;
 
-    const [plThis, plLast, invoices, customers, expenses, accounts] = await Promise.allSettled([
+    const [plThis, plLast, invoices, customers, expenses, accounts, byClass] = await Promise.allSettled([
       getProfitAndLoss(startOfYear, today),
       getProfitAndLoss(lastYearStart, lastYearEnd),
       getOutstandingInvoices(),
       getRevenueByCustomer(startOfYear, today),
       getExpensesByVendor(startOfYear, today),
       getAccountBalances(),
+      getPLByClass(startOfYear, today),
     ]);
 
     res.json({
@@ -55,6 +58,7 @@ router.get('/summary', async (req, res) => {
       customers:       customers.status === 'fulfilled' ? customers.value : { error: customers.reason?.message },
       expenses:        expenses.status  === 'fulfilled' ? expenses.value  : { error: expenses.reason?.message },
       accounts:        accounts.status  === 'fulfilled' ? accounts.value  : [],
+      byClass:         byClass.status   === 'fulfilled' ? byClass.value   : { error: byClass.reason?.message },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
