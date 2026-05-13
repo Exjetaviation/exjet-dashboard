@@ -83,12 +83,20 @@ export const getClassList = async () => {
 };
 
 export const getTransactionsByClass = async (startDate, endDate, className) => {
-  return qbFetch('reports/TransactionList', {
-    start_date: startDate,
-    end_date: endDate,
-    columns: 'tx_date,txn_type,credit_amt,debit_amt,account_name,klass_name',
-    filter_class: className,
-  });
+  const [txList, revList] = await Promise.all([
+    qbFetch('reports/TransactionList', {
+      start_date: startDate,
+      end_date: endDate,
+      columns: 'tx_date,txn_type,credit_amt,debit_amt,account_name,klass_name',
+      filter_class: className,
+    }),
+    qbFetch('reports/CustomerSales', {
+      start_date: startDate,
+      end_date: endDate,
+      filter_class: className,
+    }),
+  ]);
+  return { txList, revList };
 };
 export const getInvoicesByClass = async (startDate, endDate) => {
   const data = await qbFetch('query', {
