@@ -1,11 +1,20 @@
+
 import express from 'express';
 import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
-  getAccountBalances, getTransactionsByClass
+  getAccountBalances, getGeneralLedger
 } from '../services/quickbooks.js';
-
+router.get('/gl-test', async (req, res) => {
+  try {
+    const now = new Date();
+    const result = await getGeneralLedger(`${now.getFullYear()}-01-01`, now.toISOString().split('T')[0], 'N69FP');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 const router = express.Router();
 
 router.get('/auth-url', (req, res) => {

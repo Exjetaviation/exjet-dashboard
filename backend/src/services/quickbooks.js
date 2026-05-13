@@ -109,6 +109,5 @@ export const getGeneralLedger = async (startDate, endDate, className) => {
     start_date: startDate,
     end_date: endDate,
     filter_class: className,
-    account_type: 'Income,Expense',
   });
 };
