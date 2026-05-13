@@ -1,5 +1,6 @@
 import { useApi } from '../hooks/useApi';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 
 const STATUS_MAP = {
   0: { label: 'Scheduled', color: '#4f8ef7' },
@@ -29,18 +30,50 @@ const getStatus = (status) => {
   );
 };
 
+const COLUMNS = [
+  { key: 'date', label: 'Date', sortFn: (a, b) => (a.departure?.time || 0) - (b.departure?.time || 0) },
+  { key: 'route', label: 'Route', sortFn: (a, b) => (a.departure?.airport || '').localeCompare(b.departure?.airport || '') },
+  { key: 'aircraft', label: 'Aircraft', sortFn: (a, b) => (a.dispatch?.aircraft?.tailNumber || '').localeCompare(b.dispatch?.aircraft?.tailNumber || '') },
+  { key: 'flightTime', label: 'Flight Time', sortFn: (a, b) => (a._calc?._minutes || 0) - (b._calc?._minutes || 0) },
+  { key: 'pilots', label: 'Pilots', sortFn: null },
+  { key: 'pax', label: 'Pax', sortFn: (a, b) => (a.passengerCount || 0) - (b.passengerCount || 0) },
+  { key: 'client', label: 'Client', sortFn: (a, b) => (a.dispatch?.client?.company?.name || '').localeCompare(b.dispatch?.client?.company?.name || '') },
+  { key: 'status', label: 'Status', sortFn: (a, b) => (a.status || 0) - (b.status || 0) },
+];
+
 export default function Flights() {
   const { data, loading, error } = useApi('/api/levelflight/legs');
   const navigate = useNavigate();
+  const [sortKey, setSortKey] = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
+
   const legs = data?.legs || [];
-  const sorted = [...legs].sort((a, b) => (a.departure?.time || 0) - (b.departure?.time || 0));
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const col = COLUMNS.find(c => c.key === sortKey);
+  const sorted = col?.sortFn
+    ? [...legs].sort((a, b) => sortDir === 'asc' ? col.sortFn(a, b) : col.sortFn(b, a))
+    : [...legs];
+
+  const SortArrow = ({ colKey }) => {
+    if (sortKey !== colKey) return <span style={{ color: 'var(--border)', marginLeft: '4px' }}>↕</span>;
+    return <span style={{ color: 'var(--accent)', marginLeft: '4px' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
 
   return (
     <div>
       <div style={{ marginBottom: '28px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)' }}>Flights</h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {loading ? 'Loading...' : `${legs.length} legs this month · click a row to view details`}
+          {loading ? 'Loading...' : `${legs.length} legs · click a column header to sort · click a row to view details`}
         </p>
       </div>
 
@@ -55,8 +88,21 @@ export default function Flights() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
-                {['Date', 'Route', 'Aircraft', 'Flight Time', 'Pilots', 'Pax', 'Client', 'Status'].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: '500', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                {COLUMNS.map(col => (
+                  <th key={col.key}
+                    onClick={() => col.sortFn && handleSort(col.key)}
+                    style={{
+                      padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: '500',
+                      color: sortKey === col.key ? 'var(--accent)' : 'var(--text-secondary)',
+                      textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                      cursor: col.sortFn ? 'pointer' : 'default',
+                      userSelect: 'none',
+                      transition: 'color 0.1s',
+                    }}
+                  >
+                    {col.label}
+                    {col.sortFn && <SortArrow colKey={col.key} />}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -64,7 +110,7 @@ export default function Flights() {
               {loading ? (
                 <tr><td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading flights...</td></tr>
               ) : sorted.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>No flights found for this month</td></tr>
+                <tr><td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>No flights found</td></tr>
               ) : sorted.map((leg, i) => (
                 <tr key={leg._id?.$oid || i}
                   style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.1s' }}
