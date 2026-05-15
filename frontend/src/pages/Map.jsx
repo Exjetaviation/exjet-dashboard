@@ -36,6 +36,7 @@ const getAircraftPositions = (legs) => {
     const sorted = [...ac.legs].sort((a, b) => (b.departure?.time || 0) - (a.departure?.time || 0));
 
     const activeLeg = sorted.find(l => l.departure?.time <= now && l.arrival?.time >= now);
+    const lastDeparted = sorted.find(l => l.departure?.time <= now);
     const lastCompleted = sorted.find(l => l.status === 3 && l.arrival?.time <= now);
     const nextFlight = [...sorted].reverse().find(l => l.departure?.time > now);
 
@@ -63,17 +64,22 @@ const getAircraftPositions = (legs) => {
         isFlying = true;
         currentLeg = activeLeg;
       }
-    } else if (lastCompleted) {
-      const arrLoc = lastCompleted._calc?.to?.location;
-      if (arrLoc) {
-        position = { lat: arrLoc.lat, lng: arrLoc.lng };
-        airport = lastCompleted.arrival?.airport;
-        statusLabel = 'On Ground';
-        statusColor = '#22c55e';
-        currentLeg = lastCompleted;
-      }
-    }
-
+    } else if (lastDeparted) {
+  const arrLoc = lastDeparted._calc?.to?.location;
+  if (arrLoc && lastDeparted.arrival?.time < now) {
+    position = { lat: arrLoc.lat, lng: arrLoc.lng };
+    airport = lastDeparted.arrival?.airport;
+    statusLabel = 'On Ground';
+    statusColor = '#22c55e';
+    currentLeg = lastDeparted;
+  } else if (lastDeparted._calc?.from?.location) {
+    position = { lat: lastDeparted._calc.from.location.lat, lng: lastDeparted._calc.from.location.lng };
+    airport = lastDeparted.departure?.airport;
+    statusLabel = 'On Ground';
+    statusColor = '#22c55e';
+    currentLeg = lastDeparted;
+  }
+}
     return {
       ...ac,
       position,

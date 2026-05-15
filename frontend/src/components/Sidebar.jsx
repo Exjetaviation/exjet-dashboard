@@ -14,9 +14,17 @@ const links = [
   { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open = true }) {
   return (
-    <aside style={{ width: '220px', minHeight: '100vh', background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, zIndex: 100 }}>
+    <aside style={{
+      width: '220px', minHeight: '100vh',
+      background: 'var(--bg-secondary)',
+      borderRight: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column',
+      position: 'fixed', top: 0, left: 0, zIndex: 100,
+      transform: open ? 'translateX(0)' : 'translateX(-220px)',
+      transition: 'transform 0.2s ease',
+    }}>
       <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <img src={logo} alt="Exjet Aviation" style={{ width: '200px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
       </div>
