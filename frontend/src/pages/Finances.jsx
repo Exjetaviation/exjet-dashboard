@@ -111,7 +111,7 @@ export default function Finances() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {['overview', 'monthly', 'expenses', 'clients', 'aircraft'].map(t => (
+          {['overview', 'monthly', 'expenses', 'clients'].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
               padding: '7px 14px', fontSize: '13px', fontWeight: tab === t ? '600' : '400',
               background: tab === t ? 'var(--accent)' : 'var(--bg-card)',
