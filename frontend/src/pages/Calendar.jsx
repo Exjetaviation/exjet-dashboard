@@ -9,10 +9,10 @@ const STATUS_COLORS = [
 ];
 const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
 const VIEWS = {
-  day:  {label:'Day',  colMs:3600000,  cols:48,  baseColW:80,  stepMs:86400000},
-  week: {label:'Week', colMs:86400000, cols:21,  baseColW:150, stepMs:604800000},
-  month:{label:'Month',colMs:86400000, cols:90,  baseColW:40,  stepMs:2592000000},
-  year: {label:'Year', colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000},
+  day:   { label:'Day',   colMs:3600000,  cols:24,  baseColW:80,  stepMs:86400000    },
+  week:  { label:'Week',  colMs:86400000, cols:7,   baseColW:150, stepMs:604800000   },
+  month: { label:'Month', colMs:86400000, cols:31,  baseColW:40,  stepMs:2592000000  },
+  year:  { label:'Year',  colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000 },
 };
 const ROW_H=64, HDR_H=48, LABEL_W=120;
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
@@ -33,81 +33,109 @@ export default function Calendar() {
   const hdrRef  = useRef(null);
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
 
-  const cfg     = VIEWS[view];
-  const colW    = Math.max(8,Math.round(cfg.baseColW*zoom));
-  const totalMs = cfg.cols*cfg.colMs;
-  const totalW  = cfg.cols*colW;
-  const baseStart = view==='day'
-    ? floorHour(Date.now())-Math.floor(cfg.cols/2)*cfg.colMs
-    : floorDay(Date.now())-Math.floor(cfg.cols/2)*cfg.colMs;
-  const rangeStart = baseStart+offset*cfg.stepMs;
-  const rangeEnd   = rangeStart+totalMs;
+  const cfg = VIEWS[view];
 
-  const getBlock = (dep,arr)=>{
-    if(!dep||!arr||arr<rangeStart||dep>rangeEnd) return null;
+  const getRangeStart = useCallback(() => {
+    const now = new Date();
+    if (view === 'day') {
+      const d = new Date(now); d.setHours(0,0,0,0);
+      return d.getTime() + offset * 86400000;
+    }
+    if (view === 'week') {
+      const d = new Date(now);
+      const day = d.getDay();
+      d.setDate(d.getDate() - (day===0?6:day-1));
+      d.setHours(0,0,0,0);
+      return d.getTime() + offset * 604800000;
+    }
+    if (view === 'month') {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      return d.getTime();
+    }
+    return new Date(now.getFullYear() + offset, 0, 1).getTime();
+  }, [view, offset]);
+
+  const rangeStart = getRangeStart();
+
+  const effectiveCols = view === 'month'
+    ? new Date(new Date(rangeStart).getFullYear(), new Date(rangeStart).getMonth()+1, 0).getDate()
+    : cfg.cols;
+
+  const colW    = Math.max(8, Math.round(cfg.baseColW * zoom));
+  const totalMs = effectiveCols * cfg.colMs;
+  const totalW  = effectiveCols * colW;
+  const rangeEnd = rangeStart + totalMs;
+
+  const getBlock = (dep,arr) => {
+    if (!dep||!arr||arr<rangeStart||dep>rangeEnd) return null;
     const left  = ((Math.max(dep,rangeStart)-rangeStart)/totalMs)*totalW;
-    const width = Math.max(((Math.min(arr,rangeEnd)-Math.max(dep,rangeStart))/totalMs)*totalW,3);
+    const width = Math.max(((Math.min(arr,rangeEnd)-Math.max(dep,rangeStart))/totalMs)*totalW, 3);
     return {left,width};
   };
 
-  const scrollToCenter = useCallback(()=>{
+  const scrollToCenter = useCallback(() => {
+    const el = bodyRef.current; if (!el) return;
+    const nowPx = ((Date.now()-rangeStart)/totalMs)*totalW;
+    el.scrollLeft = Math.max(0, nowPx - el.clientWidth/2);
+  }, [rangeStart,totalMs,totalW]);
+
+  const goToToday = useCallback(() => { setOffset(0); setTimeout(scrollToCenter,80); }, [scrollToCenter]);
+  useEffect(() => { const t=setTimeout(scrollToCenter,120); return ()=>clearTimeout(t); }, [scrollToCenter,loading,view,zoom]);
+
+  const onPD = useCallback(e => {
     const el=bodyRef.current; if(!el) return;
-    const nowPx=((Date.now()-rangeStart)/totalMs)*totalW;
-    el.scrollLeft=Math.max(0,nowPx-el.clientWidth/2);
-  },[rangeStart,totalMs,totalW]);
-
-  const goToToday = useCallback(()=>{setOffset(0);setTimeout(scrollToCenter,80);},[scrollToCenter]);
-
-  useEffect(()=>{const t=setTimeout(scrollToCenter,120);return()=>clearTimeout(t);},[scrollToCenter,loading,view,zoom]);
-
-  const onPD=useCallback(e=>{
-    const el=bodyRef.current;if(!el)return;
     drag.current={on:true,startX:e.clientX,scrollX:el.scrollLeft,moved:false};
-    el.setPointerCapture(e.pointerId);el.style.cursor='grabbing';
+    el.setPointerCapture(e.pointerId); el.style.cursor='grabbing';
   },[]);
-  const onPM=useCallback(e=>{
-    if(!drag.current.on)return;
+  const onPM = useCallback(e => {
+    if (!drag.current.on) return;
     const delta=drag.current.startX-e.clientX;
-    if(Math.abs(delta)>4)drag.current.moved=true;
-    if(bodyRef.current)bodyRef.current.scrollLeft=drag.current.scrollX+delta;
+    if (Math.abs(delta)>4) drag.current.moved=true;
+    if (bodyRef.current) bodyRef.current.scrollLeft=drag.current.scrollX+delta;
   },[]);
-  const onPU=useCallback(()=>{
+  const onPU = useCallback(() => {
     drag.current.on=false;
-    if(bodyRef.current)bodyRef.current.style.cursor='grab';
+    if (bodyRef.current) bodyRef.current.style.cursor='grab';
     setTimeout(()=>{drag.current.moved=false;},150);
   },[]);
 
   const legs = data?.legs||[];
   const dutyTimes = dutyData?.dutyTimes||[];
 
-  const tripColorMap={};let colorIdx=0;
-  legs.forEach(leg=>{
+  const tripColorMap={}; let colorIdx=0;
+  legs.forEach(leg => {
     const id=String(leg.dispatch?.tripId||leg._id?.$oid);
-    if(!tripColorMap[id]){tripColorMap[id]=STATUS_COLORS[colorIdx%STATUS_COLORS.length];colorIdx++;}
+    if (!tripColorMap[id]) { tripColorMap[id]=STATUS_COLORS[colorIdx%STATUS_COLORS.length]; colorIdx++; }
   });
 
   const acMap={};
-  legs.forEach(leg=>{
-    const tail=leg.dispatch?.aircraft?.tailNumber;if(!tail)return;
-    if(!acMap[tail])acMap[tail]={tail,type:leg.dispatch?.aircraft?.type?.name,legs:[]};
+  legs.forEach(leg => {
+    const tail=leg.dispatch?.aircraft?.tailNumber; if(!tail) return;
+    if (!acMap[tail]) acMap[tail]={tail,type:leg.dispatch?.aircraft?.type?.name,legs:[]};
     acMap[tail].legs.push(leg);
   });
   const aircraft=Object.values(acMap).sort((a,b)=>a.tail.localeCompare(b.tail));
 
-  const nowPx=((Date.now()-rangeStart)/totalMs)*totalW;
-  const showNow=nowPx>=0&&nowPx<=totalW;
+  const nowPx  = ((Date.now()-rangeStart)/totalMs)*totalW;
+  const showNow= nowPx>=0&&nowPx<=totalW;
 
-  const cols=Array.from({length:cfg.cols},(_,i)=>{
+  const cols = Array.from({length:effectiveCols},(_,i) => {
     const ts=rangeStart+i*cfg.colMs;
     const d=new Date(ts);
     const isToday=floorDay(ts)===floorDay(Date.now());
     const isMonthStart=d.getDate()===1;
     let label='';
-    if(view==='day'){const h=d.getHours();if(i%3===0)label=h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;}
-    else if(view==='week')label=`${d.toLocaleDateString('en-US',{weekday:'short'})} ${d.getDate()}`;
-    else if(view==='month')label=isMonthStart?d.toLocaleDateString('en-US',{month:'short'}):d.getDate()%7===0?String(d.getDate()):'';
-    else label=isMonthStart?d.toLocaleDateString('en-US',{month:'short'}):'';
-    return{i,ts,label,isToday,isMonthStart};
+    if (view==='day') {
+      const h=d.getHours();
+      label=h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
+    } else if (view==='week') {
+      label=`${d.toLocaleDateString('en-US',{weekday:'short'})} ${d.getDate()}`;
+    } else if (view==='month') {
+      label=String(d.getDate());
+    } else {
+      label=isMonthStart?d.toLocaleDateString('en-US',{month:'short'}):'';
+    }
+    return {i,ts,label,isToday,isMonthStart,d};
   });
 
   const navBtn=(label,onClick)=>(
@@ -135,7 +163,7 @@ export default function Calendar() {
             <button onClick={()=>setZoom(z=>Math.max(0.1,Math.round((z-0.2)*10)/10))} style={{width:'30px',height:'30px',fontSize:'16px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>−</button>
             <span style={{fontSize:'11px',color:'var(--text-secondary)',minWidth:'34px',textAlign:'center'}}>{Math.round(zoom*100)}%</span>
             <button onClick={()=>setZoom(z=>Math.min(4,Math.round((z+0.2)*10)/10))} style={{width:'30px',height:'30px',fontSize:'16px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>+</button>
-            <button onClick={()=>setZoom((bodyRef.current?.clientWidth||800)/(cfg.cols*cfg.baseColW))} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--accent)',fontWeight:'600'}}>Fit</button>
+            <button onClick={()=>setZoom((bodyRef.current?.clientWidth||800)/(effectiveCols*cfg.baseColW))} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--accent)',fontWeight:'600'}}>Fit</button>
             <button onClick={()=>setZoom(1)} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>1:1</button>
           </div>
           <button onClick={goToToday} style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:'var(--accent)',color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer'}}>Today</button>
@@ -159,12 +187,25 @@ export default function Calendar() {
           </div>
           <div style={{flex:1,overflow:'hidden',minWidth:0}}>
             <div ref={hdrRef} style={{overflowX:'hidden',width:'100%'}}>
-              <div style={{display:'flex',width:totalW,height:HDR_H}}>
-                {cols.map(col=>(
-                  <div key={col.i} style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:col.isToday?'rgba(79,142,247,0.12)':'transparent',flexShrink:0,overflow:'hidden'}}>
-                    {col.label&&<span style={{fontSize:view==='year'?'9px':view==='month'?'10px':'12px',fontWeight:col.isToday||col.isMonthStart?'700':'400',color:col.isToday?'var(--accent)':col.isMonthStart?'#dde':'var(--text-secondary)',whiteSpace:'nowrap'}}>{col.label}</span>}
-                  </div>
-                ))}
+              <div style={{display:'flex',width:totalW,height:HDR_H,position:'relative'}}>
+                {cols.map(col=>{
+                  const daysInThisMonth = view==='year'&&col.isMonthStart
+                    ? new Date(col.d.getFullYear(), col.d.getMonth()+1, 0).getDate()
+                    : 0;
+                  return (
+                    <div key={col.i} style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:col.isToday?'rgba(79,142,247,0.12)':'transparent',flexShrink:0,overflow:'visible',position:'relative'}}>
+                      {view==='year' ? (
+                        col.isMonthStart && (
+                          <div style={{position:'absolute',left:0,width:daysInThisMonth*colW,height:'100%',display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:2}}>
+                            <span style={{fontSize:'12px',fontWeight:'700',color:'#dde',whiteSpace:'nowrap'}}>{col.d.toLocaleDateString('en-US',{month:'long'})}</span>
+                          </div>
+                        )
+                      ) : (
+                        col.label && <span style={{fontSize:view==='month'?'11px':'12px',fontWeight:col.isToday||col.isMonthStart?'700':'400',color:col.isToday?'var(--accent)':col.isMonthStart?'#dde':'var(--text-secondary)',whiteSpace:'nowrap'}}>{col.label}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -189,9 +230,9 @@ export default function Calendar() {
             }}
             style={{flex:1,minWidth:0,overflowX:'scroll',overflowY:'auto',cursor:'grab'}}>
             <div style={{width:totalW,position:'relative'}}>
-              {loading?(
+              {loading ? (
                 <div style={{padding:'60px',textAlign:'center',color:'var(--text-secondary)'}}>Loading...</div>
-              ):aircraft.map((ac,rowIdx)=>(
+              ) : aircraft.map((ac,rowIdx)=>(
                 <div key={ac.tail} style={{position:'relative',height:ROW_H,borderBottom:'1px solid var(--border)',background:rowIdx%2===0?'var(--bg-card)':'#111119'}}>
 
                   {/* Grid lines */}
@@ -217,8 +258,8 @@ export default function Calendar() {
                     return sorted.slice(0,-1).map((leg,i)=>{
                       const next=sorted[i+1];
                       const gStart=leg.arrival.time, gEnd=next.departure.time;
-                      if(gEnd-gStart<600000)return null;
-                      const blk=getBlock(gStart,gEnd);if(!blk)return null;
+                      if(gEnd-gStart<600000) return null;
+                      const blk=getBlock(gStart,gEnd); if(!blk) return null;
                       const airport=leg.arrival?.airport||'?';
                       const gMins=Math.round((gEnd-gStart)/60000);
                       const durLabel=gMins>=60?`${Math.floor(gMins/60)}h ${gMins%60}m`:`${gMins}m`;
@@ -240,103 +281,70 @@ export default function Calendar() {
                   })()}
 
                   {/* Duty brackets */}
-                  {(() => {
-                    const type11 = dutyTimes.filter(d => {
-                      if (!d.out || !d.in) return false;
-                      if (d.type !== 11) return false;
-                      const ds = Math.min(d.out, d.in);
-                      const de = Math.max(d.out, d.in);
-                      return ac.legs.some(leg =>
-                        leg.departure?.time && leg.arrival?.time &&
-                        ds <= leg.arrival.time + 7200000 &&
-                        de >= leg.departure.time - 7200000
-                      );
+                  {(()=>{
+                    const type11=dutyTimes.filter(d=>{
+                      if(!d.out||!d.in) return false;
+                      if(d.type!==11) return false;
+                      const ds=Math.min(d.out,d.in), de=Math.max(d.out,d.in);
+                      return ac.legs.some(leg=>leg.departure?.time&&leg.arrival?.time&&ds<=leg.arrival.time+7200000&&de>=leg.departure.time-7200000);
                     });
-
-                    // Determine PIC/SIC for each duty by matching user ID to leg pilot seats
-                    const dutyWithRole = type11.map(d => {
-                      const userId = d.user?.$oid || d.user;
-                      let role = 'UNKNOWN';
-                      for (const leg of ac.legs) {
-                        const pilot = (leg.pilots || []).find(p => (p.user?._id?.$oid || p.user) === userId);
-                        if (pilot) { role = pilot.seat === 2 ? 'PIC' : 'SIC'; break; }
+                    const dutyWithRole=type11.map(d=>{
+                      const userId=d.user?.$oid||d.user;
+                      let role='UNKNOWN';
+                      for(const leg of ac.legs){
+                        const pilot=(leg.pilots||[]).find(p=>(p.user?._id?.$oid||p.user)===userId);
+                        if(pilot){role=pilot.seat===2?'PIC':'SIC';break;}
                       }
-                      return { ...d, role };
+                      return {...d,role};
                     });
-
-                    // Group duties starting within 30 minutes of each other
-                    const sorted = [...dutyWithRole].sort((a, b) => Math.min(a.out,a.in) - Math.min(b.out,b.in));
-                    const groups = [];
-                    sorted.forEach(d => {
-                      const ds = Math.min(d.out, d.in);
-                      const last = groups[groups.length - 1];
-                      if (last && ds - Math.min(last[0].out, last[0].in) <= 30 * 60000) {
-                        last.push(d);
-                      } else {
-                        groups.push([d]);
-                      }
+                    const sortedD=[...dutyWithRole].sort((a,b)=>Math.min(a.out,a.in)-Math.min(b.out,b.in));
+                    const groups=[];
+                    sortedD.forEach(d=>{
+                      const ds=Math.min(d.out,d.in);
+                      const last=groups[groups.length-1];
+                      if(last&&ds-Math.min(last[0].out,last[0].in)<=30*60000){last.push(d);}
+                      else{groups.push([d]);}
                     });
-
-                    return groups.map((group, gi) => {
-                      const earliest = Math.min(...group.map(d => Math.min(d.out, d.in)));
-                      const maxDutyEnd = earliest + 14 * 3600000;
-                      const startBlk = getBlock(earliest, earliest + 1);
-                      const endBlk   = getBlock(maxDutyEnd, maxDutyEnd + 1);
-                      const timeRemaining = Math.max(0, Math.round((maxDutyEnd - Date.now()) / 60000));
-                      const onDutyMins = Math.round((Date.now() - earliest) / 60000);
-                      const durLabel = `${Math.floor(onDutyMins/60)}h ${onDutyMins%60}m on duty`;
-                      const limitLabel = timeRemaining > 0 ? `${Math.floor(timeRemaining/60)}h ${timeRemaining%60}m remaining` : 'DUTY LIMIT REACHED';
-                      const lineColor = timeRemaining < 120 ? '#5a5858' : timeRemaining < 240 ? '#f59e0b' : '#22c55e';
-                      const hasPIC = group.some(d => d.role === 'PIC');
-                      const hasSIC = group.some(d => d.role === 'SIC');
-
-                      return (
+                    return groups.map((group,gi)=>{
+                      const earliest=Math.min(...group.map(d=>Math.min(d.out,d.in)));
+                      const maxDutyEnd=earliest+14*3600000;
+                      const startBlk=getBlock(earliest,earliest+1);
+                      const endBlk=getBlock(maxDutyEnd,maxDutyEnd+1);
+                      const timeRemaining=Math.max(0,Math.round((maxDutyEnd-Date.now())/60000));
+                      const onDutyMins=Math.round((Date.now()-earliest)/60000);
+                      const durLabel=`${Math.floor(onDutyMins/60)}h ${onDutyMins%60}m on duty`;
+                      const limitLabel=timeRemaining>0?`${Math.floor(timeRemaining/60)}h ${timeRemaining%60}m remaining`:'DUTY LIMIT REACHED';
+                      const lineColor=timeRemaining<120?'#ef4444':timeRemaining<240?'#f59e0b':'#22c55e';
+                      const hasPIC=group.some(d=>d.role==='PIC');
+                      return(
                         <React.Fragment key={`dg-${gi}`}>
-                          {/* Duty IN bracket */}
-                          {startBlk && (
-                            <div
-                              onMouseEnter={e => { setHovered({ _isDuty: true, label: 'Duty IN', time: earliest, duration: durLabel, limit: limitLabel, tail: ac.tail, group: group.map(d => d.role) }); setTipPos({ x: e.clientX, y: e.clientY }); }}
-                              onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
-                              onMouseLeave={() => setHovered(null)}
-                              style={{ position: 'absolute', left: startBlk.left - 1, top: 4, width: 16, height: ROW_H - 8, zIndex: 6, cursor: 'default', pointerEvents: 'auto' }}
-                            >
-                              {/* Vertical line */}
-                              <div style={{ position: 'absolute', left: 0, top: 0, width: 2, height: '100%', background: lineColor, opacity: 0.9 }} />
-                              {/* PIC top line */}
-                              {hasPIC && <div style={{ position: 'absolute', left: 0, top: 0, width: 10, height: 2, background: lineColor, opacity: 0.9 }} />}
-                              {/* SIC/PIC bottom line */}
-                              <div style={{ position: 'absolute', left: 0, bottom: 0, width: 10, height: 2, background: lineColor, opacity: 0.9 }} />
-                              {/* Green arrow */}
-                              <div style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: '#22c55e', fontWeight: '700', lineHeight: 1 }}>▶</div>
+                          {startBlk&&(
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Duty IN',time:earliest,duration:durLabel,limit:limitLabel,tail:ac.tail,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                              style={{position:'absolute',left:startBlk.left-1,top:4,width:16,height:ROW_H-8,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
+                              <div style={{position:'absolute',left:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
+                              {hasPIC&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
+                              <div style={{position:'absolute',left:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
+                              <div style={{position:'absolute',left:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:'#22c55e',fontWeight:'700',lineHeight:1}}>▶</div>
                             </div>
                           )}
-                          {/* 14hr limit bracket */}
-                          {endBlk && (
-                            <div
-                              onMouseEnter={e => { setHovered({ _isDuty: true, label: '14hr Limit', time: maxDutyEnd, duration: durLabel, limit: limitLabel, tail: ac.tail, isLimit: true, group: group.map(d => d.role) }); setTipPos({ x: e.clientX, y: e.clientY }); }}
-                              onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
-                              onMouseLeave={() => setHovered(null)}
-                              style={{ position: 'absolute', left: endBlk.left - 1, top: 4, width: 16, height: ROW_H - 8, zIndex: 6, cursor: 'default', pointerEvents: 'auto' }}
-                            >
-                              {/* Vertical line */}
-                              <div style={{ position: 'absolute', right: 0, top: 0, width: 2, height: '100%', background: lineColor, opacity: 0.9 }} />
-                              {/* PIC top line */}
-                              {hasPIC && <div style={{ position: 'absolute', right: 0, top: 0, width: 10, height: 2, background: lineColor, opacity: 0.9 }} />}
-                              {/* SIC/PIC bottom line */}
-                              <div style={{ position: 'absolute', right: 0, bottom: 0, width: 10, height: 2, background: lineColor, opacity: 0.9 }} />
-                              {/* Red arrow */}
-                              <div style={{ position: 'absolute', right: 3, top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: '#ef4444', fontWeight: '700', lineHeight: 1 }}>◀</div>
+                          {endBlk&&(
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'14hr Limit',time:maxDutyEnd,duration:durLabel,limit:limitLabel,tail:ac.tail,isLimit:true,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                              style={{position:'absolute',left:endBlk.left-1,top:4,width:16,height:ROW_H-8,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
+                              <div style={{position:'absolute',right:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
+                              {hasPIC&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
+                              <div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
+                              <div style={{position:'absolute',right:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:'#ef4444',fontWeight:'700',lineHeight:1}}>◀</div>
                             </div>
-                            
                           )}
                         </React.Fragment>
                       );
                     });
                   })()}
+
                   {/* Leg blocks */}
                   {ac.legs.map((leg,li)=>{
                     const dep=leg.departure?.time, arr=leg.arrival?.time;
-                    const blk=getBlock(dep,arr);if(!blk)return null;
+                    const blk=getBlock(dep,arr); if(!blk) return null;
                     const tripId=String(leg.dispatch?.tripId||leg._id?.$oid);
                     const color=tripColorMap[tripId]||'#4f8ef7';
                     const isHov=hovered?._id?.$oid===leg._id?.$oid;
@@ -365,10 +373,9 @@ export default function Calendar() {
       </div>
 
       {/* TOOLTIP */}
-{/* TOOLTIP */}
-      {hovered && (
+      {hovered&&(
         <div style={{position:'fixed',left:Math.min(tipPos.x+16,window.innerWidth-260),top:Math.min(tipPos.y-8,window.innerHeight-260),background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:'10px',padding:'14px 16px',zIndex:9999,boxShadow:'0 8px 32px rgba(0,0,0,.6)',pointerEvents:'none',width:'240px'}}>
-          {hovered._isDuty ? (
+          {hovered._isDuty?(
             <>
               <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
                 <div style={{width:'10px',height:'10px',borderRadius:'2px',background:hovered.isLimit?'#ef4444':'#22c55e'}}/>
