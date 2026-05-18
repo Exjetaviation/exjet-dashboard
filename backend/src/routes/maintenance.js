@@ -10,8 +10,8 @@ router.get('/', async (req, res) => {
       { oid: '69a0fae31c00002a00611199', tail: 'N408JS' }
     ];
     const now = Date.now();
-    const start = now - (90 * 24 * 60 * 60 * 1000);
-    const end = now + (90 * 24 * 60 * 60 * 1000);
+    const start = now - (30 * 24 * 60 * 60 * 1000);
+    const end = now + (14 * 24 * 60 * 60 * 1000);
     const results = [];
 
     for (const ac of AIRCRAFT) {
