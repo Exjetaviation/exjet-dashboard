@@ -13,6 +13,7 @@ const links = [
   { to: '/finances', label: 'Finances', icon: '💰' },
   { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
   { to: '/maintenance', label: 'Maintenance', icon: '🔧' },
+  { to: '/assistant', label: 'AI Assistant', icon: '✦' },
 ];
 
 export default function Sidebar({ open = true }) {
