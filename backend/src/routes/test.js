@@ -1,5 +1,6 @@
 import express from 'express';
 import axios from 'axios';
+import { getClassList } from '../services/quickbooks.js';
 
 const router = express.Router();
 
@@ -25,6 +26,15 @@ router.get('/aircraft-calendar', async (req, res) => {
     res.json(r.data);
   } catch (e) {
     res.status(500).json({ error: e.message, stack: e.stack });
+  }
+});
+
+router.get('/classes', async (req, res) => {
+  try {
+    const result = await getClassList();
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
