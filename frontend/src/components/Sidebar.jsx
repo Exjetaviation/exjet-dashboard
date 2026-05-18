@@ -15,7 +15,7 @@ const links = [
   { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
   { to: '/maintenance', label: 'Maintenance', icon: '🔧' },
   { to: '/assistant', label: 'AI Assistant', icon: '✦' },
-  { path: '/crew-calendar', label: 'Crew Calendar', icon: '📅' },
+  { to: '/crew-calendar', label: 'Crew Calendar', icon: '📅' },
 ];
 
 export default function Sidebar({ open = true }) {
