@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Overview from './pages/Overview';
 import Flights from './pages/Flights';
+import CrewCalendar from './pages/CrewCalendar';
+// add route:
+<Route path="/crew-calendar" element={<CrewCalendar />} />
 
 export default function App() {
   return (
