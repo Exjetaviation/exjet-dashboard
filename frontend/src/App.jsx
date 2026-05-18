@@ -84,6 +84,7 @@ export default function App() {
             <Route path="/quotes" element={<Quotes />} />
             <Route path="/finances" element={<Finances />} />
             <Route path="/maintenance" element={<Maintenance />} />
+            <Route path="/assistant" element={<AssistantPage />} />
           </Routes>
         </main>
         <Assistant />
