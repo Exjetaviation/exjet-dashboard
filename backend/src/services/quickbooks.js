@@ -24,10 +24,26 @@ export const getTokensFromCode = async (url) => {
 };
 
 const getAccessToken = async () => {
+  // Get current refresh token from env or Supabase
+  let refreshToken = process.env.QB_REFRESH_TOKEN;
+  
   const client = getOAuthClient();
-  client.setToken({ refresh_token: process.env.QB_REFRESH_TOKEN });
-  const response = await client.refreshUsingToken(process.env.QB_REFRESH_TOKEN);
-  return response.getJson().access_token;
+  client.setToken({ refresh_token: refreshToken });
+  const response = await client.refreshUsingToken(refreshToken);
+  const tokens = response.getJson();
+  
+  // If we got a new refresh token, save it to Supabase
+  if (tokens.refresh_token && tokens.refresh_token !== refreshToken) {
+    process.env.QB_REFRESH_TOKEN = tokens.refresh_token;
+    try {
+      const { supabase } = await import('./supabase.js');
+      await supabase.from('app_config').upsert({ key: 'QB_REFRESH_TOKEN', value: tokens.refresh_token });
+    } catch (e) {
+      console.log('Could not save refresh token:', e.message);
+    }
+  }
+  
+  return tokens.access_token;
 };
 
 const qbFetch = async (path, params = {}) => {

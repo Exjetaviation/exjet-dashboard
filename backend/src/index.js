@@ -9,7 +9,14 @@ import quotesRoutes from './routes/quotes.js';
 import financesRoutes from './routes/finances.js';
 import testRoutes from './routes/test.js';
 import maintenanceRoutes from './routes/maintenance.js';
-
+// Load QB refresh token from Supabase on startup
+(async () => {
+  try {
+    const { supabase } = await import('./services/supabase.js');
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'QB_REFRESH_TOKEN').single();
+    if (data?.value) process.env.QB_REFRESH_TOKEN = data.value;
+  } catch (e) {}
+})();
 dotenv.config();
 
 const app = express();
