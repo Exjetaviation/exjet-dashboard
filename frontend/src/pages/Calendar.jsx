@@ -290,12 +290,13 @@ export default function Calendar() {
                       const isDown = ev.type === 'aog';
                       const bgColor = isDown ? 'rgba(239,68,68,0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
                       const borderColor = isDown ? '#ef4444' : isMx ? '#f59e0b' : '#a855f7';
+                      
                       return (
                         <div key={`mx-${mi}`}
                           onMouseEnter={e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); }}
                           onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setHovered(null)}
-                          style={{ position: 'absolute', left: blk.left, top: 0, width: blk.width, height: ROW_H/4, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
+                          style={{ position: 'absolute', left: blk.left, top: ROW_H*0.75, width: blk.width, height: ROW_H*0.25, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
                           {blk.width > 40 && (
                             <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
                               {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
