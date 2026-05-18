@@ -129,38 +129,24 @@ export const getGeneralLedger = async (startDate, endDate, className) => {
 };
 
 export const getInvoicesByDateRange = async (startDate, endDate) => {
-  // Fetch in batches to get all invoices
   const allInvoices = [];
   let startPos = 1;
   const batchSize = 100;
-  
   while (true) {
     const data = await qbFetch('query', {
-      query: `SELECT * FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}' ORDERBY TxnDate DESC STARTPOSITION ${startPos} MAXRESULTS ${batchSize}`
+      query: `SELECT * FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}' STARTPOSITION ${startPos} MAXRESULTS ${batchSize}`
     });
     const batch = data.QueryResponse?.Invoice || [];
     allInvoices.push(...batch);
     if (batch.length < batchSize) break;
     startPos += batchSize;
   }
+  return { QueryResponse: { Invoice: allInvoices } };
+};
+
 export const getAllInvoicesYTD = async () => {
   const now = new Date();
   const startDate = `${now.getFullYear()}-01-01`;
   const endDate = now.toISOString().split('T')[0];
-  
-  const allInvoices = [];
-  let startPos = 1;
-  
-  while (true) {
-    const data = await qbFetch('query', {
-      query: `SELECT * FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}' STARTPOSITION ${startPos} MAXRESULTS 100`
-    });
-    const batch = data.QueryResponse?.Invoice || [];
-    allInvoices.push(...batch);
-    if (batch.length < 100) break;
-    startPos += 100;
-  }
-  return allInvoices;
-};
-  return { QueryResponse: { Invoice: allInvoices } };
+  return getInvoicesByDateRange(startDate, endDate).then(d => d.QueryResponse?.Invoice || []);
 };
