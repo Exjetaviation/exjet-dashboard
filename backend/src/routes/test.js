@@ -12,26 +12,37 @@ router.get('/classes', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+import express from 'express';
+import axios from 'axios';
+
+const router = express.Router();
+
 router.get('/aircraft-calendar', async (req, res) => {
   try {
-    const token = await getLevelFlightToken();
-    const now = Date.now();
-    const twoWeeks = now + (14 * 24 * 60 * 60 * 1000);
-    
-    const r = await fetch(`${process.env.LEVELFLIGHT_BASE_URL}/api/widgets/aircraftCalendar`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        aircraft: { $oid: '673d145b2c00002200f03411' },
-        start: now - (30 * 24 * 60 * 60 * 1000),
-        end: twoWeeks,
-        includeCancelled: false
-      })
+    const { default: levelflight } = await import('../services/levelflight.js');
+    // Use getAircraftStatus as a proxy to test auth works, then call calendar directly
+    const params = new URLSearchParams();
+    params.append('grant_type', 'refresh_token');
+    params.append('client_id', process.env.LEVELFLIGHT_CLIENT_ID);
+    params.append('refresh_token', process.env.LEVELFLIGHT_REFRESH_TOKEN);
+    const tokenRes = await axios.post(process.env.LEVELFLIGHT_TOKEN_URL, params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
-    const data = await r.json();
-    res.json(data);
+    const token = tokenRes.data.id_token;
+    const now = Date.now();
+    const r = await axios.post(`${process.env.LEVELFLIGHT_BASE_URL}/api/widgets/aircraftCalendar`, {
+      aircraft: { $oid: '673d145b2c00002200f03411' },
+      start: now - (30 * 24 * 60 * 60 * 1000),
+      end: now + (14 * 24 * 60 * 60 * 1000),
+      includeCancelled: false
+    }, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    });
+    res.json(r.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, stack: e.stack });
   }
 });
+
+export default router;
 export default router;
