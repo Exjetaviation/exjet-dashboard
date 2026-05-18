@@ -289,8 +289,8 @@ export default function Calendar() {
                       if (!blk) return null;
                       const isMx   = ev.type === 'maintenance';
                       const isDown = ev.type === 'aog';
-                      const bgColor = isDown ? 'rgba(239,68,68,0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
-                      const borderColor = isDown ? '#ef4444' : isMx ? '#e20202' : '#a855f7';
+                      const bgColor = isDown ? 'rgba(239,68,68,0.15)' : isMx ? 'rgba(245, 11, 11, 0.15)' : 'rgba(168,85,247,0.15)';
+                      const borderColor = isDown ? '#ef4444' : isMx ? '#e27d02' : '#a855f7';
                       
                       return (
                         <div key={`mx-${mi}`}
