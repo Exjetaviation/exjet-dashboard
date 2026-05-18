@@ -30,6 +30,7 @@ export default function Calendar() {
   const [zoom,setZoom]     = useState(1);
   const [hovered,setHovered]   = useState(null);
   const [tipPos,setTipPos]     = useState({x:0,y:0});
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
   const bodyRef = useRef(null);
   const hdrRef  = useRef(null);
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
