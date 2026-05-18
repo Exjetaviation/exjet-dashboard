@@ -17,6 +17,7 @@ import Quotes from './pages/Quotes';
 import Finances from './pages/Finances';
 import Maintenance from './pages/Maintenance';
 import AssistantPage from './pages/AssistantPage';
+import CrewCalendar from './pages/CrewCalendar';
 export default function App() {
 
 
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="/finances" element={<Finances />} />
             <Route path="/maintenance" element={<Maintenance />} />
             <Route path="/assistant" element={<AssistantPage />} />
+            <Route path="/crew-calendar" element={<CrewCalendar />} />
           </Routes>
         </main>
         <Assistant />
