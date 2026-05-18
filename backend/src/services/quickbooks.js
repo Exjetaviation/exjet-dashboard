@@ -126,4 +126,9 @@ export const getGeneralLedger = async (startDate, endDate, className) => {
     end_date: endDate,
     filter_class: className,
   });
+export const getInvoicesByDateRange = async (startDate, endDate) => {
+  return qbFetch('query', {
+    query: `SELECT * FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}' MAXRESULTS 1000`
+  });
+};
 };

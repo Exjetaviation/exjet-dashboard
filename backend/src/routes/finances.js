@@ -3,10 +3,11 @@ import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
-  getAccountBalances, getGeneralLedger,getTransactionsByClass
+  getAccountBalances, getGeneralLedger,getTransactionsByClass, getInvoicesByDateRange
 } from '../services/quickbooks.js';
 import * as lf from '../services/levelflight.js';
 import { supabase } from '../services/supabase.js';
+
 
 const router = express.Router();
 
@@ -121,47 +122,31 @@ router.get('/by-aircraft', async (req, res) => {
     const now = new Date();
     const startDate = `${now.getFullYear()}-01-01`;
     const endDate = now.toISOString().split('T')[0];
-    const classes = ['N69FP', 'N408JS'];
 
-    const results = await Promise.all(classes.map(async (tail) => {
-      const [txData, gl] = await Promise.all([
-        getTransactionsByClass(startDate, endDate, tail),
-        getGeneralLedger(startDate, endDate, tail)
-      ]);
+    const data = await getInvoicesByDateRange(startDate, endDate);
+    const invoices = data.QueryResponse?.Invoice || [];
+    const totals = { 'N69FP': { revenue: 0, invoiceCount: 0 }, 'N408JS': { revenue: 0, invoiceCount: 0 } };
 
-      // Parse revenue from CustomerSales
-      const revRows = txData.revList?.Rows?.Row || [];
-      let revenue = 0;
-      for (const row of revRows) {
-        const cols = row.ColData || [];
-        const amt = parseFloat(cols[1]?.value || '0');
-        if (!isNaN(amt)) revenue += amt;
-      }
-
-      // Parse expenses from GeneralLedger
-      const glRows = gl?.Rows?.Row || [];
-      let expenses = 0;
-      for (const row of glRows) {
-        if (row.type === 'Section') {
-          for (const sub of row.Rows?.Row || []) {
-            const cols = sub.ColData || [];
-            const debit = parseFloat(cols[4]?.value || '0');
-            if (!isNaN(debit)) expenses += debit;
-          }
+    for (const inv of invoices) {
+      for (const line of inv.Line || []) {
+        const classRef = line.SalesItemLineDetail?.ClassRef?.name;
+        if (classRef && totals[classRef]) {
+          totals[classRef].revenue += line.Amount || 0;
+          totals[classRef].invoiceCount++;
         }
       }
+    }
 
-      return {
-        tail,
-        revenue: Math.round(revenue),
-        expenses: Math.round(expenses),
-        net: Math.round(revenue - expenses)
-      };
+    const result = Object.entries(totals).map(([tail, d]) => ({
+      tail,
+      revenue: Math.round(d.revenue),
+      invoiceCount: d.invoiceCount
     }));
 
-    res.json(results);
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
+
 export default router;
