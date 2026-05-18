@@ -3,7 +3,7 @@ import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
-  getAccountBalances, getGeneralLedger,getTransactionsByClass, getInvoicesByDateRange
+  getAccountBalances, getGeneralLedger,getTransactionsByClass, getInvoicesByDateRange, getAllInvoicesYTD, getAllInvoicesYTD
 } from '../services/quickbooks.js';
 import * as lf from '../services/levelflight.js';
 import { supabase } from '../services/supabase.js';
@@ -119,24 +119,13 @@ router.get('/summary', async (req, res) => {
 });
 router.get('/by-aircraft-debug', async (req, res) => {
   try {
-    const now = new Date();
-    const startDate = `${now.getFullYear()}-01-01`;
-    const endDate = now.toISOString().split('T')[0];
-    
-    const countData = await qbFetch('query', {
-      query: `SELECT COUNT(*) FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`
-    });
-    
-    const data = await getInvoicesByDateRange(startDate, endDate);
-    const invoices = data.QueryResponse?.Invoice || [];
-    
+    const invoices = await getAllInvoicesYTD();
     res.json({
-      totalInDB: countData.QueryResponse?.totalCount,
       fetched: invoices.length,
-      invoices: invoices.map(i => ({ 
-        doc: i.DocNumber, 
+      invoices: invoices.map(i => ({
+        doc: i.DocNumber,
         date: i.TxnDate,
-        total: i.TotalAmt, 
+        total: i.TotalAmt,
         balance: i.Balance,
         customer: i.CustomerRef?.name,
         class: i.Line?.[0]?.SalesItemLineDetail?.ClassRef?.name
@@ -152,7 +141,7 @@ router.get('/by-aircraft', async (req, res) => {
     const startDate = `${now.getFullYear()}-01-01`;
     const endDate = now.toISOString().split('T')[0];
 
-    const data = await getInvoicesByDateRange(startDate, endDate);
+    const data = await getInvoicesByDateRange, getAllInvoicesYTD(startDate, endDate);
     const invoices = data.QueryResponse?.Invoice || [];
     const totals = { 'N69FP': { revenue: 0, invoiceCount: 0 }, 'N408JS': { revenue: 0, invoiceCount: 0 } };
 
