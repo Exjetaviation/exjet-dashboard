@@ -298,7 +298,7 @@ export default function Calendar() {
                           onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setHovered(null)}
                           onClick={() => setSelectedWorkOrder(ev)}
-                          style={{ position: 'absolute', left: blk.left, top: ROW_H, width: blk.width, height: ROW_H*0.25, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
+                          style={{ position: 'absolute', left: blk.left, top: ROW_H*0.25, width: blk.width, height: ROW_H*0.25, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
                           {blk.width > 40 && (
                             <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
                               {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
