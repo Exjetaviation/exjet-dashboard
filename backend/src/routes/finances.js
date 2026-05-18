@@ -3,7 +3,7 @@ import {
   getAuthUrl, getTokensFromCode,
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
-  getAccountBalances, getGeneralLedger
+  getAccountBalances, getGeneralLedger,getTransactionsByClass
 } from '../services/quickbooks.js';
 import * as lf from '../services/levelflight.js';
 import { supabase } from '../services/supabase.js';
@@ -116,5 +116,52 @@ router.get('/summary', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router.get('/by-aircraft', async (req, res) => {
+  try {
+    const now = new Date();
+    const startDate = `${now.getFullYear()}-01-01`;
+    const endDate = now.toISOString().split('T')[0];
+    const classes = ['N69FP', 'N408JS'];
 
+    const results = await Promise.all(classes.map(async (tail) => {
+      const [txData, gl] = await Promise.all([
+        getTransactionsByClass(startDate, endDate, tail),
+        getGeneralLedger(startDate, endDate, tail)
+      ]);
+
+      // Parse revenue from CustomerSales
+      const revRows = txData.revList?.Rows?.Row || [];
+      let revenue = 0;
+      for (const row of revRows) {
+        const cols = row.ColData || [];
+        const amt = parseFloat(cols[1]?.value || '0');
+        if (!isNaN(amt)) revenue += amt;
+      }
+
+      // Parse expenses from GeneralLedger
+      const glRows = gl?.Rows?.Row || [];
+      let expenses = 0;
+      for (const row of glRows) {
+        if (row.type === 'Section') {
+          for (const sub of row.Rows?.Row || []) {
+            const cols = sub.ColData || [];
+            const debit = parseFloat(cols[4]?.value || '0');
+            if (!isNaN(debit)) expenses += debit;
+          }
+        }
+      }
+
+      return {
+        tail,
+        revenue: Math.round(revenue),
+        expenses: Math.round(expenses),
+        net: Math.round(revenue - expenses)
+      };
+    }));
+
+    res.json(results);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 export default router;
