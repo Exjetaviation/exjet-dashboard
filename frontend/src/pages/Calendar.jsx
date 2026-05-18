@@ -339,7 +339,7 @@ export default function Calendar() {
                       const onDutyMins=Math.round((Date.now()-earliest)/60000);
                       const durLabel=`${Math.floor(onDutyMins/60)}h ${onDutyMins%60}m on duty`;
                       const limitLabel=timeRemaining>0?`${Math.floor(timeRemaining/60)}h ${timeRemaining%60}m remaining`:'DUTY LIMIT REACHED';
-                      const lineColor=timeRemaining<120?'#ef4444':timeRemaining<240?'#f59e0b':'#22c55e';
+                      const lineColor=timeRemaining<120?'#666565':timeRemaining<240?'#f59e0b':'#22c55e';
                       const hasPIC=group.some(d=>d.role==='PIC');
                       return(
                         <React.Fragment key={`dg-${gi}`}>
