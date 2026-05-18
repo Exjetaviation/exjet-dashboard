@@ -8,6 +8,7 @@ import rateCardRoutes from './routes/rateCards.js';
 import quotesRoutes from './routes/quotes.js';
 import financesRoutes from './routes/finances.js';
 import testRoutes from './routes/test.js';
+import maintenanceRoutes from './routes/maintenance.js';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/api/rate-cards', rateCardRoutes);
 app.use('/api/quotes', quotesRoutes);
 app.use('/api/finances', financesRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
 
 app.listen(PORT, () => console.log(`Exjet backend listening on port ${PORT}`));
 // force redeploy Wed May 13 15:35:00 EDT 2026

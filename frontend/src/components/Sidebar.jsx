@@ -12,6 +12,7 @@ const links = [
   { to: '/quotes', label: 'Quotes', icon: '📋' },
   { to: '/finances', label: 'Finances', icon: '💰' },
   { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
+  { to: '/maintenance', label: 'Maintenance', icon: '🔧' },
 ];
 
 export default function Sidebar({ open = true }) {

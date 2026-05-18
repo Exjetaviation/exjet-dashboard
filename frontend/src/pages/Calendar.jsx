@@ -23,6 +23,7 @@ const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{month:'short',day:'n
 export default function Calendar() {
   const {data,loading}  = useApi('/api/levelflight/legs');
   const {data:dutyData} = useApi('/api/levelflight/duty');
+  const {data:maintData} = useApi('/api/maintenance');
   const navigate = useNavigate();
   const [view,setView]     = useState('week');
   const [offset,setOffset] = useState(0);
@@ -279,7 +280,31 @@ export default function Calendar() {
                       );
                     });
                   })()}
-
+                  {/* Maintenance blocks */}
+                  {(maintData?.events||[])
+                    .filter(ev => ev.aircraft_tail === ac.tail)
+                    .map((ev, mi) => {
+                      const blk = getBlock(ev.start_time, ev.end_time);
+                      if (!blk) return null;
+                      const isMx   = ev.type === 'maintenance';
+                      const isDown = ev.type === 'aog';
+                      const bgColor = isDown ? 'rgba(239,68,68,0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
+                      const borderColor = isDown ? '#ef4444' : isMx ? '#f59e0b' : '#a855f7';
+                      return (
+                        <div key={`mx-${mi}`}
+                          onMouseEnter={e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); }}
+                          onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setHovered(null)}
+                          style={{ position: 'absolute', left: blk.left, top: 0, width: blk.width, height: ROW_H, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
+                          {blk.width > 40 && (
+                            <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
+                              {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  }
                   {/* Duty brackets */}
                   {(()=>{
                     const type11=dutyTimes.filter(d=>{
@@ -373,9 +398,25 @@ export default function Calendar() {
       </div>
 
       {/* TOOLTIP */}
+      
       {hovered&&(
+        
         <div style={{position:'fixed',left:Math.min(tipPos.x+16,window.innerWidth-260),top:Math.min(tipPos.y-8,window.innerHeight-260),background:'var(--bg-secondary)',border:'1px solid var(--border)',borderRadius:'10px',padding:'14px 16px',zIndex:9999,boxShadow:'0 8px 32px rgba(0,0,0,.6)',pointerEvents:'none',width:'240px'}}>
-          {hovered._isDuty?(
+          {hovered._isMaint ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: hovered.type==='aog'?'#ef4444':'#f59e0b' }} />
+                <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>{hovered.title}</p>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Aircraft: {hovered.tail}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Type: {hovered.type}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>From: {fmtTime(hovered.start)}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Until: {fmtTime(hovered.end)}</p>
+                {hovered.notes && <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Notes: {hovered.notes}</p>}
+              </div>
+            </>
+          ) : hovered._isDuty ? (
             <>
               <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
                 <div style={{width:'10px',height:'10px',borderRadius:'2px',background:hovered.isLimit?'#ef4444':'#22c55e'}}/>
