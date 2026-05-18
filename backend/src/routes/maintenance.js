@@ -16,6 +16,7 @@ router.get('/', async (req, res) => {
 
     for (const ac of AIRCRAFT) {
       const data = await getAircraftCalendar(ac.oid, start, end);
+      console.log('RAW workOrders for', ac.tail, JSON.stringify(data.workOrders?.map(w => w.name)));
       const workOrders = data.workOrders || [];
       for (const wo of workOrders) {
         results.push({
