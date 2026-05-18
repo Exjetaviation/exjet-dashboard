@@ -281,7 +281,7 @@ export default function Calendar() {
                     });
                   })()}
                   {/* Maintenance blocks */}
-                  {(maintData?.events||[])
+                  {(Array.isArray(maintData) ? maintData : (maintData?.events||[]))
                     .filter(ev => ev.aircraft_tail === ac.tail)
                     .map((ev, mi) => {
                       const blk = getBlock(ev.start_time, ev.end_time);
