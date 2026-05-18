@@ -122,16 +122,26 @@ router.get('/by-aircraft-debug', async (req, res) => {
     const now = new Date();
     const startDate = `${now.getFullYear()}-01-01`;
     const endDate = now.toISOString().split('T')[0];
+    
+    const countData = await qbFetch('query', {
+      query: `SELECT COUNT(*) FROM Invoice WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`
+    });
+    
     const data = await getInvoicesByDateRange(startDate, endDate);
     const invoices = data.QueryResponse?.Invoice || [];
-    const lines = [];
-    for (const inv of invoices) {
-      for (const line of inv.Line || []) {
-        const classRef = line.SalesItemLineDetail?.ClassRef?.name;
-        if (classRef) lines.push({ invoice: inv.DocNumber, class: classRef, amount: line.Amount });
-      }
-    }
-    res.json({ total: lines.length, lines: lines.slice(0, 20) });
+    
+    res.json({
+      totalInDB: countData.QueryResponse?.totalCount,
+      fetched: invoices.length,
+      invoices: invoices.map(i => ({ 
+        doc: i.DocNumber, 
+        date: i.TxnDate,
+        total: i.TotalAmt, 
+        balance: i.Balance,
+        customer: i.CustomerRef?.name,
+        class: i.Line?.[0]?.SalesItemLineDetail?.ClassRef?.name
+      }))
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
