@@ -53,6 +53,7 @@ const BAR_COLORS = ['#4f8ef7','#22c55e','#a855f7','#f59e0b','#ef4444','#06b6d4',
 
 export default function Finances() {
   const [data, setData]     = useState(null);
+  const [aircraftData, setAircraftData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
   const [tab, setTab]       = useState('overview');
@@ -63,7 +64,12 @@ export default function Finances() {
       .then(d => { setData(d); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
   }, []);
-
+  useEffect(() => {
+  fetch(`${BASE_URL}/api/finances/by-aircraft`)
+    .then(r => r.json())
+    .then(setAircraftData)
+    .catch(console.error);
+  }, []);
   if (loading) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading financials...</div>;
   if (error)   return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--danger)' }}>Error: {error}</div>;
 
@@ -111,7 +117,7 @@ export default function Finances() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {['overview', 'monthly', 'expenses', 'clients'].map(t => (
+          {['overview', 'monthly', 'expenses', 'clients', 'aircraft'].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
               padding: '7px 14px', fontSize: '13px', fontWeight: tab === t ? '600' : '400',
               background: tab === t ? 'var(--accent)' : 'var(--bg-card)',
@@ -239,76 +245,27 @@ export default function Finances() {
 
 {tab === 'aircraft' && (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-    {(data?.byClass || []).map(ac => {
-      const s = ac.stats || {};
-      if (s.error) return (
-        <div key={ac.name} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
-          <span style={{ color: 'var(--accent)', fontWeight: '700', fontSize: '18px' }}>{ac.name}</span>
-          <p style={{ color: 'var(--danger)', fontSize: '13px', marginTop: '8px' }}>Error: {s.error}</p>
-        </div>
-      );
-      const maxExp = Math.max(...(s.expenseBreakdown || []).map(e => e.total), 1);
-      const maxMonth = Math.max(...(s.monthly || []).map(m => m.revenue), 1);
-      return (
-        <div key={ac.name} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)' }}>{ac.name}</span>
-              <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: s.net >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: s.net >= 0 ? 'var(--success)' : 'var(--danger)', border: `1px solid ${s.net >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, fontWeight: '600' }}>
-                {s.margin}% margin
-              </span>
-            </div>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>YTD {new Date().getFullYear()}</span>
+  {(aircraftData || []).map(ac => (
+    <div key={ac.tail} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)' }}>{ac.tail}</span>
+        <span style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '20px', background: ac.net >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: ac.net >= 0 ? '#22c55e' : '#ef4444', border: `1px solid ${ac.net >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, fontWeight: '600' }}>
+          {ac.revenue > 0 ? Math.round((ac.net / ac.revenue) * 100) : 0}% margin
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+        {[['Revenue', ac.revenue, '#4f8ef7'], ['Expenses', ac.expenses, '#f59e0b'], ['Net Income', ac.net, ac.net >= 0 ? '#22c55e' : '#ef4444']].map(([label, val, color]) => (
+          <div key={label} style={{ background: 'var(--bg-secondary)', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</p>
+            <p style={{ fontSize: '20px', fontWeight: '700', color, margin: 0 }}>${val?.toLocaleString() || '0'}</p>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            {[
-              ['Revenue',     s.revenue,       '#4f8ef7'],
-              ['Net Income',  s.net,            s.net >= 0 ? '#22c55e' : '#ef4444'],
-              ['Total Costs', s.totalExpenses,  '#f59e0b'],
-              ['Fuel',        s.fuel,           '#a855f7'],
-              ['Crew',        s.crew,           '#06b6d4'],
-              ['Maintenance', s.maintenance,    '#f97316'],
-            ].map(([label, value, color]) => (
-              <div key={label} style={{ padding: '14px 18px', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
-                <p style={{ fontSize: '18px', fontWeight: '700', color, margin: 0 }}>{fmt$(value || 0)}</p>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0' }}>
-            <div style={{ padding: '16px 20px', borderRight: '1px solid var(--border)' }}>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Expense breakdown</p>
-              {(s.expenseBreakdown || []).slice(0, 8).map((e, i) => (
-                <div key={e.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: BAR_COLORS[i % BAR_COLORS.length], flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: '11px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-                  <div style={{ width: '60px', height: '4px', background: 'var(--border)', borderRadius: '2px' }}>
-                    <div style={{ width: `${(e.total / maxExp) * 100}%`, height: '100%', background: BAR_COLORS[i % BAR_COLORS.length], borderRadius: '2px' }} />
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)', width: '70px', textAlign: 'right' }}>{fmt$(e.total)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ padding: '16px 20px' }}>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Monthly revenue</p>
-              <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', height: '80px' }}>
-                {(s.monthly || []).map((m, i) => (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', height: '100%', justifyContent: 'flex-end' }}>
-                    <div style={{ width: '100%', background: '#4f8ef7', borderRadius: '2px 2px 0 0', height: `${(m.revenue / maxMonth) * 100}%`, minHeight: m.revenue > 0 ? '3px' : '0' }} />
-                    <span style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>{m.month.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-)}
+        ))}
+      </div>
     </div>
-  );
+  ))}
+    </div>
+)}
+
+    </div>
+  );  
 }
