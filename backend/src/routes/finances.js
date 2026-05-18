@@ -43,35 +43,6 @@ router.get('/gl-test', async (req, res) => {
     if (!byAircraft[tail]) byAircraft[tail] = { tail, legs: [] };
     byAircraft[tail].legs.push(leg);
   });
-  const results = [];
-  for (const [tail, data] of Object.entries(byAircraft)) {
-    const rateCard = rateCards.find(r => r.aircraft_tail === tail);
-    const hourlyRate = rateCard?.hourly_rate || 0;
-    let totalFlightHrs = 0, totalRevenue = 0;
-    const monthlyMap = {}, clientMap = {};
-    data.legs.forEach(leg => {
-      const hrs = leg._calc._minutes / 60;
-      totalFlightHrs += hrs;
-      const depDate = new Date(leg.departure.time);
-      const month = `${depDate.getFullYear()}-${String(depDate.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, hours: 0 };
-      const legRevenue = hrs * hourlyRate;
-      totalRevenue += legRevenue;
-      monthlyMap[month].revenue += legRevenue;
-      monthlyMap[month].hours += hrs;
-      const client = leg.dispatch?.client?.company?.name || 'Unknown';
-      clientMap[client] = (clientMap[client] || 0) + legRevenue;
-    });
-    results.push({
-      tail, totalLegs: data.legs.length,
-      totalFlightHrs: Math.round(totalFlightHrs * 10) / 10,
-      totalRevenue: Math.round(totalRevenue), hourlyRate,
-      monthly: Object.entries(monthlyMap).sort(([a],[b]) => a.localeCompare(b)).map(([month, v]) => ({ month, revenue: Math.round(v.revenue), hours: Math.round(v.hours * 10) / 10 })),
-      topClients: Object.entries(clientMap).map(([name, revenue]) => ({ name, revenue: Math.round(revenue) })).sort((a,b) => b.revenue - a.revenue).slice(0, 5),
-    });
-  }
-  return results.sort((a, b) => b.totalRevenue - a.totalRevenue);
-
 router.get('/summary', async (req, res) => {
   try {
     const now = new Date();
