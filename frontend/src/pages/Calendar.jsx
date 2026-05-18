@@ -296,6 +296,8 @@ export default function Calendar() {
                           onMouseEnter={e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); }}
                           onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setHovered(null)}
+                          onClick={() => setSelectedWorkOrder(ev)}
+                          style={{ ..., cursor: 'pointer' }}
                           style={{ position: 'absolute', left: blk.left, top: ROW_H, width: blk.width, height: ROW_H*0.25, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
                           {blk.width > 40 && (
                             <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
@@ -464,6 +466,47 @@ export default function Calendar() {
           )}
         </div>
       )}
+      {selectedWorkOrder && (
+  <div onClick={() => setSelectedWorkOrder(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '28px', width: '420px', maxWidth: '90vw' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div>
+          <p style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: '700', margin: '0 0 4px' }}>WORK ORDER</p>
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>{selectedWorkOrder.title}</h2>
+        </div>
+        <button onClick={() => setSelectedWorkOrder(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Aircraft</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent)' }}>{selectedWorkOrder.aircraft_tail}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Airport</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{selectedWorkOrder.airport || '—'}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Start</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{new Date(selectedWorkOrder.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Est. Completion</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{selectedWorkOrder.end_time ? new Date(selectedWorkOrder.end_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Status</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: selectedWorkOrder.completed ? '#22c55e' : '#f59e0b' }}>{selectedWorkOrder.completed ? 'Completed' : 'In Progress'}</span>
+        </div>
+        {selectedWorkOrder.notes && (
+          <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Notes</span>
+            <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: '4px 0 0' }}>{selectedWorkOrder.notes}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
