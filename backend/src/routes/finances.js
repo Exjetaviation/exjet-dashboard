@@ -197,7 +197,14 @@ router.get('/by-aircraft', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
+router.get('/raw-invoices', async (req, res) => {
+  try {
+    const invoices = await getAllInvoicesYTD();
+    res.json(invoices);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 // ─── Per-leg revenue: join LevelFlight legs with QB invoices by tripId ────────
 
 router.get('/by-legs', async (req, res) => {
@@ -239,6 +246,7 @@ router.get('/by-legs', async (req, res) => {
         }
       }
     }
+    
 
     // Build per-leg result
     const legResults = [];
