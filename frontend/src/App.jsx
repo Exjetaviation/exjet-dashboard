@@ -15,15 +15,20 @@ import ClientDetail from './pages/ClientDetail';
 import RateCards from './pages/RateCards';
 import Quotes from './pages/Quotes';
 import Finances from './pages/Finances';
-
+import Maintenance from './pages/Maintenance';
+import AssistantPage from './pages/AssistantPage';
 export default function App() {
+
+
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
     <BrowserRouter>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
+        
         <Sidebar open={sidebarOpen} />
-
+        
         {/* Toggle button */}
         <button
           onClick={() => setSidebarOpen(o => !o)}
@@ -78,6 +83,7 @@ export default function App() {
             <Route path="/rate-cards" element={<RateCards />} />
             <Route path="/quotes" element={<Quotes />} />
             <Route path="/finances" element={<Finances />} />
+            <Route path="/maintenance" element={<Maintenance />} />
           </Routes>
         </main>
         <Assistant />
