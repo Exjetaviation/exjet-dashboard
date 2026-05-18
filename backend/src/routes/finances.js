@@ -33,14 +33,6 @@ router.get('/gl-test', async (req, res) => {
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-const getAircraftStats = async () => {
-  const now = Date.now();
-  const startOfYear = new Date(`${new Date().getFullYear()}-01-01`).getTime();
-  const [legsRes, rateCardsRes] = await Promise.all([
-    lf.getScheduledLegs(now),
-    supabase.from('rate_cards').select('*'),
-  ]);
   const legs = legsRes?.legs || [];
   const rateCards = rateCardsRes.data || [];
   const completedLegs = legs.filter(l => l.status === 3 && l.departure?.time >= startOfYear && l._calc?._minutes > 0);
@@ -79,7 +71,6 @@ const getAircraftStats = async () => {
     });
   }
   return results.sort((a, b) => b.totalRevenue - a.totalRevenue);
-};
 
 router.get('/summary', async (req, res) => {
   try {
@@ -88,14 +79,13 @@ router.get('/summary', async (req, res) => {
     const today = now.toISOString().split('T')[0];
     const lastYearStart = `${now.getFullYear() - 1}-01-01`;
     const lastYearEnd = `${now.getFullYear() - 1}-12-31`;
-    const [plThis, plLast, invoices, customers, expenses, accounts, aircraftStats] = await Promise.allSettled([
+    const [plThis, plLast, invoices, customers, expenses, accounts] = await Promise.allSettled([
       getProfitAndLoss(startOfYear, today),
       getProfitAndLoss(lastYearStart, lastYearEnd),
       getOutstandingInvoices(),
       getRevenueByCustomer(startOfYear, today),
       getExpensesByVendor(startOfYear, today),
       getAccountBalances(),
-      getAircraftStats(),
     ]);
     res.json({
       profitAndLoss:   plThis.status    === 'fulfilled' ? plThis.value    : { error: plThis.reason?.message },
@@ -104,7 +94,6 @@ router.get('/summary', async (req, res) => {
       customers:       customers.status === 'fulfilled' ? customers.value : { error: customers.reason?.message },
       expenses:        expenses.status  === 'fulfilled' ? expenses.value  : { error: expenses.reason?.message },
       accounts:        accounts.status  === 'fulfilled' ? accounts.value  : [],
-      aircraftStats:   aircraftStats.status === 'fulfilled' ? aircraftStats.value : [],
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
