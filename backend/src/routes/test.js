@@ -1,26 +1,10 @@
 import express from 'express';
-import { getClassList } from '../services/quickbooks.js';
-import { getLevelFlightToken } from '../services/levelflight.js';
-
-const router = express.Router();
-
-router.get('/classes', async (req, res) => {
-  try {
-    const result = await getClassList();
-    res.json({ result, count: result.length });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-import express from 'express';
 import axios from 'axios';
 
 const router = express.Router();
 
 router.get('/aircraft-calendar', async (req, res) => {
   try {
-    const { default: levelflight } = await import('../services/levelflight.js');
-    // Use getAircraftStatus as a proxy to test auth works, then call calendar directly
     const params = new URLSearchParams();
     params.append('grant_type', 'refresh_token');
     params.append('client_id', process.env.LEVELFLIGHT_CLIENT_ID);
@@ -44,5 +28,4 @@ router.get('/aircraft-calendar', async (req, res) => {
   }
 });
 
-export default router;
 export default router;
