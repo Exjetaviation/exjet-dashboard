@@ -5,14 +5,37 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('maintenance_events')
-      .select('*')
-      .order('start_time', { ascending: true });
-    if (error) throw error;
-    res.json({ events: data });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const AIRCRAFT = [
+      { oid: '673d145b2c00002200f03411', tail: 'N69FP' },
+      { oid: '69a0fae31c00002a00611199', tail: 'N408JS' }
+    ];
+    const now = Date.now();
+    const start = now - (90 * 24 * 60 * 60 * 1000);
+    const end = now + (90 * 24 * 60 * 60 * 1000);
+    const results = [];
+
+    for (const ac of AIRCRAFT) {
+      const data = await getAircraftCalendar(ac.oid, start, end);
+      const workOrders = data.workOrders || [];
+      for (const wo of workOrders) {
+        results.push({
+          id: wo._id?.$oid || wo.name,
+          aircraft_tail: ac.tail,
+          title: wo.name,
+          start_time: wo.start || now,
+          end_time: wo.end || wo.proposedEnd || (wo.start + 7 * 24 * 60 * 60 * 1000),
+          completed: wo.completed,
+          airport: wo.airport,
+          type: 'maintenance'
+        });
+      }
+    }
+
+    // Also get manually entered events from Supabase
+    const { data: manualEvents } = await supabase.from('maintenance_events').select('*');
+    res.json([...results, ...(manualEvents || [])]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -73,6 +96,38 @@ router.post('/sync-workorders', async (req, res) => {
       }
     }
     res.json({ success: true, synced });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+router.get('/workorders', async (req, res) => {
+  try {
+    const AIRCRAFT = [
+      { oid: '673d145b2c00002200f03411', tail: 'N69FP' },
+      { oid: '69a0fae31c00002a00611199', tail: 'N408JS' }
+    ];
+    const now = Date.now();
+    const start = now - (90 * 24 * 60 * 60 * 1000);
+    const end = now + (90 * 24 * 60 * 60 * 1000);
+    const results = [];
+
+    for (const ac of AIRCRAFT) {
+      const data = await getAircraftCalendar(ac.oid, start, end);
+      const workOrders = data.workOrders || [];
+      for (const wo of workOrders) {
+        results.push({
+          id: wo._id?.$oid || wo.name,
+          aircraft_tail: ac.tail,
+          title: wo.name,
+          start_time: wo.start || now,
+          end_time: wo.end || wo.proposedEnd || (wo.start + 7 * 24 * 60 * 60 * 1000),
+          completed: wo.completed,
+          airport: wo.airport,
+          type: 'maintenance'
+        });
+      }
+    }
+    res.json(results);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
