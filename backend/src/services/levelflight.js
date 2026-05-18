@@ -76,3 +76,13 @@ export const getTripLog = async (dispatchOid) => {
   const res = await client.get(`/api/dispatch/${dispatchOid}/flightLog`);
   return res.data;
 };
+export const getAircraftCalendar = async (aircraftOid, startMs, endMs) => {
+  const client = await lf();
+  const res = await client.post('/api/widgets/aircraftCalendar', {
+    aircraft: { $oid: aircraftOid },
+    start: startMs,
+    end: endMs,
+    includeCancelled: false
+  });
+  return res.data;
+};
