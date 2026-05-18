@@ -69,24 +69,34 @@ export default function Finances() {
   const pl = summary?.profitAndLoss;
   const plLY = summary?.profitAndLossLY;
 
-  const getPlValue = (plData, ...keys) => {
-    if (!plData?.Rows?.Row) return 0;
-    for (const row of plData.Rows.Row) {
-      for (const k of keys) {
-        if (row.group === k || row.Summary?.ColData?.[0]?.value === k) {
-          const val = row.Summary?.ColData?.[1]?.value;
-          return parseFloat(val) || 0;
-        }
-      }
-    }
-    return 0;
-  };
+  // Replace getPlValue and the metric calculations with this:
+const plRows = pl?.Rows?.Row || [];
 
-  const totalRevenue = getPlValue(pl, 'Income', 'GrossProfit') || 0;
-  const totalExpenses = getPlValue(pl, 'Expenses', 'TotalExpenses') || 0;
-  const netIncome = getPlValue(pl, 'NetIncome') || totalRevenue - totalExpenses;
-  const totalRevenueLY = getPlValue(plLY, 'Income', 'GrossProfit') || 0;
+const totalRevenue = (() => {
+  const row = plRows.find(r => r.group === 'Income');
+  return parseFloat(row?.Summary?.ColData?.[1]?.value) || 0;
+})();
 
+const grossProfit = (() => {
+  const row = plRows.find(r => r.group === 'GrossProfit');
+  return parseFloat(row?.Summary?.ColData?.[1]?.value) || 0;
+})();
+
+const totalExpenses = (() => {
+  const row = plRows.find(r => r.group === 'Expenses');
+  return parseFloat(row?.Summary?.ColData?.[1]?.value) || 0;
+})();
+
+const netIncome = (() => {
+  const row = plRows.find(r => r.group === 'NetIncome');
+  return parseFloat(row?.Summary?.ColData?.[1]?.value) || 0;
+})();
+
+const totalRevenueLY = (() => {
+  const rows = plLY?.Rows?.Row || [];
+  const row = rows.find(r => r.group === 'Income');
+  return parseFloat(row?.Summary?.ColData?.[1]?.value) || 0;
+})();
   // Parse monthly data from P&L rows
   const monthlyRows = (() => {
     if (!pl?.Rows?.Row) return [];
@@ -219,7 +229,7 @@ export default function Finances() {
           <div style={styles.grid(5)}>
             <StatCard label="Total Revenue" value={fmtK(totalRevenue)}
               sub={totalRevenueLY > 0 ? `vs ${fmtK(totalRevenueLY)} last year` : 'vs $0 last year'} />
-            <StatCard label="Gross Profit" value={fmtK(totalRevenue - totalExpenses * 0.3)}
+            <StatCard label="Gross Profit" value={fmtK(grossProfit)}
               sub="After direct costs" color="#4f8ef7" />
             <StatCard label="Net Income" value={fmtK(netIncome)}
               color={netIncome >= 0 ? '#22c55e' : '#ef4444'}
@@ -227,7 +237,7 @@ export default function Finances() {
             <StatCard label="Total Expenses" value={fmtK(totalExpenses)}
               sub="Operating expenses" color="#f59e0b" />
             <StatCard label="Outstanding" value={fmtK(outstandingTotal)}
-              sub={`${outstanding.length} unpaid invoices`} color="#ef4444" />
+              sub={`${outstanding.length} unpaid invoices`} color="#ef4444" /> 
           </div>
 
           {outstanding.length > 0 && (
