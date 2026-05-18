@@ -117,6 +117,25 @@ router.get('/summary', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router.get('/by-aircraft-debug', async (req, res) => {
+  try {
+    const now = new Date();
+    const startDate = `${now.getFullYear()}-01-01`;
+    const endDate = now.toISOString().split('T')[0];
+    const data = await getInvoicesByDateRange(startDate, endDate);
+    const invoices = data.QueryResponse?.Invoice || [];
+    const lines = [];
+    for (const inv of invoices) {
+      for (const line of inv.Line || []) {
+        const classRef = line.SalesItemLineDetail?.ClassRef?.name;
+        if (classRef) lines.push({ invoice: inv.DocNumber, class: classRef, amount: line.Amount });
+      }
+    }
+    res.json({ total: lines.length, lines: lines.slice(0, 20) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 router.get('/by-aircraft', async (req, res) => {
   try {
     const now = new Date();
