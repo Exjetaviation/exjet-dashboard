@@ -28,6 +28,7 @@ export default function Calendar() {
   const [view,setView]     = useState('week');
   const [offset,setOffset] = useState(0);
   const [zoom,setZoom]     = useState(1);
+  const [autoFit, setAutoFit] = useState(true);
   const [hovered,setHovered]   = useState(null);
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
@@ -82,6 +83,20 @@ export default function Calendar() {
   }, [rangeStart,totalMs,totalW]);
 
   const goToToday = useCallback(() => { setOffset(0); setTimeout(scrollToCenter,80); }, [scrollToCenter]);
+  const calcFitZoom = useCallback(() => {
+  if (bodyRef.current) {
+    return (bodyRef.current.clientWidth) / (effectiveCols * cfg.baseColW);
+  }
+  return 1;
+}, [effectiveCols, cfg.baseColW]);
+
+useEffect(() => {
+  if (!autoFit) return;
+  setZoom(calcFitZoom());
+  const observer = new ResizeObserver(() => setZoom(calcFitZoom()));
+  if (bodyRef.current) observer.observe(bodyRef.current);
+  return () => observer.disconnect();
+}, [autoFit, calcFitZoom, view]);
   useEffect(() => { const t=setTimeout(scrollToCenter,120); return ()=>clearTimeout(t); }, [scrollToCenter,loading,view,zoom]);
 
   const onPD = useCallback(e => {
@@ -151,6 +166,12 @@ export default function Calendar() {
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'10px'}}>
         <div>
           <h1 style={{fontSize:'22px',fontWeight:'600',color:'var(--text-primary)',margin:0}}>Operations Calendar</h1>
+          <button
+  onClick={() => setAutoFit(a => !a)}
+  style={{padding:'0 8px',height:'30px',fontSize:'11px',background: autoFit ? 'var(--accent)' : 'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color: autoFit ? '#fff' : 'var(--accent)',fontWeight:'600'}}>
+  {autoFit ? 'Auto ✓' : 'Auto'}
+</button>
+<button onClick={()=>setZoom(calcFitZoom())} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--accent)',fontWeight:'600'}}>Fit</button>
           <p style={{fontSize:'13px',color:'var(--text-secondary)',marginTop:'3px'}}>
             {loading?'Loading...':`${aircraft.length} aircraft · ${legs.length} legs · same color = same trip`}
           </p>
