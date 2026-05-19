@@ -94,3 +94,22 @@ export const getPilotCalendar = async (startMs, endMs) => {
   });
   return res.data;
 };
+export const getPilotExpirableDocs = async (part = 135) => {
+  const client = await lf();
+  const res = await client.get('/api/dashboard/pilotExpirableDocuments', {
+    params: { part }
+  });
+  return res.data;
+};
+
+export const getAttendantExpirableDocs = async () => {
+  const client = await lf();
+  const res = await client.get('/api/dashboard/attendantExpirableDocuments');
+  return res.data;
+};
+
+export const getAircraftExpirableDocs = async () => {
+  const client = await lf();
+  const res = await client.get('/api/dashboard/aircraftExpirableDocuments');
+  return res.data;
+};
