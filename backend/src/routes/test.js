@@ -93,7 +93,7 @@ router.get('/pilot-expirable', async (req, res) => {
     const r = await axios.get(
       `${process.env.LEVELFLIGHT_BASE_URL}/api/dashboard/pilotExpirableDocuments`,
       {
-        params: { part: 135 },
+        params: { part: 4 },
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       }
     );
