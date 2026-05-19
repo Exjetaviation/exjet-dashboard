@@ -86,3 +86,11 @@ export const getAircraftCalendar = async (aircraftOid, startMs, endMs) => {
   });
   return res.data;
 };
+export const getPilotCalendar = async (startMs, endMs) => {
+  const client = await lf();
+  const res = await client.post('/api/widgets/pilotCalendar', {
+    start: startMs,
+    end: endMs
+  });
+  return res.data;
+};
