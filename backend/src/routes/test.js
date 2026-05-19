@@ -69,13 +69,16 @@ router.get('/pilot-expirable', async (req, res) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
     const token = tokenRes.data.id_token;
-    const r = await axios.get(`${process.env.LEVELFLIGHT_BASE_URL}/api/dashboard/pilotexpirabledocuments`, {
-      params: { part: '135' },
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-    });
+
+    // Try POST with body instead of GET with query params
+    const r = await axios.post(`${process.env.LEVELFLIGHT_BASE_URL}/api/dashboard/pilotexpirabledocuments`, 
+      { part: 135 },
+      { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
     res.json(r.data);
   } catch (e) {
     res.status(500).json({ error: e.message, details: e.response?.data });
   }
 });
+
 export default router;
