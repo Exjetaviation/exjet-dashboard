@@ -3,7 +3,7 @@ import * as lf from '../services/levelflight.js';
 
 const router = express.Router();
 
-const getMonthTimestamps = (monthsBack = 2, monthsForward = 3) => {
+const getMonthTimestamps = (monthsBack = 2, monthsForward = 12) => {
   const timestamps = [];
   const now = new Date();
   for (let i = monthsBack; i >= 0; i--) {
