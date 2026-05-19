@@ -82,22 +82,9 @@ router.get('/pilot-expirable', async (req, res) => {
 });
 router.get('/pilot-expirable', async (req, res) => {
   try {
-    const params = new URLSearchParams();
-    params.append('grant_type', 'refresh_token');
-    params.append('client_id', process.env.LEVELFLIGHT_CLIENT_ID);
-    params.append('refresh_token', process.env.LEVELFLIGHT_REFRESH_TOKEN);
-    const tokenRes = await axios.post(process.env.LEVELFLIGHT_TOKEN_URL, params, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    });
-    const token = tokenRes.data.id_token;
-    const r = await axios.get(
-      `${process.env.LEVELFLIGHT_BASE_URL}/api/dashboard/pilotExpirableDocuments`,
-      {
-        params: { part: 4 },
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-      }
-    );
-    res.json(r.data);
+    const { getPilotExpirableDocs } = await import('../services/levelflight.js');
+    const data = await getPilotExpirableDocs(135);
+    res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message, details: e.response?.data });
   }
