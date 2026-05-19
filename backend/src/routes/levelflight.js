@@ -3,11 +3,15 @@ import * as lf from '../services/levelflight.js';
 
 const router = express.Router();
 
-const getMonthTimestamps = (monthsBack = 6) => {
+const getMonthTimestamps = (monthsBack = 2, monthsForward = 3) => {
   const timestamps = [];
   const now = new Date();
-  for (let i = 0; i <= monthsBack; i++) {
+  for (let i = monthsBack; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    timestamps.push(d.getTime());
+  }
+  for (let i = 1; i <= monthsForward; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     timestamps.push(d.getTime());
   }
   return timestamps;
@@ -44,7 +48,7 @@ router.get('/pilots', async (req, res) => {
 router.get('/legs', async (req, res) => {
   try {
     const monthsBack = parseInt(req.query.months || '6');
-    const timestamps = getMonthTimestamps(monthsBack);
+    const timestamps = getMonthTimestamps(2, 3);
     const results = await Promise.all(
       timestamps.map(ts => lf.getScheduledLegs(ts).catch(() => ({ legs: [] })))
     );
