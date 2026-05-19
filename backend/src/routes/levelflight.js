@@ -96,13 +96,9 @@ router.get('/trip/:oid', async (req, res) => {
 });
 router.get('/pilot-calendar', async (req, res) => {
   try {
-    const client = await lf();
     const now = Date.now();
-    const r = await client.post('/api/widgets/pilotCalendar', {
-      start: now,
-      end: now + (30 * 24 * 60 * 60 * 1000)
-    });
-    res.json(r.data);
+    const data = await lf.getPilotCalendar(now, now + (30 * 24 * 60 * 60 * 1000));
+    res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 export default router;
