@@ -81,8 +81,6 @@ export default function App() {
             <Route path="/aircraft" element={<Aircraft />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
-            <Route path="/rate-cards" element={<RateCards />} />
-            <Route path="/quotes" element={<Quotes />} />
             <Route path="/finances" element={<Finances />} />
             <Route path="/maintenance" element={<Maintenance />} />
             <Route path="/assistant" element={<AssistantPage />} />
