@@ -18,6 +18,7 @@ export async function apiFetch(endpoint, options = {}) {
 
   if (res.status === 401) {
     // Token missing or expired — send the user back to the login screen.
+    console.log('REDIRECT FROM apiFetch 401', { endpoint, hadToken: !!token });
     await supabase.auth.signOut();
     window.location.href = '/login';
     throw new Error('Session expired. Please log in again.');
