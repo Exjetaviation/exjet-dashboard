@@ -14,11 +14,12 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('LOGIN RESULT — error:', error, '| session:', data?.session);
     setLoading(false);
     if (error) { setError(error.message); return; }
+    if (!data?.session) { setError('No session returned'); return; }
     navigate('/');
-  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
