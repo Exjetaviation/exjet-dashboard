@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 export const useApi = (endpoint) => {
   const [data, setData] = useState(null);
@@ -11,7 +10,7 @@ export const useApi = (endpoint) => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${BASE_URL}${endpoint}`);
+        const res = await apiFetch(endpoint);
         const json = await res.json();
         setData(json);
       } catch (err) {

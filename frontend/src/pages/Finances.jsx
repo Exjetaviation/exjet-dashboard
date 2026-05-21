@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 const fmt  = (n) => `$${Math.round(n || 0).toLocaleString()}`;
 const fmtK = (n) => {
@@ -27,13 +26,13 @@ export default function Finances() {
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/api/finances/summary`)
+    apiFetch('/api/finances/summary')
       .then(r => r.json())
       .then(d => { setSummary(d); setLoading(false); })
       .catch(() => setLoading(false));
-    fetch(`${BASE}/api/finances/by-aircraft`)
+    apiFetch('/api/finances/by-aircraft')
       .then(r => r.json()).then(setAircraft).catch(() => {});
-    fetch(`${BASE}/api/finances/by-trips`)
+    apiFetch('/api/finances/by-trips')
       .then(r => r.json()).then(setTrips).catch(() => {});
   }, []);
 
