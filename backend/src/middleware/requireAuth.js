@@ -1,4 +1,11 @@
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 // Decode JWT header/payload WITHOUT verifying signature — diagnostics only.
 function peekJwt(token) {
@@ -10,16 +17,10 @@ function peekJwt(token) {
   } catch { return null; }
 }
 
-// Verifies the Supabase login token on every API request.
-// If the token is missing or invalid, the request is rejected.
-export function requireAuth(req, res, next) {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    // Fail closed: if auth is not configured, reject everything.
-    console.error('requireAuth: JWT_SECRET not set');
-    return res.status(500).json({ error: 'Server auth not configured' });
-  }
-
+// Verifies the Supabase login token on every API request by asking Supabase.
+// Supabase signs access tokens with asymmetric keys (e.g. ES256), so we
+// delegate verification to Supabase instead of verifying locally.
+export async function requireAuth(req, res, next) {
   const header = req.get('authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) {
@@ -27,16 +28,19 @@ export function requireAuth(req, res, next) {
   }
 
   try {
-    // Supabase signs access tokens with HS256 using the project JWT secret.
-    const payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user) {
+      console.error('requireAuth getUser failed:', error?.message || 'no user', '| token:', peekJwt(token));
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
     req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.user_metadata?.app_role || 'crew',
+      id: data.user.id,
+      email: data.user.email,
+      role: data.user.user_metadata?.app_role || 'crew',
     };
     next();
   } catch (e) {
-    console.error('requireAuth verify failed:', e.message, '| token:', peekJwt(token));
+    console.error('requireAuth getUser threw:', e.message, '| token:', peekJwt(token));
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
