@@ -20,6 +20,7 @@ export default function Login() {
     if (error) { setError(error.message); return; }
     if (!data?.session) { setError('No session returned'); return; }
     navigate('/');
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
