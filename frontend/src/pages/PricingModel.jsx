@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 const fmt$ = v => v != null ? `$${Math.round(v).toLocaleString()}` : '—';
 const fmtPct = v => v != null ? `${Math.round(v * 100)}%` : '—';
@@ -37,7 +36,7 @@ export default function PricingModel() {
 
   const loadModel = async () => {
     setLoading(true);
-    const res = await fetch(`${BASE_URL}/api/pricing/model`);
+    const res = await apiFetch('/api/pricing/model');
     const data = await res.json();
     setModel(data);
     setLoading(false);
@@ -48,7 +47,7 @@ export default function PricingModel() {
   const sync = async () => {
     setSyncing(true); setSyncMsg(null);
     try {
-      const res = await fetch(`${BASE_URL}/api/pricing/sync`, { method: 'POST' });
+      const res = await apiFetch('/api/pricing/sync', { method: 'POST' });
       const data = await res.json();
       setSyncMsg({ type: 'success', text: `Synced ${data.inserted} trips from LevelFlight` });
       await loadModel();
@@ -63,9 +62,8 @@ export default function PricingModel() {
     if (!form.aircraft_tail || !form.flight_mins) return;
     setEstimating(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/pricing/estimate`, {
+      const res = await apiFetch('/api/pricing/estimate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, flight_mins: Number(form.flight_mins), overnight_count: Number(form.overnight_count) }),
       });
       const data = await res.json();

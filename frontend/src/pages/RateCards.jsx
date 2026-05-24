@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 const FIELDS = [
   { key: 'aircraft_tail',        label: 'Tail Number',                  type: 'text',   placeholder: 'N69FP' },
@@ -41,7 +40,7 @@ export default function RateCards() {
 
   const fetchCards = async () => {
     setLoading(true);
-    const res = await fetch(`${BASE_URL}/api/rate-cards`);
+    const res = await apiFetch('/api/rate-cards');
     const data = await res.json();
     setCards(Array.isArray(data) ? data : []);
     setLoading(false);
@@ -66,11 +65,10 @@ export default function RateCards() {
     setSaving(true);
     try {
       const isNew = editing === 'new';
-      const url = isNew ? `${BASE_URL}/api/rate-cards` : `${BASE_URL}/api/rate-cards/${editing}`;
+      const url = isNew ? '/api/rate-cards' : `/api/rate-cards/${editing}`;
       const method = isNew ? 'POST' : 'PUT';
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -86,7 +84,7 @@ export default function RateCards() {
 
   const remove = async (id) => {
     if (!confirm('Delete this rate card?')) return;
-    await fetch(`${BASE_URL}/api/rate-cards/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/rate-cards/${id}`, { method: 'DELETE' });
     await fetchCards();
   };
 

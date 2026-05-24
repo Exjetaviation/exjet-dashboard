@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import wings from '../assets/wings.png';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 const SUGGESTIONS = [
   "What flights are scheduled this week?",
@@ -34,9 +33,8 @@ export default function AssistantPage() {
     setMessages(newMessages);
     setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/assistant/chat`, {
+      const res = await apiFetch('/api/assistant/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
       });
       const data = await res.json();

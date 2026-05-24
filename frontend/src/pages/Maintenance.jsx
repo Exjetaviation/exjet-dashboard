@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const TYPES = ['maintenance', 'aog', 'inspection', 'other'];
 const AIRCRAFT = ['N69FP', 'N408JS'];
 
@@ -9,15 +9,14 @@ export default function Maintenance() {
   const [form, setForm]     = useState({ aircraft_tail: 'N69FP', title: '', start: '', end: '', type: 'maintenance', notes: '' });
   const [saving, setSaving] = useState(false);
 
-  const load = () => fetch(`${BASE_URL}/api/maintenance`).then(r=>r.json()).then(d=>setEvents(d.events||[]));
+  const load = () => apiFetch('/api/maintenance').then(r=>r.json()).then(d=>setEvents(d.events||[]));
   useEffect(() => { load(); }, []);
 
   const submit = async () => {
     if (!form.title || !form.start || !form.end) return alert('Fill in title, start and end');
     setSaving(true);
-    await fetch(`${BASE_URL}/api/maintenance`, {
+    await apiFetch('/api/maintenance', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         aircraft_tail: form.aircraft_tail,
         title: form.title,
@@ -34,7 +33,7 @@ export default function Maintenance() {
 
   const del = async (id) => {
     if (!confirm('Delete this event?')) return;
-    await fetch(`${BASE_URL}/api/maintenance/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/maintenance/${id}`, { method: 'DELETE' });
     load();
   };
 
