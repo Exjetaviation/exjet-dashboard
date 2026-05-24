@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 const DUTY_TYPES = {
   11: { label: 'Flight Duty', color: '#4f8ef7', bg: '#4f8ef722' },
@@ -35,7 +34,7 @@ export default function CrewCalendar() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${BASE}/api/levelflight/pilot-calendar`)
+    apiFetch('/api/levelflight/pilot-calendar')
       .then(r => r.json())
       .then(d => {
         setData(d);

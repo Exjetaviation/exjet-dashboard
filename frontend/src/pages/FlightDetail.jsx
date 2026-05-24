@@ -1,7 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiFetch } from '../lib/api';
 
 const Section = ({ title, children }) => (
   <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
@@ -69,7 +68,7 @@ export default function FlightDetail() {
     ];
     Promise.all(
       endpoints.map(({ key, setter }) =>
-        fetch(`${BASE_URL}/api/foreflight/flights/${ffFlightId}/${key}`)
+        apiFetch(`/api/foreflight/flights/${ffFlightId}/${key}`)
           .then(r => r.json())
           .then(data => setter(data))
           .catch(() => setter(null))
