@@ -12,8 +12,9 @@ const links = [
   { to: '/clients', label: 'Clients', icon: '◎' },
   { to: '/quotes', label: 'Quotes', icon: '📋' },
   { to: '/finances', label: 'Finances', icon: '💰' },
-  { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
-  { to: '/maintenance', label: 'Maintenance', icon: '🔧' },
+  // Hidden from sidebar — pages and routes still live at /rate-cards and /maintenance.
+  // { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
+  // { to: '/maintenance', label: 'Maintenance', icon: '🔧' },
   { to: '/assistant', label: 'AI Assistant', icon: '✦' },
   { to: '/crew-calendar', label: 'Crew Calendar', icon: '📅' },
 ];
@@ -21,7 +22,7 @@ const links = [
 export default function Sidebar({ open = true }) {
   return (
     <aside style={{
-      width: '220px', minHeight: '100vh',
+      width: '220px', height: '100vh',
       background: 'var(--bg-secondary)',
       borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column',
