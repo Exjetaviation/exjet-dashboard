@@ -14,8 +14,19 @@ const VIEWS = {
   month: { label:'Month', colMs:86400000, cols:31,  baseColW:40,  stepMs:2592000000  },
   year:  { label:'Year',  colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000 },
 };
-const ROW_H=64, HDR_H=48, LABEL_W=120;
-const MX_LANE_H=16, MX_BASE_TOP=ROW_H*0.75;
+// Row geometry: ROW_H grew from 64 → 80 so the maintenance strip can double from 16 → 32
+// (more room for stacked lanes). MX_BASE_TOP is fixed at 48 so everything above it
+// (header, tail label, legs, duty brackets) stays in the same place.
+const ROW_H=80, HDR_H=48, LABEL_W=120;
+const LEG_TOP=8,  LEG_H=48;               // legs occupy y=8..56  — unchanged
+const DUTY_TOP=4, DUTY_H=56;              // duty brackets y=4..60 — unchanged
+const GROUND_H=ROW_H;                     // ground hatching fills the row (as before)
+const MX_BASE_TOP=48;                     // top of maintenance strip — unchanged
+const MX_AREA_H=ROW_H-MX_BASE_TOP;        // 32 — strip height (doubled from original 16)
+const MX_SINGLE_H=16;                     // single-lane height = original block height (do not stretch)
+const MX_LANE_GAP=1;
+const MX_MIN_LANE_H=5;                    // floor; thinner lanes collapse into +N more
+const MX_MAX_VISIBLE_LANES=Math.max(1, Math.floor((MX_AREA_H+MX_LANE_GAP)/(MX_MIN_LANE_H+MX_LANE_GAP)));
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
 const floorHour = ts=>{const d=new Date(ts);d.setMinutes(0,0,0);return d.getTime();};
 const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -154,10 +165,6 @@ useEffect(() => {
     });
     maintMaxLanes[tail] = laneEnds.length;
   });
-  const rowHeightFor = tail => {
-    const lanes = maintMaxLanes[tail] || 0;
-    return lanes <= 1 ? ROW_H : ROW_H + (lanes - 1) * MX_LANE_H;
-  };
 
   const nowPx  = ((Date.now()-rangeStart)/totalMs)*totalW;
   const showNow= nowPx>=0&&nowPx<=totalW;
@@ -264,7 +271,7 @@ useEffect(() => {
         <div style={{display:'flex',overflow:'hidden',maxHeight:'65vh'}}>
           <div style={{width:LABEL_W,minWidth:LABEL_W,flexShrink:0,borderRight:'2px solid var(--border)',overflowY:'hidden'}} id="lbl-col">
             {aircraft.map((ac,i)=>(
-              <div key={ac.tail} style={{height:rowHeightFor(ac.tail),display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 14px',borderBottom:'1px solid var(--border)',background:i%2===0?'var(--bg-card)':'#111119',flexShrink:0}}>
+              <div key={ac.tail} style={{height:ROW_H,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 14px',borderBottom:'1px solid var(--border)',background:i%2===0?'var(--bg-card)':'#111119',flexShrink:0}}>
                 <span style={{fontSize:'13px',fontWeight:'700',color:'var(--accent)'}}>{ac.tail}</span>
                 <span style={{fontSize:'11px',color:'var(--text-secondary)',marginTop:'3px'}}>{ac.type?.replace('Gulfstream ','G')||'—'}</span>
               </div>
@@ -282,7 +289,7 @@ useEffect(() => {
               {loading ? (
                 <div style={{padding:'60px',textAlign:'center',color:'var(--text-secondary)'}}>Loading...</div>
               ) : aircraft.map((ac,rowIdx)=>(
-                <div key={ac.tail} style={{position:'relative',height:rowHeightFor(ac.tail),borderBottom:'1px solid var(--border)',background:rowIdx%2===0?'var(--bg-card)':'#111119'}}>
+                <div key={ac.tail} style={{position:'relative',height:ROW_H,borderBottom:'1px solid var(--border)',background:rowIdx%2===0?'var(--bg-card)':'#111119'}}>
 
                   {/* Grid lines */}
                   {cols.map(col=>(
@@ -317,7 +324,7 @@ useEffect(() => {
                           onMouseEnter={e=>{setHovered({_isGround:true,airport,duration:durLabel,start:gStart,end:gEnd});setTipPos({x:e.clientX,y:e.clientY});}}
                           onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                           onMouseLeave={()=>setHovered(null)}
-                          style={{position:'absolute',left:blk.left,top:0,width:blk.width,height:ROW_H,background:'repeating-linear-gradient(45deg,rgba(255,255,255,0.025) 0px,rgba(255,255,255,0.025) 4px,transparent 4px,transparent 10px)',borderLeft:'1px solid rgba(255,255,255,0.08)',borderRight:'1px solid rgba(255,255,255,0.08)',zIndex:1,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',cursor:'default'}}>
+                          style={{position:'absolute',left:blk.left,top:0,width:blk.width,height:GROUND_H,background:'repeating-linear-gradient(45deg,rgba(255,255,255,0.025) 0px,rgba(255,255,255,0.025) 4px,transparent 4px,transparent 10px)',borderLeft:'1px solid rgba(255,255,255,0.08)',borderRight:'1px solid rgba(255,255,255,0.08)',zIndex:1,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',cursor:'default'}}>
                           {blk.width>50&&(
                             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'1px'}}>
                               <span style={{fontSize:'10px',fontWeight:'700',color:'rgba(255,255,255,0.4)'}}>{airport}</span>
@@ -328,30 +335,59 @@ useEffect(() => {
                       );
                     });
                   })()}
-                  {/* Maintenance blocks (lane-assigned to prevent overlap collisions) */}
-                  {(maintByTail[ac.tail] || []).map(({ ev, lane }, mi) => {
-                    const blk = getBlock(ev.start_time, ev.end_time);
-                    if (!blk) return null;
-                    const isMx   = ev.type === 'maintenance';
-                    const isDown = ev.type === 'aog';
-                    const bgColor = isDown ? 'rgba(239, 68, 68, 0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
-                    const borderColor = isDown ? '#ef4444' : isMx ? '#f59e0b' : '#a855f7';
+                  {/* Maintenance blocks — lane-assigned, shrunk to share the fixed strip */}
+                  {(() => {
+                    const items = maintByTail[ac.tail] || [];
+                    if (items.length === 0) return null;
+                    const totalLanes   = maintMaxLanes[ac.tail] || 1;
+                    const visibleLanes = Math.min(totalLanes, MX_MAX_VISIBLE_LANES);
+                    // Single lane: render at the ORIGINAL 16px height, top-aligned in the strip — visually identical to before.
+                    // Multi-lane: divide the full 32px strip among visible lanes (shrink-to-fit).
+                    const laneH        = visibleLanes === 1
+                      ? MX_SINGLE_H
+                      : (MX_AREA_H - (visibleLanes - 1) * MX_LANE_GAP) / visibleLanes;
+                    const fontSize     = laneH >= 14 ? 10 : laneH >= 11 ? 9 : 8;
+                    const showText     = laneH >= 13;   // only render the title when the band is tall enough to not clip glyphs
+                    const overflowTop  = MX_BASE_TOP + (visibleLanes - 1) * (laneH + MX_LANE_GAP);
 
-                    return (
-                      <div key={`mx-${mi}`}
-                        onMouseEnter={e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); }}
-                        onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
-                        onMouseLeave={() => setHovered(null)}
-                        onClick={() => setSelectedWorkOrder(ev)}
-                        style={{ position: 'absolute', left: blk.left, top: MX_BASE_TOP + lane * MX_LANE_H, width: blk.width, height: MX_LANE_H, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
-                        {blk.width > 40 && (
-                          <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
-                            {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                    return items.map(({ ev, lane }, mi) => {
+                      const blk = getBlock(ev.start_time, ev.end_time);
+                      if (!blk) return null;
+                      const isMx     = ev.type === 'maintenance';
+                      const isDown   = ev.type === 'aog';
+                      const handlers = {
+                        onMouseEnter: e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); },
+                        onMouseMove:  e => setTipPos({ x: e.clientX, y: e.clientY }),
+                        onMouseLeave: () => setHovered(null),
+                        onClick:      () => setSelectedWorkOrder(ev),
+                      };
+
+                      // Overflow: this lane would be too thin — collapse into a "+1 more" pill in the bottom visible slot.
+                      if (lane >= visibleLanes) {
+                        return (
+                          <div key={`mx-of-${mi}`} {...handlers}
+                            style={{ position: 'absolute', left: blk.left, top: overflowTop, width: Math.min(blk.width, 36), height: laneH, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: '2px', zIndex: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: `${Math.min(fontSize, 9)}px`, fontWeight: 700, color: '#fff', lineHeight: 1, cursor: 'pointer', overflow: 'hidden' }}>
+                            +1
+                          </div>
+                        );
+                      }
+
+                      const bgColor     = isDown ? 'rgba(239, 68, 68, 0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
+                      const borderColor = isDown ? '#ef4444' : isMx ? '#f59e0b' : '#a855f7';
+                      const top         = MX_BASE_TOP + lane * (laneH + MX_LANE_GAP);
+
+                      return (
+                        <div key={`mx-${mi}`} {...handlers}
+                          style={{ position: 'absolute', left: blk.left, top, width: blk.width, height: laneH, background: bgColor, borderLeft: `2px solid ${borderColor}`, borderRight: `2px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default', lineHeight: 1 }}>
+                          {showText && blk.width > 40 && (
+                            <span style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', display: 'block', maxWidth: '100%' }}>
+                              {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                   {/* Duty brackets */}
                   {(()=>{
                     const type11=dutyTimes.filter(d=>{
@@ -392,7 +428,7 @@ useEffect(() => {
                         <React.Fragment key={`dg-${gi}`}>
                           {startBlk&&(
                             <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Duty IN',time:earliest,duration:durLabel,limit:limitLabel,tail:ac.tail,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
-                              style={{position:'absolute',left:startBlk.left-1,top:4,width:16,height:ROW_H-8,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
+                              style={{position:'absolute',left:startBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',left:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
                               {hasPIC&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',left:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
@@ -401,7 +437,7 @@ useEffect(() => {
                           )}
                           {endBlk&&(
                             <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'14hr Limit',time:maxDutyEnd,duration:durLabel,limit:limitLabel,tail:ac.tail,isLimit:true,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
-                              style={{position:'absolute',left:endBlk.left-1,top:4,width:16,height:ROW_H-8,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
+                              style={{position:'absolute',left:endBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',right:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
                               {hasPIC&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
@@ -430,7 +466,7 @@ useEffect(() => {
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
                         onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                         onMouseLeave={()=>setHovered(null)}
-                        style={{position:'absolute',left:blk.left+1,top:8,width:Math.max(blk.width-2,3),height:ROW_H-16,background:color,borderRadius:'5px',cursor:'pointer',opacity:isHov?1:0.85,boxShadow:isHov?`0 2px 12px ${color}99`:'none',border:`1px solid ${color}88`,zIndex:isHov?5:2,display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
+                        style={{position:'absolute',left:blk.left+1,top:LEG_TOP,width:Math.max(blk.width-2,3),height:LEG_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isHov?1:0.85,boxShadow:isHov?`0 2px 12px ${color}99`:'none',border:`1px solid ${color}88`,zIndex:isHov?5:2,display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
                         {blk.width>60&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.8)',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0}}>{origin}</span>}
                         {blk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
                         {blk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{blk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
