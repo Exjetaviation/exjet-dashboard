@@ -18,10 +18,10 @@ const VIEWS = {
 //   ┌───────────────────────────┐  y=0
 //   │  flight area (legs/duty)  │
 //   ├───────────────────────────┤  y=MX_BASE_TOP
-//   │  maintenance strip (32px) │
+//   │  maintenance strip (16px) │
 //   └───────────────────────────┘  y=ROW_H  (bottom-anchored)
-const ROW_H=80, HDR_H=48, LABEL_W=120;
-const MX_AREA_H=32;                            // maintenance strip height
+const ROW_H=64, HDR_H=48, LABEL_W=120;
+const MX_AREA_H=16;                            // maintenance strip height (original compact strip)
 const MX_BASE_TOP=ROW_H-MX_AREA_H;             // 48 — strip is the bottom MX_AREA_H of the row
 const MX_LANE_GAP=1;
 const MX_MIN_LANE_H=5;                         // floor; thinner lanes collapse into +N more
