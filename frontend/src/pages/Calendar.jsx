@@ -26,9 +26,9 @@ const MX_BASE_TOP=ROW_H-MX_AREA_H;             // 48 — strip is the bottom MX_
 const MX_LANE_GAP=1;
 const MX_MIN_LANE_H=5;                         // floor; thinner lanes collapse into +N more
 const MX_MAX_VISIBLE_LANES=Math.max(1, Math.floor((MX_AREA_H+MX_LANE_GAP)/(MX_MIN_LANE_H+MX_LANE_GAP)));
-const FLIGHT_TOP=4;                            // small breathing room above flight blocks
-const FLIGHT_H=MX_BASE_TOP-FLIGHT_TOP-2;       // legs fill the flight area down to ~2px above the strip
-const DUTY_TOP=FLIGHT_TOP;                     // duty brackets bracket the flight area, same vertical extent
+const FLIGHT_TOP=0;                            // flight blocks fill the full flight area (no top gap)
+const FLIGHT_H=MX_BASE_TOP;                    // legs span from row top down to the maintenance strip
+const DUTY_TOP=FLIGHT_TOP;                     // duty brackets match flight extent
 const DUTY_H=FLIGHT_H;
 const GROUND_H=ROW_H;                          // ground hatching still fills the row
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
