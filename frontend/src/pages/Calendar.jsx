@@ -15,6 +15,7 @@ const VIEWS = {
   year:  { label:'Year',  colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000 },
 };
 const ROW_H=64, HDR_H=48, LABEL_W=120;
+const MX_LANE_H=16, MX_BASE_TOP=ROW_H*0.75;
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
 const floorHour = ts=>{const d=new Date(ts);d.setMinutes(0,0,0);return d.getTime();};
 const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -133,6 +134,31 @@ useEffect(() => {
   });
   const aircraft=Object.values(acMap).sort((a,b)=>a.tail.localeCompare(b.tail));
 
+  // Lane-assign maintenance/work orders per aircraft so overlapping bars stack
+  // instead of colliding. Two events overlap when start_a < end_b && end_a > start_b.
+  const maintEvents = Array.isArray(maintData) ? maintData : (maintData?.events || []);
+  const maintByTail = {};
+  const maintMaxLanes = {};
+  maintEvents.forEach(ev => {
+    if (!ev?.aircraft_tail || ev.start_time == null || ev.end_time == null) return;
+    (maintByTail[ev.aircraft_tail] ||= []).push(ev);
+  });
+  Object.keys(maintByTail).forEach(tail => {
+    const sorted = [...maintByTail[tail]].sort((a,b) => a.start_time - b.start_time);
+    const laneEnds = []; // laneEnds[i] = end_time of last event placed in lane i
+    maintByTail[tail] = sorted.map(ev => {
+      let lane = laneEnds.findIndex(end => end <= ev.start_time);
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(ev.end_time); }
+      else { laneEnds[lane] = ev.end_time; }
+      return { ev, lane };
+    });
+    maintMaxLanes[tail] = laneEnds.length;
+  });
+  const rowHeightFor = tail => {
+    const lanes = maintMaxLanes[tail] || 0;
+    return lanes <= 1 ? ROW_H : ROW_H + (lanes - 1) * MX_LANE_H;
+  };
+
   const nowPx  = ((Date.now()-rangeStart)/totalMs)*totalW;
   const showNow= nowPx>=0&&nowPx<=totalW;
 
@@ -238,7 +264,7 @@ useEffect(() => {
         <div style={{display:'flex',overflow:'hidden',maxHeight:'65vh'}}>
           <div style={{width:LABEL_W,minWidth:LABEL_W,flexShrink:0,borderRight:'2px solid var(--border)',overflowY:'hidden'}} id="lbl-col">
             {aircraft.map((ac,i)=>(
-              <div key={ac.tail} style={{height:ROW_H,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 14px',borderBottom:'1px solid var(--border)',background:i%2===0?'var(--bg-card)':'#111119',flexShrink:0}}>
+              <div key={ac.tail} style={{height:rowHeightFor(ac.tail),display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 14px',borderBottom:'1px solid var(--border)',background:i%2===0?'var(--bg-card)':'#111119',flexShrink:0}}>
                 <span style={{fontSize:'13px',fontWeight:'700',color:'var(--accent)'}}>{ac.tail}</span>
                 <span style={{fontSize:'11px',color:'var(--text-secondary)',marginTop:'3px'}}>{ac.type?.replace('Gulfstream ','G')||'—'}</span>
               </div>
@@ -256,7 +282,7 @@ useEffect(() => {
               {loading ? (
                 <div style={{padding:'60px',textAlign:'center',color:'var(--text-secondary)'}}>Loading...</div>
               ) : aircraft.map((ac,rowIdx)=>(
-                <div key={ac.tail} style={{position:'relative',height:ROW_H,borderBottom:'1px solid var(--border)',background:rowIdx%2===0?'var(--bg-card)':'#111119'}}>
+                <div key={ac.tail} style={{position:'relative',height:rowHeightFor(ac.tail),borderBottom:'1px solid var(--border)',background:rowIdx%2===0?'var(--bg-card)':'#111119'}}>
 
                   {/* Grid lines */}
                   {cols.map(col=>(
@@ -302,33 +328,30 @@ useEffect(() => {
                       );
                     });
                   })()}
-                  {/* Maintenance blocks */}
-                  {(Array.isArray(maintData) ? maintData : (maintData?.events||[]))
-                    .filter(ev => ev.aircraft_tail === ac.tail)
-                    .map((ev, mi) => {
-                      const blk = getBlock(ev.start_time, ev.end_time);
-                      if (!blk) return null;
-                      const isMx   = ev.type === 'maintenance';
-                      const isDown = ev.type === 'aog';
-                      const bgColor = isDown ? 'rgba(239, 68, 68, 0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
-                      const borderColor = isDown ? '#ef4444' : isMx ? '#f59e0b' : '#a855f7';
-                      
-                      return (
-                        <div key={`mx-${mi}`}
-                          onMouseEnter={e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); }}
-                          onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
-                          onMouseLeave={() => setHovered(null)}
-                          onClick={() => setSelectedWorkOrder(ev)}
-                          style={{ position: 'absolute', left: blk.left, top: ROW_H*0.75, width: blk.width, height: ROW_H*0.25, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
-                          {blk.width > 40 && (
-                            <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
-                              {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })
-                  }
+                  {/* Maintenance blocks (lane-assigned to prevent overlap collisions) */}
+                  {(maintByTail[ac.tail] || []).map(({ ev, lane }, mi) => {
+                    const blk = getBlock(ev.start_time, ev.end_time);
+                    if (!blk) return null;
+                    const isMx   = ev.type === 'maintenance';
+                    const isDown = ev.type === 'aog';
+                    const bgColor = isDown ? 'rgba(239, 68, 68, 0.15)' : isMx ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
+                    const borderColor = isDown ? '#ef4444' : isMx ? '#f59e0b' : '#a855f7';
+
+                    return (
+                      <div key={`mx-${mi}`}
+                        onMouseEnter={e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); }}
+                        onMouseMove={e => setTipPos({ x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setHovered(null)}
+                        onClick={() => setSelectedWorkOrder(ev)}
+                        style={{ position: 'absolute', left: blk.left, top: MX_BASE_TOP + lane * MX_LANE_H, width: blk.width, height: MX_LANE_H, background: bgColor, borderLeft: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default' }}>
+                        {blk.width > 40 && (
+                          <span style={{ fontSize: '10px', fontWeight: '700', color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>
+                            {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                   {/* Duty brackets */}
                   {(()=>{
                     const type11=dutyTimes.filter(d=>{
