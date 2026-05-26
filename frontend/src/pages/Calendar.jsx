@@ -358,17 +358,19 @@ useEffect(() => {
                       const isMx     = ev.type === 'maintenance';
                       const isDown   = ev.type === 'aog';
                       const handlers = {
+                        // stop pointer capture by the row drag handler — otherwise it eats the click
+                        onPointerDown: e => e.stopPropagation(),
                         onMouseEnter: e => { setHovered({ _isMaint: true, title: ev.title, type: ev.type, tail: ev.aircraft_tail, notes: ev.notes, start: ev.start_time, end: ev.end_time }); setTipPos({ x: e.clientX, y: e.clientY }); },
                         onMouseMove:  e => setTipPos({ x: e.clientX, y: e.clientY }),
                         onMouseLeave: () => setHovered(null),
-                        onClick:      () => setSelectedWorkOrder(ev),
+                        onClick:      e => { e.stopPropagation(); setSelectedWorkOrder(ev); },
                       };
 
                       // Overflow: this lane would be too thin — collapse into a "+1 more" pill in the bottom visible slot.
                       if (lane >= visibleLanes) {
                         return (
                           <div key={`mx-of-${mi}`} {...handlers}
-                            style={{ position: 'absolute', left: blk.left, top: overflowTop, width: Math.min(blk.width, 36), height: laneH, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: '2px', zIndex: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: `${Math.min(fontSize, 9)}px`, fontWeight: 700, color: '#fff', lineHeight: 1, cursor: 'pointer', overflow: 'hidden' }}>
+                            style={{ position: 'absolute', left: blk.left, top: overflowTop, width: Math.min(blk.width, 36), height: laneH, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: '2px', zIndex: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: `${Math.min(fontSize, 9)}px`, fontWeight: 700, color: '#fff', lineHeight: 1, cursor: 'pointer', overflow: 'hidden' }}>
                             +1
                           </div>
                         );
@@ -380,7 +382,7 @@ useEffect(() => {
 
                       return (
                         <div key={`mx-${mi}`} {...handlers}
-                          style={{ position: 'absolute', left: blk.left, top, width: blk.width, height: laneH, background: bgColor, borderLeft: `2px solid ${borderColor}`, borderRight: `2px solid ${borderColor}`, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'default', lineHeight: 1 }}>
+                          style={{ position: 'absolute', left: blk.left, top, width: blk.width, height: laneH, background: bgColor, borderLeft: `2px solid ${borderColor}`, borderRight: `2px solid ${borderColor}`, zIndex: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', lineHeight: 1 }}>
                           {showText && blk.width > 40 && (
                             <span style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', display: 'block', maxWidth: '100%' }}>
                               {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
