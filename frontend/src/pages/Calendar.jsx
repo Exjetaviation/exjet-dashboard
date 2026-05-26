@@ -14,19 +14,23 @@ const VIEWS = {
   month: { label:'Month', colMs:86400000, cols:31,  baseColW:40,  stepMs:2592000000  },
   year:  { label:'Year',  colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000 },
 };
-// Row geometry: ROW_H grew from 64 → 80 so the maintenance strip can double from 16 → 32
-// (more room for stacked lanes). MX_BASE_TOP is fixed at 48 so everything above it
-// (header, tail label, legs, duty brackets) stays in the same place.
+// Row geometry — derived top-down so every row is uniform and nothing floats:
+//   ┌───────────────────────────┐  y=0
+//   │  flight area (legs/duty)  │
+//   ├───────────────────────────┤  y=MX_BASE_TOP
+//   │  maintenance strip (32px) │
+//   └───────────────────────────┘  y=ROW_H  (bottom-anchored)
 const ROW_H=80, HDR_H=48, LABEL_W=120;
-const LEG_TOP=8,  LEG_H=48;               // legs occupy y=8..56  — unchanged
-const DUTY_TOP=4, DUTY_H=56;              // duty brackets y=4..60 — unchanged
-const GROUND_H=ROW_H;                     // ground hatching fills the row (as before)
-const MX_BASE_TOP=48;                     // top of maintenance strip — unchanged
-const MX_AREA_H=ROW_H-MX_BASE_TOP;        // 32 — strip height (doubled from original 16)
-const MX_SINGLE_H=16;                     // single-lane height = original block height (do not stretch)
+const MX_AREA_H=32;                            // maintenance strip height
+const MX_BASE_TOP=ROW_H-MX_AREA_H;             // 48 — strip is the bottom MX_AREA_H of the row
 const MX_LANE_GAP=1;
-const MX_MIN_LANE_H=5;                    // floor; thinner lanes collapse into +N more
+const MX_MIN_LANE_H=5;                         // floor; thinner lanes collapse into +N more
 const MX_MAX_VISIBLE_LANES=Math.max(1, Math.floor((MX_AREA_H+MX_LANE_GAP)/(MX_MIN_LANE_H+MX_LANE_GAP)));
+const FLIGHT_TOP=4;                            // small breathing room above flight blocks
+const FLIGHT_H=MX_BASE_TOP-FLIGHT_TOP-2;       // legs fill the flight area down to ~2px above the strip
+const DUTY_TOP=FLIGHT_TOP;                     // duty brackets bracket the flight area, same vertical extent
+const DUTY_H=FLIGHT_H;
+const GROUND_H=ROW_H;                          // ground hatching still fills the row
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
 const floorHour = ts=>{const d=new Date(ts);d.setMinutes(0,0,0);return d.getTime();};
 const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -341,13 +345,11 @@ useEffect(() => {
                     if (items.length === 0) return null;
                     const totalLanes   = maintMaxLanes[ac.tail] || 1;
                     const visibleLanes = Math.min(totalLanes, MX_MAX_VISIBLE_LANES);
-                    // Single lane: render at the ORIGINAL 16px height, top-aligned in the strip — visually identical to before.
-                    // Multi-lane: divide the full 32px strip among visible lanes (shrink-to-fit).
-                    const laneH        = visibleLanes === 1
-                      ? MX_SINGLE_H
-                      : (MX_AREA_H - (visibleLanes - 1) * MX_LANE_GAP) / visibleLanes;
+                    // Every case divides the full strip evenly. 1 lane = full 32px block,
+                    // anchored to the row's bottom edge via MX_BASE_TOP = ROW_H - MX_AREA_H.
+                    const laneH        = (MX_AREA_H - (visibleLanes - 1) * MX_LANE_GAP) / visibleLanes;
                     const fontSize     = laneH >= 14 ? 10 : laneH >= 11 ? 9 : 8;
-                    const showText     = laneH >= 13;   // only render the title when the band is tall enough to not clip glyphs
+                    const showText     = laneH >= 13;
                     const overflowTop  = MX_BASE_TOP + (visibleLanes - 1) * (laneH + MX_LANE_GAP);
 
                     return items.map(({ ev, lane }, mi) => {
@@ -466,7 +468,7 @@ useEffect(() => {
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
                         onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                         onMouseLeave={()=>setHovered(null)}
-                        style={{position:'absolute',left:blk.left+1,top:LEG_TOP,width:Math.max(blk.width-2,3),height:LEG_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isHov?1:0.85,boxShadow:isHov?`0 2px 12px ${color}99`:'none',border:`1px solid ${color}88`,zIndex:isHov?5:2,display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
+                        style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isHov?1:0.85,boxShadow:isHov?`0 2px 12px ${color}99`:'none',border:`1px solid ${color}88`,zIndex:isHov?5:2,display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
                         {blk.width>60&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.8)',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0}}>{origin}</span>}
                         {blk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
                         {blk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{blk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
