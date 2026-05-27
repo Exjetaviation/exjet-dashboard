@@ -1,6 +1,7 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
+import AgentReviewPanel from '../components/AgentReviewPanel';
 
 const Section = ({ title, children }) => (
   <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
@@ -53,6 +54,7 @@ export default function FlightDetail() {
   const [ffOverflight, setFfOverflight] = useState(null);
   const [ffIcao, setFfIcao] = useState(null);
   const [ffLoading, setFfLoading] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const ffFlightId = leg?.foreflight?.flightId;
 
@@ -89,13 +91,23 @@ export default function FlightDetail() {
 
   const checklist = leg.checklist?.trip || {};
 
+  const aiFlight = {
+    tail: leg.dispatch?.aircraft?.tailNumber || null,
+    departure: leg.departure?.airport || null,
+    destination: leg.arrival?.airport || null,
+    departureDate: leg.departure?.time ? new Date(leg.departure.time).toISOString().slice(0, 10) : null,
+    flightId: leg.foreflight?.flightId || null,
+  };
+
   return (
     <div>
+      {aiOpen && <AgentReviewPanel flight={aiFlight} onClose={() => setAiOpen(false)} />}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
         <button onClick={() => navigate('/flights')} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>
           ← Flights
         </button>
-        <div>
+        <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)' }}>
             {leg.departure?.airport} → {leg.arrival?.airport}
           </h1>
@@ -103,6 +115,25 @@ export default function FlightDetail() {
             {leg.dispatch?.aircraft?.tailNumber} · Trip #{leg.dispatch?.tripId} · Quote #{leg.dispatch?.quoteId}
           </p>
         </div>
+        <button
+          title="Run AI readiness review"
+          onClick={() => setAiOpen(true)}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(79,142,247,0.18)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(79,142,247,0.08)'; }}
+          style={{
+            background: 'rgba(79,142,247,0.08)',
+            border: '1px solid rgba(79,142,247,0.35)',
+            color: 'var(--accent)',
+            borderRadius: '8px',
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ✨ AI
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>

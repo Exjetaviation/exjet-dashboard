@@ -12,6 +12,7 @@ import FlightDetail from './pages/FlightDetail';
 import Crew from './pages/Crew';
 import CrewDetail from './pages/CrewDetail';
 import Aircraft from './pages/Aircraft';
+import AircraftDetail from './pages/AircraftDetail';
 import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
 import RateCards from './pages/RateCards';
@@ -76,6 +77,7 @@ function Dashboard() {
           <Route path="/crew" element={<Crew />} />
           <Route path="/crew/:id" element={<CrewDetail />} />
           <Route path="/aircraft" element={<Aircraft />} />
+          <Route path="/aircraft/:tail" element={<AircraftDetail />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
           <Route path="/rate-cards" element={<RateCards />} />

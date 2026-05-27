@@ -7,6 +7,7 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@supabase/supabase-js": "*",
     "axios": "*",
     "cors": "*",
@@ -16,6 +17,7 @@
     "intuit-oauth": "^4.2.3",
     "jsonwebtoken": "^9.0.3",
     "node-quickbooks": "^2.0.50",
+    "pdf-parse": "^2.4.5",
     "simple-statistics": "*"
   },
   "devDependencies": {
