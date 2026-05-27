@@ -348,8 +348,9 @@ useEffect(() => {
                     // Every case divides the full strip evenly. 1 lane = full 32px block,
                     // anchored to the row's bottom edge via MX_BASE_TOP = ROW_H - MX_AREA_H.
                     const laneH        = (MX_AREA_H - (visibleLanes - 1) * MX_LANE_GAP) / visibleLanes;
-                    const fontSize     = laneH >= 14 ? 10 : laneH >= 11 ? 9 : 8;
-                    const showText     = laneH >= 13;
+                    // Always show the title; scale font down so it still fits in thin stacked lanes.
+                    const fontSize     = laneH >= 14 ? 10 : laneH >= 11 ? 9 : laneH >= 8 ? 8 : 7;
+                    const showText     = laneH >= 5;
                     const overflowTop  = MX_BASE_TOP + (visibleLanes - 1) * (laneH + MX_LANE_GAP);
 
                     return items.map(({ ev, lane }, mi) => {
