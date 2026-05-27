@@ -3,7 +3,13 @@
 // mirroring the proven approach in scripts/exjet-api-probe.js.
 
 import 'dotenv/config';
-import { PDFParse } from 'pdf-parse';
+
+// pdf-parse is lazy-loaded inside fetchDocumentText below. Its transitive
+// dep (pdfjs-dist) evaluates browser APIs at module load (DOMMatrix,
+// ImageData, Path2D) and needs Node 20.12+ to polyfill them via
+// process.getBuiltinModule. Eager-importing here would crash the entire
+// backend at boot on any older runtime — deferring the import keeps the
+// rest of the agent alive even if PDF extraction fails.
 
 const BASE = process.env.FOREFLIGHT_BASE_URL || 'https://dispatch.foreflight.com';
 const API_KEY = process.env.FOREFLIGHT_API_KEY || '';
@@ -108,6 +114,7 @@ async function fetchDocumentText(url) {
 
     let raw = '';
     if (isPdf) {
+      const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: buf });
       const result = await parser.getText();
       raw = typeof result?.text === 'string' ? result.text : '';
