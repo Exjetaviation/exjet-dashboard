@@ -8,6 +8,7 @@ import rateCardRoutes from './routes/rateCards.js';
 import quotesRoutes from './routes/quotes.js';
 import financesRoutes from './routes/finances.js';
 import maintenanceRoutes from './routes/maintenance.js';
+import agentRoutes from './routes/agent.js';
 import { requireAuth } from './middleware/requireAuth.js';
 
 // Load QB refresh token from Supabase on startup
@@ -44,6 +45,7 @@ app.use('/api/rate-cards', rateCardRoutes);
 app.use('/api/quotes', quotesRoutes);
 app.use('/api/finances', financesRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/agent', agentRoutes);
 // Note: /api/test and /api/debug routers intentionally removed (finding F-03).
 
 app.listen(PORT, () => console.log(`Exjet backend listening on port ${PORT}`));

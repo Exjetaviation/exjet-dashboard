@@ -1,8 +1,10 @@
+import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 
 export default function Aircraft() {
   const { data: ffAircraft, loading } = useApi('/api/foreflight/aircraft');
   const { data: lfLegs } = useApi('/api/levelflight/legs');
+  const navigate = useNavigate();
 
   const fleet = Array.isArray(ffAircraft) ? ffAircraft : [];
   const legs = lfLegs?.legs || [];
@@ -44,7 +46,12 @@ export default function Aircraft() {
             const last = getLastFlight(ac.aircraftRegistration);
             const next = getNextFlight(ac.aircraftRegistration);
             return (
-              <div key={i} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+              <div key={i}
+                onClick={() => navigate(`/aircraft/${encodeURIComponent(ac.aircraftRegistration)}`)}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(79,142,247,0.06)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-card)'; }}
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', cursor: 'pointer', transition: 'background 0.1s' }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ fontSize: '28px' }}>🛩</div>
