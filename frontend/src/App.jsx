@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
-import Assistant from './components/Assistant';
 import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
@@ -88,7 +87,6 @@ function Dashboard() {
           <Route path="/quotes" element={<Quotes />} />
         </Routes>
       </main>
-      <Assistant />
     </div>
   );
 }
