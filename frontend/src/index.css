@@ -35,3 +35,9 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Leaflet's map container defaults to #ddd (light gray); the dark look comes
+   only from the dark tiles painting over it. Force the container dark so the
+   map never shows light when tiles are slow or fail to load (e.g. older
+   smart-TV browsers that can't fetch the CARTO tiles). */
+.leaflet-container { background: var(--bg-primary) !important; }
