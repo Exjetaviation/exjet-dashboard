@@ -124,6 +124,9 @@ export default function Map() {
   const markersRef = useRef({});
   const trailLayerRef = useRef(null);
   const didFitRef = useRef(false);
+  const mapWrapRef = useRef(null);
+  const [cssFs, setCssFs] = useState(false);      // CSS-maximize fallback when the Fullscreen API is unavailable
+  const [nativeFs, setNativeFs] = useState(false);
   const [selected, setSelected] = useState(null);
 
   const legs = data?.legs || [];
@@ -177,6 +180,38 @@ export default function Map() {
       trailLayerRef.current = null;
     };
   }, []);
+
+  // Full screen: prefer the native Fullscreen API, fall back to CSS-maximize
+  // (covers older browsers that lack the API). Either way Leaflet needs an
+  // invalidateSize once the container has resized.
+  const isFs = nativeFs || cssFs;
+  const enterFs = () => {
+    const el = mapWrapRef.current;
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => setCssFs(true));
+    else setCssFs(true);
+  };
+  const exitFs = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    setCssFs(false);
+  };
+  const toggleFs = () => (isFs ? exitFs() : enterFs());
+
+  useEffect(() => {
+    const onFs = () => {
+      setNativeFs(!!document.fullscreenElement);
+      setTimeout(() => mapInstanceRef.current?.invalidateSize(), 60);
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  useEffect(() => {
+    setTimeout(() => mapInstanceRef.current?.invalidateSize(), 60);
+    if (!cssFs) return;
+    const onKey = e => { if (e.key === 'Escape') setCssFs(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [cssFs]);
 
   // Redraw the ADS-B flight trails when the data, toggle, or fleet changes.
   useEffect(() => {
@@ -306,8 +341,12 @@ export default function Map() {
         </div>
 
         {/* Map */}
-        <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
+        <div ref={mapWrapRef} className="exjet-map-wrap" style={{ overflow: 'hidden', ...(cssFs ? { position: 'fixed', inset: 0, zIndex: 9999, borderRadius: 0, border: 'none', background: 'var(--bg-primary)' } : { flex: 1, borderRadius: '12px', border: '1px solid var(--border)', position: 'relative' }) }}>
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+
+          <button onClick={toggleFs} title={isFs ? 'Exit full screen (Esc)' : 'Full screen'} style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+            {isFs ? '⤧ Exit full screen' : '⤢ Full screen'}
+          </button>
 
           <button onClick={() => setShowTrail(s => !s)} style={{ position: 'absolute', top: 12,
             right: 12, zIndex: 1000, padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer',
@@ -386,6 +425,7 @@ export default function Map() {
 
       <style>{`
         .aircraft-icon { background: transparent; border: none; }
+        .exjet-map-wrap:fullscreen { border-radius: 0; border: none; background: var(--bg-primary); }
         .exjet-tooltip {
           background: #0a0a0f !important;
           border: 1px solid #2a2a3a !important;
