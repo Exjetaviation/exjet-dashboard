@@ -1,4 +1,5 @@
 import { useApi } from '../hooks/useApi';
+import { useAdsb } from '../hooks/useAdsb';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
@@ -93,9 +94,18 @@ const getAircraftPositions = (legs) => {
   }).filter(ac => ac.position);
 };
 
-const createAircraftIcon = (color, isFlying) => {
+const createAircraftIcon = (color, isFlying, heading = null) => {
   const size = isFlying ? 36 : 32;
-  const svg = isFlying
+  // Live in-flight: a north-pointing arrow rotated to the reported track so it
+  // points along the heading. (The ✈ glyph below isn't north-aligned, so it's
+  // only used when we have no live heading.)
+  const headingArrow = isFlying && heading != null;
+  const svg = headingArrow
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 36 36" style="transform: rotate(${heading}deg); transform-origin: center;">
+        <circle cx="18" cy="18" r="17" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1.5"/>
+        <path d="M18 5 L25 28 L18 23 L11 28 Z" fill="${color}"/>
+      </svg>`
+    : isFlying
     ? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 36 36">
         <circle cx="18" cy="18" r="17" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1.5"/>
         <text x="18" y="23" text-anchor="middle" font-size="18">✈</text>
@@ -116,14 +126,40 @@ const createAircraftIcon = (color, isFlying) => {
 
 export default function Map() {
   const { data, loading } = useApi('/api/levelflight/legs');
+  const { positions: live, updatedAt } = useAdsb(20000);
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
+  const didFitRef = useRef(false);
   const [selected, setSelected] = useState(null);
 
   const legs = data?.legs || [];
-  const aircraft = getAircraftPositions(legs);
+  const scheduled = getAircraftPositions(legs);
+
+  // Live ADS-B wins; aircraft with no live position keep their scheduled-leg
+  // position (parked / transponder off), so they still show at last airport.
+  const aircraft = scheduled.map(ac => {
+    const l = live[ac.tail];
+    if (l && l.lat != null && l.lon != null) {
+      return {
+        ...ac,
+        position: { lat: l.lat, lng: l.lon },
+        isFlying: !l.onGround,
+        statusLabel: l.onGround ? 'On Ground · live' : 'In Flight · live',
+        statusColor: l.onGround ? '#22c55e' : '#f59e0b',
+        track: l.track,
+        live: l,
+        source: 'adsb',
+      };
+    }
+    return { ...ac, source: 'scheduled' };
+  });
+  const liveCount = aircraft.filter(ac => ac.source === 'adsb').length;
+
+  // Keep the open detail card in sync with the latest live data instead of the
+  // snapshot captured at click time.
+  const selectedAc = selected ? (aircraft.find(ac => ac.tail === selected.tail) || selected) : null;
 
   useEffect(() => {
     if (mapInstanceRef.current) return;
@@ -156,12 +192,16 @@ export default function Map() {
     markersRef.current = {};
 
     aircraft.forEach(ac => {
-      const icon = createAircraftIcon(ac.statusColor, ac.isFlying);
+      const icon = createAircraftIcon(ac.statusColor, ac.isFlying, ac.track);
       const marker = L.marker([ac.position.lat, ac.position.lng], { icon })
         .addTo(map)
         .on('click', () => setSelected(ac));
 
-      marker.bindTooltip(`<strong>${ac.tail}</strong><br/>${ac.statusLabel} · ${ac.airport || ''}`, {
+      const liveLine = ac.live
+        ? `<br/>${ac.live.altitudeFt != null ? `${ac.live.altitudeFt.toLocaleString()} ft` : '—'} · ${ac.live.groundSpeedKt != null ? `${Math.round(ac.live.groundSpeedKt)} kt` : '—'}${ac.live.callsign ? ` · ${ac.live.callsign}` : ''}`
+        : '';
+      const srcLine = `<br/><span style="opacity:0.6">${ac.source === 'adsb' ? 'Live (ADS-B)' : 'Scheduled'}</span>`;
+      marker.bindTooltip(`<strong>${ac.tail}</strong><br/>${ac.statusLabel} · ${ac.airport || ''}${liveLine}${srcLine}`, {
         permanent: false,
         className: 'exjet-tooltip',
         offset: [0, -10],
@@ -170,11 +210,14 @@ export default function Map() {
       markersRef.current[ac.tail] = marker;
     });
 
-    if (aircraft.length > 0) {
+    // Fit bounds once on first draw only — re-fitting on every live poll would
+    // fight the user's pan/zoom every 20s.
+    if (!didFitRef.current && aircraft.length > 0) {
       const bounds = L.latLngBounds(aircraft.map(ac => [ac.position.lat, ac.position.lng]));
       map.fitBounds(bounds, { padding: [80, 80] });
+      didFitRef.current = true;
     }
-  }, [aircraft.length, loading]);
+  }, [aircraft.length, loading, updatedAt]);
 
   const flyTo = (ac) => {
     setSelected(ac);
@@ -192,7 +235,14 @@ export default function Map() {
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>Fleet Map</h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-            {loading ? 'Loading...' : `${aircraft.length} aircraft tracked · positions based on latest flight data`}
+            {loading
+              ? 'Loading...'
+              : `${aircraft.length} aircraft tracked · ${liveCount} live (ADS-B), ${aircraft.length - liveCount} scheduled`}
+            {updatedAt && (
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {' · '}Live as of {new Date(updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -236,6 +286,13 @@ export default function Map() {
               </div>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0 }}>{ac.type?.replace('Gulfstream ', 'G') || '—'}</p>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px' }}>{ac.airport || '—'}</p>
+              <span style={{
+                display: 'inline-block', marginTop: '6px', fontSize: '9px', fontWeight: '600',
+                letterSpacing: '0.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: '20px',
+                background: ac.source === 'adsb' ? 'rgba(34,197,94,0.12)' : 'rgba(136,136,160,0.12)',
+                color: ac.source === 'adsb' ? '#22c55e' : 'var(--text-secondary)',
+                border: `1px solid ${ac.source === 'adsb' ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
+              }}>{ac.source === 'adsb' ? 'Live · ADS-B' : 'Scheduled'}</span>
             </div>
           ))}
         </div>
@@ -245,7 +302,7 @@ export default function Map() {
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
 
           {/* Selected aircraft detail card */}
-          {selected && (
+          {selectedAc && (
             <div style={{
               position: 'absolute', bottom: '16px', left: '16px', right: '16px',
               background: 'rgba(10,10,15,0.92)', border: '1px solid var(--border)',
@@ -254,39 +311,52 @@ export default function Map() {
               display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start',
             }}>
               <div style={{ flex: 1, minWidth: '140px' }}>
-                <p style={{ fontSize: '18px', fontWeight: '700', color: 'var(--accent)', margin: '0 0 2px' }}>{selected.tail}</p>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>{selected.type}</p>
+                <p style={{ fontSize: '18px', fontWeight: '700', color: 'var(--accent)', margin: '0 0 2px' }}>{selectedAc.tail}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>{selectedAc.type}</p>
               </div>
               <div style={{ flex: 1, minWidth: '140px' }}>
                 <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</p>
-                <p style={{ fontSize: '13px', color: selected.statusColor, fontWeight: '600', margin: 0 }}>● {selected.statusLabel}</p>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{selected.airport}</p>
+                <p style={{ fontSize: '13px', color: selectedAc.statusColor, fontWeight: '600', margin: 0 }}>● {selectedAc.statusLabel}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{selectedAc.airport}</p>
               </div>
-              {selected.currentLeg && (
-                <div style={{ flex: 1, minWidth: '160px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {selected.isFlying ? 'Current flight' : 'Last flight'}
-                  </p>
+              {selectedAc.live && (
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live (ADS-B)</p>
                   <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: '500', margin: 0 }}>
-                    {selected.currentLeg.departure?.airport} → {selected.currentLeg.arrival?.airport}
+                    {selectedAc.live.altitudeFt != null ? `${selectedAc.live.altitudeFt.toLocaleString()} ft` : '—'}
+                    {selectedAc.live.groundSpeedKt != null ? ` · ${Math.round(selectedAc.live.groundSpeedKt)} kt` : ''}
                   </p>
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {selected.currentLeg.dispatch?.client?.company?.name || 'No client'}
+                    {selectedAc.live.callsign || selectedAc.tail}
+                    {selectedAc.live.track != null ? ` · hdg ${Math.round(selectedAc.live.track)}°` : ''}
                   </p>
                 </div>
               )}
-              {selected.nextFlight && (
+              {selectedAc.currentLeg && (
+                <div style={{ flex: 1, minWidth: '160px' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {selectedAc.isFlying ? 'Current flight' : 'Last flight'}
+                  </p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: '500', margin: 0 }}>
+                    {selectedAc.currentLeg.departure?.airport} → {selectedAc.currentLeg.arrival?.airport}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {selectedAc.currentLeg.dispatch?.client?.company?.name || 'No client'}
+                  </p>
+                </div>
+              )}
+              {selectedAc.nextFlight && (
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Next flight</p>
                   <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: '500', margin: 0 }}>
-                    {selected.nextFlight.departure?.airport} → {selected.nextFlight.arrival?.airport}
+                    {selectedAc.nextFlight.departure?.airport} → {selectedAc.nextFlight.arrival?.airport}
                   </p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtTime(selected.nextFlight.departure?.time)}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{fmtTime(selectedAc.nextFlight.departure?.time)}</p>
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                 <button
-                  onClick={() => { if (selected.currentLeg) navigate(`/flights/${selected.currentLeg._id?.$oid}`, { state: { leg: selected.currentLeg } }); }}
+                  onClick={() => { if (selectedAc.currentLeg) navigate(`/flights/${selectedAc.currentLeg._id?.$oid}`, { state: { leg: selectedAc.currentLeg } }); }}
                   style={{ padding: '6px 12px', fontSize: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '7px', cursor: 'pointer' }}
                 >View flight →</button>
                 <button onClick={() => setSelected(null)} style={{ padding: '6px 12px', fontSize: '12px', background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '7px', cursor: 'pointer' }}>
