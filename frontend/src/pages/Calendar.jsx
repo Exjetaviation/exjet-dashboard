@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAdsb } from '../hooks/useAdsb';
 import { useNavigate } from 'react-router-dom';
 
 const STATUS_COLORS = [
@@ -31,6 +32,15 @@ const FLIGHT_H=ROW_H;                          // legs span full row (y=0..64) �
 const DUTY_TOP=FLIGHT_TOP;                     // duty brackets match flight extent
 const DUTY_H=FLIGHT_H;
 const GROUND_H=ROW_H;                          // ground hatching still fills the row
+// Darken a #rrggbb hex by scaling each channel (default 55%) — used for the
+// live "in the air" border, which is a darker shade of the block's own color.
+const darken = (hex, f=0.55) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex||'');
+  if (!m) return hex;
+  const n = parseInt(m[1],16);
+  const r = Math.round(((n>>16)&255)*f), g = Math.round(((n>>8)&255)*f), b = Math.round((n&255)*f);
+  return `#${((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1)}`;
+};
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
 const floorHour = ts=>{const d=new Date(ts);d.setMinutes(0,0,0);return d.getTime();};
 const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -40,6 +50,7 @@ export default function Calendar() {
   const {data,loading}  = useApi('/api/levelflight/legs');
   const {data:dutyData} = useApi('/api/levelflight/duty');
   const {data:maintData} = useApi('/api/maintenance');
+  const {positions:live} = useAdsb(20000);  // live ADS-B onGround status per tail
   const navigate = useNavigate();
   const [view,setView]     = useState('week');
   const [offset,setOffset] = useState(0);
@@ -170,7 +181,8 @@ useEffect(() => {
     maintMaxLanes[tail] = laneEnds.length;
   });
 
-  const nowPx  = ((Date.now()-rangeStart)/totalMs)*totalW;
+  const nowTs  = Date.now();
+  const nowPx  = ((nowTs-rangeStart)/totalMs)*totalW;
   const showNow= nowPx>=0&&nowPx<=totalW;
 
   const cols = Array.from({length:effectiveCols},(_,i) => {
@@ -464,6 +476,10 @@ useEffect(() => {
                     const dest=leg.arrival?.airport||'';
                     const origin=leg.departure?.airport||'';
                     const mins=leg._calc?._minutes||0;
+                    // Live "in the air": this tail is airborne per ADS-B AND this leg is the one happening now.
+                    const liveAc=live[ac.tail];
+                    const isAirborne=!!liveAc&&liveAc.onGround===false&&dep&&arr&&dep<=nowTs&&arr>=nowTs;
+                    const darker=darken(color);
                     return(
                       <div key={leg._id?.$oid||li}
                         onPointerDown={e=>e.stopPropagation()}
@@ -471,7 +487,7 @@ useEffect(() => {
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
                         onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                         onMouseLeave={()=>setHovered(null)}
-                        style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isHov?1:0.85,boxShadow:isHov?`0 2px 12px ${color}99`:'none',border:`1px solid ${color}88`,zIndex:isHov?5:2,display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
+                        style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isAirborne?1:(isHov?1:0.85),boxShadow:isAirborne?undefined:(isHov?`0 2px 12px ${color}99`:'none'),border:isAirborne?`2px solid ${darker}`:`1px solid ${color}88`,...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?6:(isHov?5:2),display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
                         {blk.width>60&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.8)',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0}}>{origin}</span>}
                         {blk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
                         {blk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{blk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
@@ -592,6 +608,12 @@ useEffect(() => {
     </div>
   </div>
 )}
+      <style>{`
+        @keyframes exjetAirbornePulse {
+          0%, 100% { box-shadow: 0 0 2px 0 var(--ab); }
+          50%      { box-shadow: 0 0 8px 2px var(--ab); }
+        }
+      `}</style>
     </div>
   );
 }
