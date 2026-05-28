@@ -116,11 +116,13 @@ const createAircraftIcon = (color, isFlying, heading = 0) => {
 
 export default function Map() {
   const { data, loading } = useApi('/api/levelflight/legs');
-  const { positions: live, updatedAt } = useAdsb(20000);
+  const [showTrail, setShowTrail] = useState(false);
+  const { positions: live, trails, updatedAt } = useAdsb(20000, showTrail);
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
+  const trailLayerRef = useRef(null);
   const didFitRef = useRef(false);
   const [selected, setSelected] = useState(null);
 
@@ -167,12 +169,28 @@ export default function Map() {
     }).addTo(map);
 
     mapInstanceRef.current = map;
+    trailLayerRef.current = L.layerGroup().addTo(map);
 
     return () => {
       map.remove();
       mapInstanceRef.current = null;
+      trailLayerRef.current = null;
     };
   }, []);
+
+  // Redraw the ADS-B flight trails when the data, toggle, or fleet changes.
+  useEffect(() => {
+    const layer = trailLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!showTrail) return;
+    Object.entries(trails || {}).forEach(([tail, pts]) => {
+      if (!pts || pts.length < 2) return;
+      const ac = aircraft.find(a => a.tail === tail);
+      const color = ac?.statusColor || '#4f8ef7';
+      L.polyline(pts, { color, weight: 2.5, opacity: 0.65 }).addTo(layer);
+    });
+  }, [trails, showTrail, aircraft]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -290,6 +308,14 @@ export default function Map() {
         {/* Map */}
         <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative' }}>
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+
+          <button onClick={() => setShowTrail(s => !s)} style={{ position: 'absolute', top: 12,
+            right: 12, zIndex: 1000, padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer',
+            border: '1px solid var(--border)',
+            background: showTrail ? 'var(--accent)' : 'var(--bg-secondary)',
+            color: showTrail ? '#fff' : 'var(--text-primary)' }}>
+            {showTrail ? 'Flight trail: On' : 'Flight trail: Off'}
+          </button>
 
           {/* Selected aircraft detail card */}
           {selectedAc && (
