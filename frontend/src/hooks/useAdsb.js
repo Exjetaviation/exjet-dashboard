@@ -13,6 +13,20 @@ export function useAdsb(intervalMs = 20000, includeTrail = false) {
   // Read the latest includeTrail inside the interval without re-creating it.
   const includeTrailRef = useRef(includeTrail);
   useEffect(() => { includeTrailRef.current = includeTrail; }, [includeTrail]);
+  // One-shot trail fetch the moment the toggle turns on (so we don't wait for
+  // the next poll); clear trails when it turns off.
+  useEffect(() => {
+    if (!includeTrail) { setTrails({}); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const r = await apiFetch('/api/adsb/trail');
+        const j = await r.json();
+        if (alive && j?.trails) setTrails(j.trails);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, [includeTrail]);
   useEffect(() => {
     let alive = true;
     const tick = async () => {
