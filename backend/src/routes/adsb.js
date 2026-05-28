@@ -1,5 +1,5 @@
 import express from 'express';
-import { getLivePositions } from '../services/adsb.js';
+import { getLivePositions, getTrails } from '../services/adsb.js';
 
 const router = express.Router();
 
@@ -10,5 +10,7 @@ router.get('/positions', async (req, res) => {
     res.status(502).json({ error: e.message, positions: {} });
   }
 });
+
+router.get('/trail', (req, res) => res.json({ trails: getTrails() }));
 
 export default router;

@@ -27,7 +27,33 @@ const FLEET = (process.env.ADSB_FLEET || 'N69FP,N408JS')
   .split(',').map(s => s.trim()).filter(Boolean);
 const CACHE_TTL_MS = Number(process.env.ADSB_CACHE_TTL_MS || 20000);
 
+const TRAIL_MAX_POINTS = Number(process.env.ADSB_TRAIL_MAX_POINTS || 1200);
+const TRAIL_MAX_AGE_MS  = Number(process.env.ADSB_TRAIL_MAX_AGE_MS || 21600000); // 6h
+const TRAIL_MIN_MOVE_DEG = 0.0008; // ~90m; skip near-duplicate points (parked aircraft)
+const history = {}; // { reg: [{ lat, lon, t }] }
+
 let cache = { at: 0, data: {} };
+
+function appendTrail(reg, pos) {
+  const arr = history[reg] || (history[reg] = []);
+  const now = Date.now();
+  const last = arr[arr.length - 1];
+  if (last && (Math.abs(pos.lat - last.lat) + Math.abs(pos.lon - last.lon)) < TRAIL_MIN_MOVE_DEG) {
+    last.t = now; return; // hasn't really moved; just refresh timestamp
+  }
+  arr.push({ lat: pos.lat, lon: pos.lon, t: now });
+  const cutoff = now - TRAIL_MAX_AGE_MS;
+  while (arr.length && arr[0].t < cutoff) arr.shift();
+  if (arr.length > TRAIL_MAX_POINTS) arr.splice(0, arr.length - TRAIL_MAX_POINTS);
+}
+
+export function getTrails() {
+  const out = {};
+  for (const reg of Object.keys(history)) {
+    if (history[reg].length > 1) out[reg] = history[reg].map(p => [p.lat, p.lon]);
+  }
+  return out;
+}
 
 function normalize(ac) {
   if (!ac) return null;
@@ -63,7 +89,7 @@ export async function getLivePositions() {
   for (const reg of FLEET) { // sequential: respects free-tier 1 req/sec
     try {
       const pos = await fetchReg(reg);
-      if (pos && pos.lat != null && pos.lon != null) out[reg] = pos;
+      if (pos && pos.lat != null && pos.lon != null) { out[reg] = pos; appendTrail(reg, pos); }
     } catch (e) { console.warn('[adsb]', e.message); }
   }
   cache = { at: now, data: out };
