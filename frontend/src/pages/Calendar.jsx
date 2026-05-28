@@ -185,6 +185,25 @@ useEffect(() => {
   const nowPx  = ((nowTs-rangeStart)/totalMs)*totalW;
   const showNow= nowPx>=0&&nowPx<=totalW;
 
+  // For each tail ADS-B reports airborne, find the leg it's actually flying:
+  // the most-recently-departed leg, tolerating schedule slip (up to 6h past the
+  // scheduled arrival). We deliberately do NOT require now <= arrival — that's
+  // the unreliable schedule estimate, and a real flight running late would
+  // otherwise lose its border the moment it passed its scheduled arrival.
+  const LATE_GRACE_MS = 6*3600000;
+  const airborneLegId = {}; // { tail: leg._id.$oid }
+  aircraft.forEach(ac => {
+    const la = live[ac.tail];
+    if (!la || la.onGround !== false) return; // only when ADS-B says airborne
+    let cur = null;
+    ac.legs.forEach(l => {
+      const dep=l.departure?.time, arr=l.arrival?.time;
+      if (!dep || !arr) return;
+      if (dep <= nowTs && nowTs <= arr + LATE_GRACE_MS && (!cur || dep > cur.departure.time)) cur = l;
+    });
+    if (cur) airborneLegId[ac.tail] = cur._id?.$oid;
+  });
+
   const cols = Array.from({length:effectiveCols},(_,i) => {
     const ts=rangeStart+i*cfg.colMs;
     const d=new Date(ts);
@@ -476,9 +495,9 @@ useEffect(() => {
                     const dest=leg.arrival?.airport||'';
                     const origin=leg.departure?.airport||'';
                     const mins=leg._calc?._minutes||0;
-                    // Live "in the air": this tail is airborne per ADS-B AND this leg is the one happening now.
-                    const liveAc=live[ac.tail];
-                    const isAirborne=!!liveAc&&liveAc.onGround===false&&dep&&arr&&dep<=nowTs&&arr>=nowTs;
+                    // Live "in the air": this leg is the one the airborne tail is flying
+                    // (most-recently-departed leg, tolerating schedule slip — see airborneLegId).
+                    const isAirborne=!!leg._id?.$oid&&airborneLegId[ac.tail]===leg._id?.$oid;
                     const darker=darken(color);
                     return(
                       <div key={leg._id?.$oid||li}
