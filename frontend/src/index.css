@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 :root {
+  /* Force dark on every device, regardless of the OS color-scheme preference.
+     Makes UA-painted surfaces (root canvas, scrollbars, form controls,
+     overscroll) render dark instead of following the device. */
+  color-scheme: dark;
   --bg-primary: #0a0a0f;
   --bg-secondary: #12121a;
   --bg-card: #1a1a24;
@@ -14,6 +18,9 @@
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+  /* Paint the <html> canvas dark too — only <body> had a background, so a
+     light-mode device showed white in the overscroll / root area. */
+  background: var(--bg-primary);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
