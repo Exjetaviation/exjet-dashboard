@@ -94,33 +94,23 @@ const getAircraftPositions = (legs) => {
   }).filter(ac => ac.position);
 };
 
-const createAircraftIcon = (color, isFlying, heading = null) => {
-  const size = isFlying ? 36 : 32;
-  // Live in-flight: a north-pointing arrow rotated to the reported track so it
-  // points along the heading. (The ✈ glyph below isn't north-aligned, so it's
-  // only used when we have no live heading.)
-  const headingArrow = isFlying && heading != null;
-  const svg = headingArrow
-    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 36 36" style="transform: rotate(${heading}deg); transform-origin: center;">
-        <circle cx="18" cy="18" r="17" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1.5"/>
-        <path d="M18 5 L25 28 L18 23 L11 28 Z" fill="${color}"/>
-      </svg>`
-    : isFlying
-    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 36 36">
-        <circle cx="18" cy="18" r="17" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1.5"/>
-        <text x="18" y="23" text-anchor="middle" font-size="18">✈</text>
-      </svg>`
-    : `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">
-        <circle cx="16" cy="16" r="15" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="1.5"/>
-        <circle cx="16" cy="16" r="6" fill="${color}"/>
-      </svg>`;
-
+const createAircraftIcon = (color, isFlying, heading = 0) => {
+  const size = isFlying ? 34 : 26;
+  const rot = Number.isFinite(heading) ? heading : 0;
+  const html = `
+    <div style="width:${size}px;height:${size}px;transform:rotate(${rot}deg);
+      transform-origin:center center;display:flex;align-items:center;
+      justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));">
+      <svg viewBox="0 0 24 24" width="${size}" height="${size}" style="display:block">
+        <path d="M12 2c-.5 0-1 .5-1 1.5V9L3 14v2l8-2.5V19l-2 1.5V22l3-1 3 1v-1.5L13 19v-5.5l8 2.5v-2l-8-5V3.5C13 2.5 12.5 2 12 2z"
+              fill="${color}" stroke="white" stroke-width="0.6"/>
+      </svg>
+    </div>`;
   return L.divIcon({
-    html: svg,
-    className: '',
+    className: 'aircraft-icon',
+    html,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
   });
 };
 
@@ -369,6 +359,7 @@ export default function Map() {
       </div>
 
       <style>{`
+        .aircraft-icon { background: transparent; border: none; }
         .exjet-tooltip {
           background: #0a0a0f !important;
           border: 1px solid #2a2a3a !important;
