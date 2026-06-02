@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { Fragment, useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 
 const fmt  = (n) => `$${Math.round(n || 0).toLocaleString()}`;
@@ -96,13 +96,22 @@ export default function Finances() {
   // Accounts
   const accounts = summary?.accounts || [];
 
-  // Aircraft totals
-  const totalAcRevenue = aircraft.filter(a => a.tail !== 'Untagged').reduce((s, a) => s + a.revenue, 0);
-
   // Trips
   const tripList = trips?.trips || [];
 
   const [expandedTrip, setExpandedTrip] = useState(null);
+  const [expandedCat, setExpandedCat] = useState(null);
+
+  // Round 2a parsed feeds — A/R + A/P aging, balance sheet, cash flow,
+  // per-aircraft bill totals, and the P&L Detail drill-down map.
+  const arAging        = summary?.arAging;
+  const apAging        = summary?.apAging;
+  const balanceSheet   = summary?.balanceSheet;
+  const cashFlowData   = summary?.cashFlow;
+  const cogsByCategory = summary?.cogsByCategory || [];
+  const expByCategory  = summary?.expensesByCategory || [];
+  const expByAircraft  = summary?.expensesByAircraft || {};
+  const plDetailMap    = summary?.plDetailByCategory || {};
 
   const s = {
     page:  { padding: '28px 32px', maxWidth: '1400px' },
@@ -136,6 +145,226 @@ export default function Finances() {
   const Badge = ({ text, color }) => (
     <span style={{ fontSize: '11px', fontWeight: '600', padding: '2px 7px', borderRadius: '5px', background: `${color}22`, color }}>{text}</span>
   );
+
+  // Bucket colors graduate from healthy (green) to alarming (deep red) so the
+  // bars and the per-customer badges read at a glance.
+  const BUCKETS = [
+    { key: 'current', label: 'Current', short: 'Curr',  color: '#22c55e' },
+    { key: 'b1to30',  label: '1 – 30',  short: '1-30',  color: '#4f8ef7' },
+    { key: 'b31to60', label: '31 – 60', short: '31-60', color: '#f59e0b' },
+    { key: 'b61to90', label: '61 – 90', short: '61-90', color: '#ef4444' },
+    { key: 'b91plus', label: '91 +',    short: '91+',   color: '#dc2626' },
+  ];
+
+  const AgingPanel = ({ title, aging, emptyHint, nameLabel }) => {
+    if (!aging) return null;
+    const total = aging.totals?.total || 0;
+    if (total === 0) {
+      return (
+        <div>
+          <p style={s.stl}>{title}</p>
+          <div style={s.card}><p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{emptyHint || 'Nothing outstanding.'}</p></div>
+        </div>
+      );
+    }
+    // Sort worst first: most $ in 61+ days, tiebreaker by total balance.
+    const sortedRows = [...aging.rows].sort((a, b) =>
+      (b.b91plus + b.b61to90) - (a.b91plus + a.b61to90) || b.total - a.total
+    );
+    return (
+      <div>
+        <p style={s.stl}>{title} · {fmt(total)} total · as of {aging.asOf}</p>
+        <div style={s.card}>
+          <div style={{ display: 'grid', gridTemplateColumns: '78px 1fr 120px', columnGap: 10, rowGap: 7, alignItems: 'center' }}>
+            {BUCKETS.map(b => {
+              const amt = aging.totals[b.key] || 0;
+              const pct = total > 0 ? (amt / total) * 100 : 0;
+              return (
+                <Fragment key={b.key}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{b.label}</span>
+                  <Bar pct={pct} color={b.color} />
+                  <span style={{ fontSize: 12, textAlign: 'right', fontWeight: amt > 0 ? 600 : 400, color: amt > 0 ? b.color : 'var(--text-secondary)' }}>
+                    {fmt(amt)} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>· {Math.round(pct)}%</span>
+                  </span>
+                </Fragment>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+            <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.6, margin: '6px 0 4px' }}>{nameLabel} (worst-first)</p>
+            {sortedRows.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                <span style={{ flex: 1, fontSize: 13 }}>{r.name}</span>
+                <div style={{ display: 'flex', gap: 8, fontSize: 10 }}>
+                  {BUCKETS.filter(b => r[b.key] > 0).map(b => (
+                    <span key={b.key} style={{ color: b.color, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: `${b.color}1f` }}>{b.short}&nbsp;{fmt(r[b.key])}</span>
+                  ))}
+                </div>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)', minWidth: 88, textAlign: 'right' }}>{fmt(r.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const BalanceSheetPanel = ({ bs }) => {
+    if (!bs) return null;
+    const Row = ({ label, value, bold, color }) => (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: bold ? 700 : 400 }}>{label}</span>
+        <span style={{ fontSize: bold ? 15 : 13, fontWeight: bold ? 700 : 600, color: color || 'var(--text-primary)' }}>{fmt(value)}</span>
+      </div>
+    );
+    return (
+      <div>
+        <p style={s.stl}>Balance Sheet · as of {bs.asOf}</p>
+        <div style={{ ...s.grid(3), marginBottom: 14 }}>
+          <StatCard label="Working Capital" value={fmtK(bs.workingCapital)} color={bs.workingCapital >= 0 ? '#22c55e' : '#ef4444'} sub="Current assets − current liabilities" />
+          <StatCard label="Cash on Hand"    value={fmtK(bs.cash)} color="#22c55e" sub="Across bank accounts" />
+          <StatCard label="Equity"          value={fmtK(bs.equity)} color="#4f8ef7" sub="Net of all liabilities" />
+        </div>
+        <div style={{ ...s.grid(2), gap: 14 }}>
+          <div style={s.card}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#4f8ef7', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 6px' }}>Assets</p>
+            <Row label="Cash"                 value={bs.cash} color="#22c55e" />
+            <Row label="Accounts Receivable"  value={bs.ar} color="#4f8ef7" />
+            <Row label="Other Current Assets" value={bs.otherCurrentAssets} />
+            <Row label="Total Assets"         value={bs.totalAssets} bold />
+          </div>
+          <div style={s.card}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 6px' }}>Liabilities &amp; Equity</p>
+            <Row label="Accounts Payable"          value={bs.ap} color="#ef4444" />
+            <Row label="Credit Cards"              value={bs.creditCards} color="#ef4444" />
+            <Row label="Other Current Liabilities" value={bs.otherCurrentLiab} />
+            <Row label="Long-Term Liabilities"     value={bs.longTermLiab} />
+            <Row label="Total Liabilities"         value={bs.totalLiab} bold color="#ef4444" />
+            <Row label="Equity"                    value={bs.equity} bold color="#22c55e" />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const CashFlowChart = ({ cf }) => {
+    if (!cf || !cf.operating) return null;
+    // QBO appends a 'Total' column — strip it from the per-month chart so
+    // monthly bars are comparable to each other.
+    const months = cf.columns.slice(0, -1);
+    const oper   = cf.operating.slice(0, -1);
+    const fin    = (cf.financing || []).slice(0, -1);
+    const net    = (cf.netChange  || []).slice(0, -1);
+    const totalOper = cf.operating[cf.operating.length - 1] || 0;
+    const totalNet  = (cf.netChange?.[cf.netChange.length - 1]) || 0;
+    const totalFin  = (cf.financing?.[cf.financing.length - 1]) || 0;
+    const maxAbs = Math.max(1, ...oper.map(Math.abs), ...fin.map(Math.abs), ...net.map(Math.abs));
+    return (
+      <div style={{ ...s.card, marginTop: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+          <p style={{ ...s.stl, margin: 0 }}>Operating Cash Flow · Monthly</p>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+            YTD operating: <span style={{ fontWeight: 700, color: totalOper >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(totalOper)}</span>
+            {' · '}financing: <span style={{ fontWeight: 700, color: totalFin >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(totalFin)}</span>
+            {' · '}net change: <span style={{ fontWeight: 700, color: totalNet >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(totalNet)}</span>
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 200, marginBottom: 8 }}>
+          {oper.map((v, i) => {
+            const h = `${Math.max((Math.abs(v) / maxAbs) * 95, v !== 0 ? 3 : 0)}%`;
+            const positive = v >= 0;
+            return (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: positive ? 'flex-end' : 'flex-start' }}>
+                <div title={`${months[i]}: ${fmt(v)}`} style={{ width: '100%', height: h, background: positive ? '#22c55e' : '#ef4444', borderRadius: positive ? '3px 3px 0 0' : '0 0 3px 3px', minWidth: 8 }} />
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{months[i]}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#22c55e', borderRadius: 2, display: 'inline-block' }} /> Positive operating cash</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#ef4444', borderRadius: 2, display: 'inline-block' }} /> Negative</span>
+        </div>
+      </div>
+    );
+  };
+
+  // Category list with click-to-drill into the P&L Detail transactions.
+  const CategoryGroup = ({ title, rows, accent, total }) => {
+    if (!rows?.length) return null;
+    const max = Math.max(...rows.map(r => r.amount), 1);
+    return (
+      <div style={{ ...s.sec }}>
+        <p style={s.stl}>{title} · {fmtK(total)}</p>
+        <div style={s.card}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={s.th}>Category</th>
+                <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
+                <th style={{ ...s.th, textAlign: 'right' }}>% of Group</th>
+                <th style={{ ...s.th, width: '170px' }}>Share</th>
+                <th style={{ ...s.th, textAlign: 'right', width: '78px' }}>Txns</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const txns = plDetailMap[r.category] || [];
+                const isOpen = expandedCat === r.category;
+                return (
+                  <Fragment key={i}>
+                    <tr onClick={() => setExpandedCat(isOpen ? null : r.category)}
+                        style={{ cursor: txns.length ? 'pointer' : 'default', background: isOpen ? 'rgba(79,142,247,0.04)' : 'transparent' }}>
+                      <td style={s.td}>
+                        <span style={{ marginRight: 6, color: 'var(--text-secondary)', fontSize: 10 }}>{txns.length ? (isOpen ? '▼' : '▶') : ' '}</span>
+                        {r.category}
+                      </td>
+                      <td style={{ ...s.td, textAlign: 'right', fontWeight: 600, color: accent }}>{fmt(r.amount)}</td>
+                      <td style={{ ...s.td, textAlign: 'right', color: 'var(--text-secondary)' }}>{total > 0 ? Math.round((r.amount / total) * 100) : 0}%</td>
+                      <td style={s.td}><Bar pct={(r.amount / max) * 100} color={accent} /></td>
+                      <td style={{ ...s.td, textAlign: 'right', color: 'var(--text-secondary)' }}>{txns.length || '—'}</td>
+                    </tr>
+                    {isOpen && txns.length > 0 && (
+                      <tr style={{ background: 'rgba(79,142,247,0.02)' }}>
+                        <td colSpan={5} style={{ padding: '0 12px 12px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...s.th, padding: '6px 8px' }}>Date</th>
+                                <th style={{ ...s.th, padding: '6px 8px' }}>Type</th>
+                                <th style={{ ...s.th, padding: '6px 8px' }}>Vendor / Source</th>
+                                <th style={{ ...s.th, padding: '6px 8px' }}>Aircraft</th>
+                                <th style={{ ...s.th, padding: '6px 8px' }}>Memo</th>
+                                <th style={{ ...s.th, padding: '6px 8px', textAlign: 'right' }}>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...txns].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((t, j) => (
+                                <tr key={j}>
+                                  <td style={{ ...s.td, padding: '6px 8px', fontSize: 12, color: 'var(--text-secondary)' }}>{t.date}</td>
+                                  <td style={{ ...s.td, padding: '6px 8px', fontSize: 12 }}>{t.type}</td>
+                                  <td style={{ ...s.td, padding: '6px 8px', fontSize: 12 }}>{t.name || '—'}</td>
+                                  <td style={{ ...s.td, padding: '6px 8px', fontSize: 12 }}>
+                                    {t.klass ? <span style={{ fontSize: 11, padding: '1px 5px', borderRadius: 3, background: 'var(--accent)22', color: 'var(--accent)', fontWeight: 600 }}>{t.klass}</span> : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
+                                  </td>
+                                  <td style={{ ...s.td, padding: '6px 8px', fontSize: 12, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.memo || '—'}</td>
+                                  <td style={{ ...s.td, padding: '6px 8px', fontSize: 12, textAlign: 'right', fontWeight: 600, color: accent }}>{fmt(t.amount)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) return (
     <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px' }}>
@@ -226,6 +455,21 @@ export default function Finances() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Balance Sheet snapshot */}
+          {balanceSheet && (
+            <div style={s.sec}>
+              <BalanceSheetPanel bs={balanceSheet} />
+            </div>
+          )}
+
+          {/* A/R + A/P aging side by side */}
+          {(arAging || apAging) && (
+            <div style={{ ...s.sec, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <AgingPanel title="A/R Aging — what's owed to us" aging={arAging} nameLabel="Customers" emptyHint="No open invoices. Nothing outstanding." />
+              <AgingPanel title="A/P Aging — what we owe vendors" aging={apAging} nameLabel="Vendors" emptyHint="No open bills." />
             </div>
           )}
 
@@ -339,6 +583,9 @@ export default function Finances() {
               </table>
             </div>
           )}
+
+          {/* Cash flow per month */}
+          <CashFlowChart cf={cashFlowData} />
         </div>
       )}
 
@@ -348,39 +595,34 @@ export default function Finances() {
           <div style={s.grid(3)}>
             <StatCard label="Total Expenses" value={fmtK(expenses + cogs)} color="#f59e0b" />
             <StatCard label="Cost of Goods Sold" value={fmtK(cogs)} sub="Fuel, crew, landing fees" color="#ef4444" />
-            <StatCard label="Operating Expenses" value={fmtK(expenses)} sub="Admin, insurance, etc." color="#a855f7" />
+            <StatCard label="Operating Expenses" value={fmtK(expenses)} sub="Admin, hangar, software" color="#a855f7" />
           </div>
-          <div style={{ marginTop: '16px' }}>
-            <p style={s.stl}>All Vendors</p>
-            <div style={s.card}>
-              {expenseRows.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>No expense data from QuickBooks.</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <th style={s.th}>Vendor</th>
-                      <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
-                      <th style={{ ...s.th, textAlign: 'right' }}>% of Total</th>
-                      <th style={{ ...s.th, width: '160px' }}>Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expenseRows.map((e, i) => (
-                      <tr key={i}>
-                        <td style={s.td}>{e.name}</td>
-                        <td style={{ ...s.td, textAlign: 'right', fontWeight: '600', color: '#f59e0b' }}>{fmt(e.amount)}</td>
-                        <td style={{ ...s.td, textAlign: 'right', color: 'var(--text-secondary)' }}>
-                          {Math.round((e.amount / (expenses + cogs)) * 100)}%
-                        </td>
-                        <td style={s.td}><Bar pct={(e.amount / maxExpense) * 100} color="#f59e0b" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+
+          {/* Per-flight direct costs — what each trip burns through */}
+          <CategoryGroup
+            title="Direct Costs · Cost of Goods Sold"
+            rows={cogsByCategory}
+            accent="#ef4444"
+            total={cogs}
+          />
+
+          {/* Operating overhead — what keeps the lights on */}
+          <CategoryGroup
+            title="Operating Expenses"
+            rows={expByCategory}
+            accent="#a855f7"
+            total={expenses}
+          />
+
+          {(cogsByCategory.length === 0 && expByCategory.length === 0) && (
+            <div style={{ ...s.card, marginTop: 16 }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>No expense data from QuickBooks yet.</p>
             </div>
-          </div>
+          )}
+
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12, fontStyle: 'italic' }}>
+            Click a category row to see the underlying transactions (date, vendor, aircraft tag, memo).
+          </p>
         </div>
       )}
 
@@ -434,34 +676,49 @@ export default function Finances() {
       {tab === 'aircraft' && (
         <div style={s.sec}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-            <p style={{ ...s.stl, margin: 0 }}>Revenue by Aircraft · from QB invoice class tags</p>
+            <p style={{ ...s.stl, margin: 0 }}>Profit by Aircraft · from QB class tags on invoices AND bills</p>
             <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '5px', background: '#f59e0b22', color: '#f59e0b', fontWeight: '600' }}>
               QB migration in progress — partial data
             </span>
           </div>
           <div style={s.grid(3)}>
-            {aircraft.map((ac, i) => (
-              <div key={i} style={s.card}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <p style={{ fontSize: ac.tail === 'Untagged' ? '16px' : '22px', fontWeight: '700', color: ac.tail === 'Untagged' ? 'var(--text-secondary)' : 'var(--accent)', margin: 0 }}>{ac.tail}</p>
-                  <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-                    {ac.invoiceCount} invoice{ac.invoiceCount !== 1 ? 's' : ''}
-                  </span>
+            {aircraft.map((ac, i) => {
+              const expense = expByAircraft[ac.tail] || 0;
+              const profit  = (ac.revenue || 0) - expense;
+              const isUntagged = ac.tail === 'Untagged';
+              const profitColor = profit >= 0 ? '#22c55e' : '#ef4444';
+              return (
+                <div key={i} style={s.card}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                    <p style={{ fontSize: isUntagged ? '16px' : '22px', fontWeight: '700', color: isUntagged ? 'var(--text-secondary)' : 'var(--accent)', margin: 0 }}>{ac.tail}</p>
+                    <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                      {ac.invoiceCount} invoice{ac.invoiceCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Revenue</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: isUntagged ? 'var(--text-secondary)' : '#4f8ef7' }}>{fmt(ac.revenue)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Bill expenses</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#f59e0b' }}>{fmt(expense)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Profit</span>
+                    <span style={{ fontSize: 17, fontWeight: 700, color: isUntagged ? 'var(--text-secondary)' : profitColor }}>{fmt(profit)}</span>
+                  </div>
+                  {isUntagged && (
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '10px' }}>
+                      Invoices / bills with no aircraft class tag
+                    </p>
+                  )}
                 </div>
-                <p style={{ fontSize: '26px', fontWeight: '700', color: ac.tail === 'Untagged' ? 'var(--text-secondary)' : '#4f8ef7', margin: '0 0 8px' }}>{fmt(ac.revenue)}</p>
-                <Bar pct={totalAcRevenue > 0 ? (ac.revenue / (totalAcRevenue + (aircraft.find(a=>a.tail==='Untagged')?.revenue||0))) * 100 : 0}
-                  color={ac.tail === 'Untagged' ? '#888' : 'var(--accent)'} />
-                {ac.tail === 'Untagged' && (
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                    Invoices without an aircraft class tag
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div style={{ ...s.card, marginTop: '14px', borderColor: '#f59e0b44', background: '#f59e0b08' }}>
             <p style={{ fontSize: '13px', color: '#f59e0b', margin: 0 }}>
-              ⚠️ As QB is fully migrated and all invoices are tagged with the correct aircraft class (N69FP / N408JS), the Untagged amount will move into the correct aircraft columns automatically.
+              ⚠️ Bill-side expenses only include line items posted as Bills with an aircraft class tag. Direct card charges (Purchase entity) and untagged lines aren't reflected here yet. Total YTD bills processed: {summary?.billsCount ?? '—'}.
             </p>
           </div>
         </div>
