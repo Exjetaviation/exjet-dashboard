@@ -31,7 +31,12 @@ export default function Finances() {
       .then(d => { setSummary(d); setLoading(false); })
       .catch(() => setLoading(false));
     apiFetch('/api/finances/by-aircraft')
-      .then(r => r.json()).then(setAircraft).catch(() => {});
+      .then(r => r.json())
+      // The endpoint returns { error } with a 500 on QBO hiccups; apiFetch only
+      // throws on 401, so a non-array body would reach state and make
+      // aircraft.find() throw on the Aircraft tab (blank screen). Guard it.
+      .then(d => setAircraft(Array.isArray(d) ? d : []))
+      .catch(() => {});
     apiFetch('/api/finances/by-trips')
       .then(r => r.json()).then(setTrips).catch(() => {});
   }, []);
