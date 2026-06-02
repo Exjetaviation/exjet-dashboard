@@ -110,8 +110,33 @@ export default function Finances() {
   const cashFlowData   = summary?.cashFlow;
   const cogsByCategory = summary?.cogsByCategory || [];
   const expByCategory  = summary?.expensesByCategory || [];
-  const expByAircraft  = summary?.expensesByAircraft || {};
   const plDetailMap    = summary?.plDetailByCategory || {};
+  const plClasses      = summary?.plByClass?.classes || [];
+
+  // Fleet aircraft (matching the QB class names). Anything QBO reports under a
+  // different class — including its "Not Specified" no-class bucket — folds
+  // into one "Other planes outside of fleet" row.
+  const FLEET_TAILS = ['N69FP', 'N408JS'];
+  const aircraftPL = (() => {
+    const sumKey = k => plClasses.filter(c => !FLEET_TAILS.includes(c.className)).reduce((s, c) => s + (c[k] || 0), 0);
+    const blank = { income: 0, cogs: 0, grossProfit: 0, expenses: 0, netIncome: 0 };
+    const otherClassNames = plClasses.filter(c => !FLEET_TAILS.includes(c.className)).map(c => c.className);
+    const cards = FLEET_TAILS.map(tail => {
+      const c = plClasses.find(x => x.className === tail);
+      return { tail, isFleet: true, ...(c ? { income: c.income, cogs: c.cogs, grossProfit: c.grossProfit, expenses: c.expenses, netIncome: c.netIncome } : blank) };
+    });
+    cards.push({
+      tail: 'Other planes outside of fleet',
+      isFleet: false,
+      income:      sumKey('income'),
+      cogs:        sumKey('cogs'),
+      grossProfit: sumKey('grossProfit'),
+      expenses:    sumKey('expenses'),
+      netIncome:   sumKey('netIncome'),
+      classNames:  otherClassNames,
+    });
+    return cards;
+  })();
 
   const s = {
     page:  { padding: '28px 32px', maxWidth: '1400px' },
@@ -676,51 +701,61 @@ export default function Finances() {
       {tab === 'aircraft' && (
         <div style={s.sec}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-            <p style={{ ...s.stl, margin: 0 }}>Profit by Aircraft · from QB class tags on invoices AND bills</p>
-            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '5px', background: '#f59e0b22', color: '#f59e0b', fontWeight: '600' }}>
-              QB migration in progress — partial data
-            </span>
+            <p style={{ ...s.stl, margin: 0 }}>Profit by Aircraft · QuickBooks ProfitAndLoss by Class</p>
           </div>
           <div style={s.grid(3)}>
-            {aircraft.map((ac, i) => {
-              const expense = expByAircraft[ac.tail] || 0;
-              const profit  = (ac.revenue || 0) - expense;
-              const isUntagged = ac.tail === 'Untagged';
-              const profitColor = profit >= 0 ? '#22c55e' : '#ef4444';
+            {aircraftPL.map((ac, i) => {
+              const expensesAll = (ac.cogs || 0) + (ac.expenses || 0);
+              const ai = aircraft.find(a => a.tail === ac.tail);
+              const profitColor = ac.netIncome >= 0 ? '#22c55e' : '#ef4444';
               return (
                 <div key={i} style={s.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                    <p style={{ fontSize: isUntagged ? '16px' : '22px', fontWeight: '700', color: isUntagged ? 'var(--text-secondary)' : 'var(--accent)', margin: 0 }}>{ac.tail}</p>
-                    <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-                      {ac.invoiceCount} invoice{ac.invoiceCount !== 1 ? 's' : ''}
-                    </span>
+                    <p style={{ fontSize: ac.isFleet ? '22px' : '15px', fontWeight: '700', color: ac.isFleet ? 'var(--accent)' : 'var(--text-secondary)', margin: 0 }}>{ac.tail}</p>
+                    {ai && (
+                      <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '5px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                        {ai.invoiceCount} invoice{ai.invoiceCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Revenue</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: isUntagged ? 'var(--text-secondary)' : '#4f8ef7' }}>{fmt(ac.revenue)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Income</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#4f8ef7' }}>{fmt(ac.income)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Bill expenses</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#f59e0b' }}>{fmt(expense)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Direct costs (COGS)</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#ef4444' }}>{fmt(ac.cogs)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Operating expenses</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#a855f7' }}>{fmt(ac.expenses)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Profit</span>
-                    <span style={{ fontSize: 17, fontWeight: 700, color: isUntagged ? 'var(--text-secondary)' : profitColor }}>{fmt(profit)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700 }}>Net income</span>
+                    <span style={{ fontSize: 17, fontWeight: 700, color: profitColor }}>{fmt(ac.netIncome)}</span>
                   </div>
-                  {isUntagged && (
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '10px' }}>
-                      Invoices / bills with no aircraft class tag
+                  {ac.income !== 0 && (
+                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>
+                      Margin: <span style={{ color: profitColor, fontWeight: 600 }}>{Math.round((ac.netIncome / ac.income) * 100)}%</span>
+                      {' · '}Expenses: {fmt(expensesAll)}
+                    </p>
+                  )}
+                  {!ac.isFleet && ac.classNames?.length > 0 && (
+                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>
+                      Rolls up: {ac.classNames.join(', ')}
                     </p>
                   )}
                 </div>
               );
             })}
           </div>
-          <div style={{ ...s.card, marginTop: '14px', borderColor: '#f59e0b44', background: '#f59e0b08' }}>
-            <p style={{ fontSize: '13px', color: '#f59e0b', margin: 0 }}>
-              ⚠️ Bill-side expenses only include line items posted as Bills with an aircraft class tag. Direct card charges (Purchase entity) and untagged lines aren't reflected here yet. Total YTD bills processed: {summary?.billsCount ?? '—'}.
-            </p>
-          </div>
+          {plClasses.length === 0 && (
+            <div style={{ ...s.card, marginTop: 14 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                P&amp;L by Class hasn't come back from QuickBooks yet. If this persists, check the debug dump at <code>/api/finances/debug/financials</code>.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

@@ -7,10 +7,11 @@ import {
   getInvoicesByDateRange, getAllInvoicesYTD,
   getAgedReceivables, getAgedReceivableDetail, getAgedPayables,
   getBalanceSheetSummary, getCashFlow, getProfitAndLossDetail,
-  getAllBillsYTD,
+  getProfitAndLossByClass, getProfitAndLossByCustomer,
+  getProjects, getProjectProfitability, getAllBillsYTD,
   parseExpensesByCategory, parseCOGSByCategory, parseAgingReport,
   parseBalanceSheet, parseCashFlow, parseExpensesByAircraft,
-  parsePLDetailByCategory,
+  parsePLDetailByCategory, parseProfitAndLossByClass,
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -50,13 +51,17 @@ router.get('/debug/financials', async (req, res) => {
   const startOfYear = `${now.getFullYear()}-01-01`;
   const today = now.toISOString().split('T')[0];
 
-  const [arAging, arAgingDetail, apAging, bsSummary, cashFlow, plDetail, bills] = await Promise.allSettled([
+  const [arAging, arAgingDetail, apAging, bsSummary, cashFlow, plDetail, plByClass, projects, plByCustomer, projProfit, bills] = await Promise.allSettled([
     getAgedReceivables(today),
     getAgedReceivableDetail(today),
     getAgedPayables(today),
     getBalanceSheetSummary(today),
     getCashFlow(startOfYear, today),
     getProfitAndLossDetail(startOfYear, today),
+    getProfitAndLossByClass(startOfYear, today),
+    getProjects(),
+    getProfitAndLossByCustomer(startOfYear, today),
+    getProjectProfitability(startOfYear, today),
     getAllBillsYTD(),
   ]);
 
@@ -70,14 +75,23 @@ router.get('/debug/financials', async (req, res) => {
     ? { count: bills.value.length, sample: bills.value.slice(0, 3) }
     : { error: bills.reason?.message || String(bills.reason), source: 'Bills' };
 
+  // Projects array can be long — return count + first 3 samples for size.
+  const projectsData = projects.status === 'fulfilled'
+    ? { count: projects.value.length, sample: projects.value.slice(0, 3) }
+    : { error: projects.reason?.message || String(projects.reason), source: 'Projects' };
+
   res.json({
-    arAging:       settle(arAging, 'AgedReceivables'),
-    arAgingDetail: settle(arAgingDetail, 'AgedReceivableDetail'),
-    apAging:       settle(apAging, 'AgedPayables'),
-    bsSummary:     settle(bsSummary, 'BalanceSheetSummary'),
-    cashFlow:      settle(cashFlow, 'CashFlow'),
-    plDetail:      settle(plDetail, 'ProfitAndLossDetail'),
-    billsYTD:      billsData,
+    arAging:           settle(arAging, 'AgedReceivables'),
+    arAgingDetail:     settle(arAgingDetail, 'AgedReceivableDetail'),
+    apAging:           settle(apAging, 'AgedPayables'),
+    bsSummary:         settle(bsSummary, 'BalanceSheetSummary'),
+    cashFlow:          settle(cashFlow, 'CashFlow'),
+    plDetail:          settle(plDetail, 'ProfitAndLossDetail'),
+    plByClass:         settle(plByClass, 'ProfitAndLossByClass'),
+    projects:          projectsData,
+    plByCustomer:      settle(plByCustomer, 'ProfitAndLossByCustomer'),
+    projectProfit:     settle(projProfit, 'ProjectProfitability'),
+    billsYTD:          billsData,
   });
 });
 // Main summary — pure QB. Fetches everything the Finances page needs in one
@@ -104,7 +118,8 @@ router.get('/summary', async (req, res) => {
       getBalanceSheetSummary(today),                // 8  balance sheet
       getCashFlow(startOfYear, today),              // 9  cash flow (monthly)
       getProfitAndLossDetail(startOfYear, today),   // 10 P&L detail (for drill-down)
-      getAllBillsYTD(),                             // 11 YTD vendor bills (for per-aircraft)
+      getAllBillsYTD(),                             // 11 YTD vendor bills (kept — diagnostic compare)
+      getProfitAndLossByClass(startOfYear, today),  // 12 P&L summarized by Class — authoritative per-aircraft
     ]);
 
     const val = (i) => results[i].status === 'fulfilled' ? results[i].value : null;
@@ -137,6 +152,7 @@ router.get('/summary', async (req, res) => {
       cashFlow:            parseCashFlow(val(9)),
       expensesByAircraft:  parseExpensesByAircraft(bills),
       plDetailByCategory:  parsePLDetailByCategory(val(10)),
+      plByClass:           parseProfitAndLossByClass(val(12)),
       billsCount:          bills.length,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
