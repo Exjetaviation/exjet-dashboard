@@ -59,6 +59,11 @@ export default function Calendar() {
   const [hovered,setHovered]   = useState(null);
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
+  const [,forceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => forceTick(t => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
   const bodyRef = useRef(null);
   const hdrRef  = useRef(null);
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
@@ -424,13 +429,28 @@ useEffect(() => {
                       );
                     });
                   })()}
-                  {/* Duty brackets */}
+                  {/* Duty brackets — open duties (only one of out/in set) render too */}
                   {(()=>{
-                    const type11=dutyTimes.filter(d=>{
-                      if(!d.out||!d.in) return false;
-                      if(d.type!==11) return false;
-                      const ds=Math.min(d.out,d.in), de=Math.max(d.out,d.in);
-                      return ac.legs.some(leg=>leg.departure?.time&&leg.arrival?.time&&ds<=leg.arrival.time+7200000&&de>=leg.departure.time-7200000);
+                    const DUTY_LIMIT_MS=14*3600000;
+                    // Open duty: one of out/in is null/0/missing. Use whichever
+                    // is a valid positive timestamp as the start; effective end
+                    // is start+14h (Part 135 ceiling). Closed duties keep their
+                    // original [min(out,in), max(out,in)] window.
+                    const info=d=>{
+                      const o=Number.isFinite(d.out)&&d.out>0?d.out:null;
+                      const i=Number.isFinite(d.in)&&d.in>0?d.in:null;
+                      if(o==null&&i==null) return null;
+                      const open=o==null||i==null;
+                      const start=open?(o??i):Math.min(o,i);
+                      const end=open?start+DUTY_LIMIT_MS:Math.max(o,i);
+                      return {start,end,open};
+                    };
+                    const type11=dutyTimes.flatMap(d=>{
+                      if(d.type!==11) return [];
+                      const inf=info(d);
+                      if(!inf) return [];
+                      const matches=ac.legs.some(leg=>leg.departure?.time&&leg.arrival?.time&&inf.start<=leg.arrival.time+7200000&&inf.end>=leg.departure.time-7200000);
+                      return matches?[{...d,_start:inf.start,_end:inf.end,_open:inf.open}]:[];
                     });
                     const dutyWithRole=type11.map(d=>{
                       const userId=d.user?.$oid||d.user;
@@ -441,17 +461,16 @@ useEffect(() => {
                       }
                       return {...d,role};
                     });
-                    const sortedD=[...dutyWithRole].sort((a,b)=>Math.min(a.out,a.in)-Math.min(b.out,b.in));
+                    const sortedD=[...dutyWithRole].sort((a,b)=>a._start-b._start);
                     const groups=[];
                     sortedD.forEach(d=>{
-                      const ds=Math.min(d.out,d.in);
                       const last=groups[groups.length-1];
-                      if(last&&ds-Math.min(last[0].out,last[0].in)<=30*60000){last.push(d);}
+                      if(last&&d._start-last[0]._start<=30*60000){last.push(d);}
                       else{groups.push([d]);}
                     });
                     return groups.map((group,gi)=>{
-                      const earliest=Math.min(...group.map(d=>Math.min(d.out,d.in)));
-                      const maxDutyEnd=earliest+14*3600000;
+                      const earliest=Math.min(...group.map(d=>d._start));
+                      const maxDutyEnd=earliest+DUTY_LIMIT_MS;
                       const startBlk=getBlock(earliest,earliest+1);
                       const endBlk=getBlock(maxDutyEnd,maxDutyEnd+1);
                       const timeRemaining=Math.max(0,Math.round((maxDutyEnd-Date.now())/60000));
