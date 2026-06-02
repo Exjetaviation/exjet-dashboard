@@ -113,6 +113,7 @@ export default function Finances() {
   const plDetailMap    = summary?.plDetailByCategory || {};
   const plClasses      = summary?.plByClass?.classes || [];
   const tripsPL        = summary?.tripsProfitability?.trips || [];
+  const outOfFleetPL   = summary?.tripsProfitability?.outOfFleet || null;
 
   // Merge per-trip P&L (income / costs / profit) with the per-invoice list
   // (paid status, line items). Key by trip ID extracted from the customer
@@ -148,6 +149,8 @@ export default function Finances() {
   const tripsAvgMargin    = tripsPL.length > 0 && tripsTotalRevenue > 0
     ? tripsPL.reduce((s, t) => s + (t.income > 0 ? (t.netIncome / t.income) : 0), 0) / tripsPL.length
     : 0;
+  const allRevenue        = tripsTotalRevenue + (outOfFleetPL?.income || 0);
+  const allProfit         = tripsTotalProfit  + (outOfFleetPL?.netIncome || 0);
 
   // Fleet aircraft (matching the QB class names). Anything QBO reports under a
   // different class — including its "Not Specified" no-class bucket — folds
@@ -799,11 +802,12 @@ export default function Finances() {
       {tab === 'trips' && (
         <div style={s.sec}>
           <div style={s.grid(4)}>
-            <StatCard label="Trips Tracked" value={tripsPL.length || tripsMerged.length} sub={`${trips?.totalTrips || 0} invoices`} />
-            <StatCard label="Trip Revenue" value={fmtK(tripsTotalRevenue || trips?.totalRevenue)} color="#4f8ef7" sub="From QB per-trip P&L" />
-            <StatCard label="Trip Profit"  value={fmtK(tripsTotalProfit)} color={tripsTotalProfit >= 0 ? '#22c55e' : '#ef4444'}
-              sub={`Avg margin ${Math.round(tripsAvgMargin * 100)}%`} />
-            <StatCard label="Outstanding"  value={fmtK(trips?.totalOutstanding)} color="#ef4444"
+            <StatCard label="Trips Tracked" value={tripsPL.length} sub={outOfFleetPL ? `+ ${outOfFleetPL.customerCount} out-of-fleet customers` : `${trips?.totalTrips || 0} invoices`} />
+            <StatCard label="Revenue"       value={fmtK(allRevenue || trips?.totalRevenue)} color="#4f8ef7"
+              sub={outOfFleetPL ? `${fmtK(tripsTotalRevenue)} trips · ${fmtK(outOfFleetPL.income)} out-of-fleet` : 'From QB per-trip P&L'} />
+            <StatCard label="Profit"        value={fmtK(allProfit)} color={allProfit >= 0 ? '#22c55e' : '#ef4444'}
+              sub={`Trip-only margin ${Math.round(tripsAvgMargin * 100)}%`} />
+            <StatCard label="Outstanding"   value={fmtK(trips?.totalOutstanding)} color="#ef4444"
               sub={`Collected ${fmtK((trips?.totalRevenue || 0) - (trips?.totalOutstanding || 0))}`} />
           </div>
 
@@ -890,14 +894,43 @@ export default function Finances() {
                       </Fragment>
                     );
                   })}
-                  {tripsMerged.length === 0 && (
+                  {outOfFleetPL && (
+                    <Fragment>
+                      <tr onClick={() => setExpandedTrip(expandedTrip === 'OUT_OF_FLEET' ? null : 'OUT_OF_FLEET')}
+                          style={{ cursor: 'pointer', background: expandedTrip === 'OUT_OF_FLEET' ? 'rgba(245,158,11,0.06)' : 'rgba(245,158,11,0.03)', borderTop: '2px solid var(--border)' }}>
+                        <td style={{ ...s.td, fontWeight: 700, color: '#f59e0b' }}>
+                          <span style={{ marginRight: 6, color: 'var(--text-secondary)', fontSize: 10 }}>{expandedTrip === 'OUT_OF_FLEET' ? '▼' : '▶'}</span>
+                          Out of fleet
+                          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400 }}>
+                            ({outOfFleetPL.customerCount} customer{outOfFleetPL.customerCount !== 1 ? 's' : ''} without a trip sub-customer)
+                          </span>
+                        </td>
+                        <td style={{ ...s.td, color: 'var(--text-secondary)', fontSize: 11 }}>—</td>
+                        <td style={{ ...s.td, textAlign: 'right', fontWeight: 600, color: '#4f8ef7' }}>{fmt(outOfFleetPL.income)}</td>
+                        <td style={{ ...s.td, textAlign: 'right', color: '#f59e0b' }}>{fmt(outOfFleetPL.totalExpenses)}</td>
+                        <td style={{ ...s.td, textAlign: 'right', fontWeight: 700, color: outOfFleetPL.netIncome >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(outOfFleetPL.netIncome)}</td>
+                        <td style={{ ...s.td, textAlign: 'right', color: outOfFleetPL.netIncome >= 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{outOfFleetPL.income > 0 ? `${Math.round(outOfFleetPL.margin * 100)}%` : '—'}</td>
+                        <td style={s.td}>
+                          <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: '#f59e0b22', color: '#f59e0b', fontWeight: 600 }}>no trip tag</span>
+                        </td>
+                        <td style={{ ...s.td, textAlign: 'right', color: 'var(--text-secondary)' }}>—</td>
+                        <td style={{ ...s.td, color: 'var(--text-secondary)', textAlign: 'center' }}>{expandedTrip === 'OUT_OF_FLEET' ? '▲' : '▼'}</td>
+                      </tr>
+                      {expandedTrip === 'OUT_OF_FLEET' && outOfFleetPL.customerNames.map((cn, j) => (
+                        <tr key={`oof-${j}`} style={{ background: 'rgba(245,158,11,0.02)' }}>
+                          <td colSpan={9} style={{ ...s.td, paddingLeft: 32, fontSize: 12, color: 'var(--text-secondary)' }}>↳ {cn}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  )}
+                  {tripsMerged.length === 0 && !outOfFleetPL && (
                     <tr><td colSpan={9} style={{ ...s.td, textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>No trips yet for {new Date().getFullYear()}.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12, fontStyle: 'italic' }}>
-              Each trip is a QB sub-customer (e.g. "Trip 25079"). Revenue / Costs / Profit are pulled from QB's ProfitAndLoss summarized by Customer — they include every transaction tagged to that sub-customer (bills, invoices, journal entries, card charges).
+              Each trip is a QB sub-customer (e.g. "Trip 25079"). Revenue / Costs / Profit are pulled from QB's ProfitAndLoss summarized by Customer — they include every transaction tagged to that sub-customer (bills, invoices, journal entries, card charges). "Out of fleet" rolls up every parent customer billed directly without a trip sub-customer.
             </p>
           </div>
         </div>

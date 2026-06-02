@@ -236,7 +236,9 @@ export const getProfitAndLossByClass = async (startDate, endDate) => {
   return qbFetch('reports/ProfitAndLoss', {
     start_date: startDate,
     end_date: endDate,
-    summarize_column_by: 'Class',
+    // QBO expects the plural form for class summarization (matches Customers,
+    // Vendors, etc.). The singular 'Class' returns "Invalid Enumeration".
+    summarize_column_by: 'Classes',
   });
 };
 
@@ -463,25 +465,57 @@ export const parseProfitAndLossByClass = (report) => {
 // enabled on this plan tier, so sub-customer naming is the equivalent. The
 // "Total ParentName" rollup columns are skipped naturally because they don't
 // match the Trip pattern.
-const TRIP_PATTERN = /^Trip\s+\d+/i;
+const TRIP_PATTERN  = /^Trip\s+\d+/i;
+const TOTAL_PATTERN = /^Total\s+/i;
 export const parseTripsProfitability = (report) => {
   const out = parseProfitAndLossByColumn(report);
   if (!out) return null;
-  const trips = out.columns
-    .filter(c => TRIP_PATTERN.test(c.name))
-    .map(c => {
+  const trips = [];
+  const outOfFleetCustomers = [];
+
+  for (const c of out.columns) {
+    if (TRIP_PATTERN.test(c.name)) {
       const m = c.name.match(/(\d+)/);
       const tripId = m ? m[1] : null;
       const totalExpenses = (c.cogs || 0) + (c.expenses || 0);
       const margin = c.income > 0 ? c.netIncome / c.income : 0;
-      return {
+      trips.push({
         name: c.name, tripId,
         income: c.income, cogs: c.cogs, expenses: c.expenses,
         totalExpenses, netIncome: c.netIncome, margin,
-      };
-    })
-    .sort((a, b) => b.income - a.income);
-  return { trips };
+      });
+    } else if (TOTAL_PATTERN.test(c.name)) {
+      // QBO emits a "Total ParentCustomerName" column that already includes
+      // its sub-customer columns. Skip — we count those sub-customers above.
+      continue;
+    } else if (c.income !== 0 || c.cogs !== 0 || c.expenses !== 0 || c.netIncome !== 0) {
+      outOfFleetCustomers.push(c);
+    }
+  }
+  trips.sort((a, b) => b.income - a.income);
+
+  // Aggregate every non-Trip parent customer into one "Out of fleet" bucket
+  // so revenue billed directly to a customer (without a trip sub-customer)
+  // is still visible in the page totals.
+  let outOfFleet = null;
+  if (outOfFleetCustomers.length > 0) {
+    const sumK = k => outOfFleetCustomers.reduce((s, c) => s + (c[k] || 0), 0);
+    const income = sumK('income');
+    const netIncome = sumK('netIncome');
+    outOfFleet = {
+      name: 'Out of fleet',
+      customerCount: outOfFleetCustomers.length,
+      customerNames: outOfFleetCustomers.map(c => c.name).sort(),
+      income,
+      cogs: sumK('cogs'),
+      expenses: sumK('expenses'),
+      totalExpenses: sumK('cogs') + sumK('expenses'),
+      netIncome,
+      margin: income > 0 ? netIncome / income : 0,
+    };
+  }
+
+  return { trips, outOfFleet };
 };
 
 // ProfitAndLossDetail → { categoryName: [{date,type,num,name,klass,memo,amount}] }
