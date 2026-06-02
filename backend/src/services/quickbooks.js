@@ -228,6 +228,57 @@ export const getProfitAndLossDetail = async (startDate, endDate) => {
   });
 };
 
+// ===== P&L summarized BY CLASS — gives a per-class column for Income, COGS,
+// Expenses, GrossProfit, NetIncome. This is the authoritative per-aircraft
+// view because it includes every transaction QBO tagged to a class (bills,
+// invoices, purchases, journal entries, deposits — not just bills). =====
+export const getProfitAndLossByClass = async (startDate, endDate) => {
+  return qbFetch('reports/ProfitAndLoss', {
+    start_date: startDate,
+    end_date: endDate,
+    summarize_column_by: 'Class',
+  });
+};
+
+// ===== Projects (each trip is a Project / sub-customer in QBO) =====
+// Projects are modeled as Customer rows with IsProject=true and a ParentRef
+// pointing at the customer who booked the trip.
+export const getProjects = async () => {
+  const all = [];
+  let startPos = 1;
+  const batchSize = 100;
+  while (true) {
+    const data = await qbFetch('query', {
+      query: `SELECT * FROM Customer WHERE IsProject = true STARTPOSITION ${startPos} MAXRESULTS ${batchSize}`,
+    });
+    const batch = data.QueryResponse?.Customer || [];
+    all.push(...batch);
+    if (batch.length < batchSize) break;
+    startPos += batchSize;
+  }
+  return all;
+};
+
+// ProfitAndLoss summarized by Customer — one column per customer (and per
+// project, since projects are sub-customers). Used to derive per-trip P&L.
+export const getProfitAndLossByCustomer = async (startDate, endDate) => {
+  return qbFetch('reports/ProfitAndLoss', {
+    start_date: startDate,
+    end_date: endDate,
+    summarize_column_by: 'Customers',
+  });
+};
+
+// Try QBO's named Project Profitability report. Not in every plan tier; if
+// the API rejects it we fall back to deriving per-project totals from
+// getProfitAndLossByCustomer + getProjects. Caller should use .catch.
+export const getProjectProfitability = async (startDate, endDate) => {
+  return qbFetch('reports/ProjectProfitability', {
+    start_date: startDate,
+    end_date: endDate,
+  });
+};
+
 // ===== Bills (vendor-side AP documents) — paginated, mirrors invoice query =====
 export const getBillsByDateRange = async (startDate, endDate) => {
   const allBills = [];
@@ -368,6 +419,42 @@ export const parseExpensesByAircraft = (bills) => {
     }
   }
   return totals;
+};
+
+// ProfitAndLoss summarized by Class → { classes: [{className, income, cogs,
+// grossProfit, expenses, netIncome}] }. Each class is a column in the report;
+// the last column is the grand Total which we drop. Untagged transactions
+// usually appear as a "Not Specified" column — caller can decide how to bucket.
+export const parseProfitAndLossByClass = (report) => {
+  if (!report || report.error) return null;
+  const cols = report?.Columns?.Column || [];
+  // cols[0] is the label column; cols[1..N-1] are per-class; cols[N] is the
+  // grand "Total" column (skip it — it's just the sum across classes).
+  const classNames = cols.slice(1, -1).map(c => c.ColTitle);
+
+  const sectionValues = (groupCode) => {
+    const sec = (report?.Rows?.Row || []).find(r => r?.group === groupCode);
+    if (!sec) return classNames.map(() => 0);
+    const cd = sec.Summary?.ColData || [];
+    return cd.slice(1, -1).map(c => parseFloat(c?.value) || 0);
+  };
+
+  const income      = sectionValues('Income');
+  const cogs        = sectionValues('COGS');
+  const grossProfit = sectionValues('GrossProfit');
+  const expenses    = sectionValues('Expenses');
+  const netIncome   = sectionValues('NetIncome');
+
+  return {
+    classes: classNames.map((name, i) => ({
+      className:   name,
+      income:      income[i]      || 0,
+      cogs:        cogs[i]        || 0,
+      grossProfit: grossProfit[i] || 0,
+      expenses:    expenses[i]    || 0,
+      netIncome:   netIncome[i]   || 0,
+    })),
+  };
 };
 
 // ProfitAndLossDetail → { categoryName: [{date,type,num,name,klass,memo,amount}] }
