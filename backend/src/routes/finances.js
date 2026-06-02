@@ -7,7 +7,10 @@ import {
   getInvoicesByDateRange, getAllInvoicesYTD,
   getAgedReceivables, getAgedReceivableDetail, getAgedPayables,
   getBalanceSheetSummary, getCashFlow, getProfitAndLossDetail,
-  getAllBillsYTD
+  getAllBillsYTD,
+  parseExpensesByCategory, parseCOGSByCategory, parseAgingReport,
+  parseBalanceSheet, parseCashFlow, parseExpensesByAircraft,
+  parsePLDetailByCategory,
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -77,7 +80,10 @@ router.get('/debug/financials', async (req, res) => {
     billsYTD:      billsData,
   });
 });
-// Main summary — pure QB
+// Main summary — pure QB. Fetches everything the Finances page needs in one
+// parallel batch (per-call .catch via Promise.allSettled means a single QB
+// failure doesn't blank out the whole page) and applies the pure parsers
+// from quickbooks.js so the frontend gets app-shape data, not raw QBO XML-ish.
 router.get('/summary', async (req, res) => {
   try {
     const now = new Date();
@@ -86,22 +92,52 @@ router.get('/summary', async (req, res) => {
     const lastYearStart = `${now.getFullYear() - 1}-01-01`;
     const lastYearEnd   = `${now.getFullYear() - 1}-12-31`;
 
-    const [plThis, plLast, invoices, customers, expenses, accounts] = await Promise.allSettled([
-      getProfitAndLoss(startOfYear, today),
-      getProfitAndLoss(lastYearStart, lastYearEnd),
-      getOutstandingInvoices(),
-      getRevenueByCustomer(startOfYear, today),
-      getExpensesByVendor(startOfYear, today),
-      getAccountBalances(),
+    const results = await Promise.allSettled([
+      getProfitAndLoss(startOfYear, today),         // 0  pl this year
+      getProfitAndLoss(lastYearStart, lastYearEnd), // 1  pl last year
+      getOutstandingInvoices(),                     // 2  open invoices
+      getRevenueByCustomer(startOfYear, today),     // 3  revenue by customer
+      getExpensesByVendor(startOfYear, today),      // 4  expenses by vendor (kept — frontend still reads)
+      getAccountBalances(),                         // 5  bank accounts
+      getAgedReceivables(today),                    // 6  A/R aging
+      getAgedPayables(today),                       // 7  A/P aging
+      getBalanceSheetSummary(today),                // 8  balance sheet
+      getCashFlow(startOfYear, today),              // 9  cash flow (monthly)
+      getProfitAndLossDetail(startOfYear, today),   // 10 P&L detail (for drill-down)
+      getAllBillsYTD(),                             // 11 YTD vendor bills (for per-aircraft)
     ]);
 
+    const val = (i) => results[i].status === 'fulfilled' ? results[i].value : null;
+    const errOf = (i) => results[i].status === 'fulfilled'
+      ? null
+      : { error: results[i].reason?.message || String(results[i].reason) };
+
+    const plThis = val(0);
+    const bills  = val(11) || [];
+
     res.json({
-      profitAndLoss:   plThis.status    === 'fulfilled' ? plThis.value    : { error: plThis.reason?.message },
-      profitAndLossLY: plLast.status    === 'fulfilled' ? plLast.value    : { error: plLast.reason?.message },
-      invoices:        invoices.status  === 'fulfilled' ? invoices.value  : [],
-      customers:       customers.status === 'fulfilled' ? customers.value : { error: customers.reason?.message },
-      expenses:        expenses.status  === 'fulfilled' ? expenses.value  : { error: expenses.reason?.message },
-      accounts:        accounts.status  === 'fulfilled' ? accounts.value  : [],
+      // Raw QBO responses — kept so the existing frontend keeps working
+      // unchanged. Round 2b will start consuming the parsed fields below.
+      profitAndLoss:   plThis    || errOf(0),
+      profitAndLossLY: val(1)    || errOf(1),
+      invoices:        val(2)    || [],
+      customers:       val(3)    || errOf(3),
+      expenses:        val(4)    || errOf(4),
+      accounts:        val(5)    || [],
+
+      // Parsed app-shape data — new in Round 2a, drives the next UI pass.
+      // Operating overhead vs per-flight direct costs (Fuel, Crew, Landing,
+      // Catering, etc.) are split because they live in different P&L sections
+      // and Round 2b's UI shows them as separate buckets.
+      expensesByCategory:  parseExpensesByCategory(plThis),
+      cogsByCategory:      parseCOGSByCategory(plThis),
+      arAging:             parseAgingReport(val(6)),
+      apAging:             parseAgingReport(val(7)),
+      balanceSheet:        parseBalanceSheet(val(8)),
+      cashFlow:            parseCashFlow(val(9)),
+      expensesByAircraft:  parseExpensesByAircraft(bills),
+      plDetailByCategory:  parsePLDetailByCategory(val(10)),
+      billsCount:          bills.length,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
