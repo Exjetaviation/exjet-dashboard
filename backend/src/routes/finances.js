@@ -23,7 +23,17 @@ router.get('/callback', async (req, res) => {
     res.json({ message: 'Copy these to your Railway variables', QB_REFRESH_TOKEN: tokens.refresh_token, QB_REALM_ID: req.query.realmId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
+// Returns the raw QuickBooks ProfitAndLoss report (Jan 1 of current year → today)
+// so we can inspect actual expense-category rows before wiring category grouping
+// into the summary page. Temporary — remove once category grouping is verified.
+router.get('/debug/expenses', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const startOfYear = `${new Date().getFullYear()}-01-01`;
+    const raw = await getProfitAndLoss(startOfYear, today);
+    res.json(raw);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 // Main summary — pure QB
 router.get('/summary', async (req, res) => {
   try {
