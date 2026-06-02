@@ -90,9 +90,12 @@ export const getExpensesByVendor = async (startDate, endDate) => {
   return qbFetch('reports/VendorExpenses', { start_date: startDate, end_date: endDate });
 };
 
-// Pulls the ProfitAndLoss report as a single total column (no monthly summary)
-// and parses the Expenses section into [{ category, amount }]. Walks nested
-// rows so subcategories (e.g. Maintenance > Engine) flatten into leaf entries.
+// Parses the Expenses section of the ProfitAndLoss report into a flat
+// [{ category, amount }] keyed by TOP-LEVEL Chart-of-Accounts category.
+// For nested categories we use QBO's own Section.Summary total — that
+// matches the report's grand total exactly and folds in any "Other"
+// postings that don't surface as leaf rows. The last ColData column is
+// the YTD total even when the report is monthly-summarized.
 export const getExpensesByCategory = async (startDate, endDate) => {
   const report = await qbFetch('reports/ProfitAndLoss', {
     start_date: startDate,
@@ -105,19 +108,22 @@ export const getExpensesByCategory = async (startDate, endDate) => {
   );
   if (!expensesSection) return [];
 
+  const lastTotal = cols => parseFloat(cols?.[cols.length - 1]?.value) || 0;
+
   const results = [];
-  const walk = (rows) => {
-    for (const row of rows || []) {
-      if (row?.type === 'Data' && Array.isArray(row.ColData) && row.ColData.length > 0) {
-        const category = row.ColData[0]?.value || 'Uncategorized';
-        const last = row.ColData[row.ColData.length - 1]?.value;
-        const amount = parseFloat(last) || 0;
-        if (category && amount !== 0) results.push({ category, amount });
-      }
-      if (row?.Rows?.Row) walk(row.Rows.Row);
+  for (const row of expensesSection.Rows?.Row || []) {
+    let category, amount;
+    if (row?.type === 'Section') {
+      category = row.Header?.ColData?.[0]?.value || 'Uncategorized';
+      amount = lastTotal(row.Summary?.ColData);
+    } else if (row?.type === 'Data' && Array.isArray(row.ColData)) {
+      category = row.ColData[0]?.value || 'Uncategorized';
+      amount = lastTotal(row.ColData);
+    } else {
+      continue;
     }
-  };
-  walk(expensesSection.Rows?.Row || []);
+    if (category && amount !== 0) results.push({ category, amount });
+  }
   return results;
 };
 
