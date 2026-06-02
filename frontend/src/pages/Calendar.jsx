@@ -470,19 +470,33 @@ useEffect(() => {
                     });
                     return groups.map((group,gi)=>{
                       const earliest=Math.min(...group.map(d=>d._start));
-                      const maxDutyEnd=earliest+DUTY_LIMIT_MS;
+                      // While ANY duty in the group is still open, the second
+                      // bracket is the projected 14h Part 135 ceiling. Once all
+                      // duties are submitted, switch to the actual logged end —
+                      // no 14h math, no countdown.
+                      const groupOpen=group.some(d=>d._open);
+                      const groupEnd=groupOpen?earliest+DUTY_LIMIT_MS:Math.max(...group.map(d=>d._end));
                       const startBlk=getBlock(earliest,earliest+1);
-                      const endBlk=getBlock(maxDutyEnd,maxDutyEnd+1);
-                      const timeRemaining=Math.max(0,Math.round((maxDutyEnd-Date.now())/60000));
-                      const onDutyMins=Math.round((Date.now()-earliest)/60000);
-                      const durLabel=`${Math.floor(onDutyMins/60)}h ${onDutyMins%60}m on duty`;
-                      const limitLabel=timeRemaining>0?`${Math.floor(timeRemaining/60)}h ${timeRemaining%60}m remaining`:'DUTY LIMIT REACHED';
-                      const lineColor=timeRemaining<120?'#666565':timeRemaining<240?'#f59e0b':'#22c55e';
+                      const endBlk=getBlock(groupEnd,groupEnd+1);
+                      const onDutyMins=Math.max(0,Math.round((Date.now()-earliest)/60000));
+                      const totalMins=Math.max(0,Math.round((groupEnd-earliest)/60000));
+                      const onDutyLabel=`${Math.floor(onDutyMins/60)}h ${onDutyMins%60}m on duty`;
+                      const totalLabel=`${Math.floor(totalMins/60)}h ${totalMins%60}m total`;
+                      const timeRemaining=Math.max(0,Math.round((groupEnd-Date.now())/60000));
+                      const remainingLabel=timeRemaining>0?`${Math.floor(timeRemaining/60)}h ${timeRemaining%60}m remaining`:'DUTY LIMIT REACHED';
+                      const lineColor=groupOpen
+                        ?(timeRemaining<120?'#ef4444':timeRemaining<240?'#f59e0b':'#4f8ef7')
+                        :'#4f8ef7';
                       const hasPIC=group.some(d=>d.role==='PIC');
+                      const startDuration=groupOpen?onDutyLabel:totalLabel;
+                      const startLimit=groupOpen?remainingLabel:'';
+                      const endLabel=groupOpen?'14hr Limit':`Flight Duty OFF · ${totalLabel}`;
+                      const endLimit=groupOpen?remainingLabel:'';
+                      const endTriangleColor=groupOpen?'#ef4444':lineColor;
                       return(
                         <React.Fragment key={`dg-${gi}`}>
                           {startBlk&&(
-                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Duty IN',time:earliest,duration:durLabel,limit:limitLabel,tail:ac.tail,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Flight Duty START',time:earliest,duration:startDuration,limit:startLimit,tail:ac.tail,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
                               style={{position:'absolute',left:startBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',left:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
                               {hasPIC&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
@@ -491,12 +505,12 @@ useEffect(() => {
                             </div>
                           )}
                           {endBlk&&(
-                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'14hr Limit',time:maxDutyEnd,duration:durLabel,limit:limitLabel,tail:ac.tail,isLimit:true,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:endLabel,time:groupEnd,duration:startDuration,limit:endLimit,tail:ac.tail,isLimit:groupOpen,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
                               style={{position:'absolute',left:endBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',right:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
                               {hasPIC&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
-                              <div style={{position:'absolute',right:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:'#ef4444',fontWeight:'700',lineHeight:1}}>◀</div>
+                              <div style={{position:'absolute',right:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:endTriangleColor,fontWeight:'700',lineHeight:1}}>◀</div>
                             </div>
                           )}
                         </React.Fragment>
@@ -569,7 +583,7 @@ useEffect(() => {
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Time: {fmtTime(hovered.time)}</p>
                 {hovered.group&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Crew: {hovered.group.join(' + ')}</p>}
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.duration}</p>
-                <p style={{fontSize:'12px',fontWeight:'600',color:hovered.limit?.includes('REACHED')?'var(--danger)':'#f59e0b',margin:0}}>{hovered.limit}</p>
+                {hovered.limit && <p style={{fontSize:'12px',fontWeight:'600',color:hovered.limit?.includes('REACHED')?'var(--danger)':'#f59e0b',margin:0}}>{hovered.limit}</p>}
               </div>
             </>
           ):hovered._isGround?(
