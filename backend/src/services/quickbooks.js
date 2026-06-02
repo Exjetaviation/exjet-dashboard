@@ -421,33 +421,28 @@ export const parseExpensesByAircraft = (bills) => {
   return totals;
 };
 
-// ProfitAndLoss summarized by Class → { classes: [{className, income, cogs,
-// grossProfit, expenses, netIncome}] }. Each class is a column in the report;
-// the last column is the grand Total which we drop. Untagged transactions
-// usually appear as a "Not Specified" column — caller can decide how to bucket.
-export const parseProfitAndLossByClass = (report) => {
+// Generic per-column P&L parser. Used for both summarize_column_by=Class
+// (per-aircraft) and summarize_column_by=Customers (per-trip via the trip
+// sub-customers). Returns { columns: [{name, income, cogs, grossProfit,
+// expenses, netIncome}] } with the label and grand-Total columns stripped.
+export const parseProfitAndLossByColumn = (report) => {
   if (!report || report.error) return null;
   const cols = report?.Columns?.Column || [];
-  // cols[0] is the label column; cols[1..N-1] are per-class; cols[N] is the
-  // grand "Total" column (skip it — it's just the sum across classes).
-  const classNames = cols.slice(1, -1).map(c => c.ColTitle);
-
+  const names = cols.slice(1, -1).map(c => c.ColTitle);
   const sectionValues = (groupCode) => {
     const sec = (report?.Rows?.Row || []).find(r => r?.group === groupCode);
-    if (!sec) return classNames.map(() => 0);
+    if (!sec) return names.map(() => 0);
     const cd = sec.Summary?.ColData || [];
     return cd.slice(1, -1).map(c => parseFloat(c?.value) || 0);
   };
-
   const income      = sectionValues('Income');
   const cogs        = sectionValues('COGS');
   const grossProfit = sectionValues('GrossProfit');
   const expenses    = sectionValues('Expenses');
   const netIncome   = sectionValues('NetIncome');
-
   return {
-    classes: classNames.map((name, i) => ({
-      className:   name,
+    columns: names.map((name, i) => ({
+      name,
       income:      income[i]      || 0,
       cogs:        cogs[i]        || 0,
       grossProfit: grossProfit[i] || 0,
@@ -455,6 +450,38 @@ export const parseProfitAndLossByClass = (report) => {
       netIncome:   netIncome[i]   || 0,
     })),
   };
+};
+
+export const parseProfitAndLossByClass = (report) => {
+  const out = parseProfitAndLossByColumn(report);
+  if (!out) return null;
+  return { classes: out.columns.map(({ name, ...rest }) => ({ className: name, ...rest })) };
+};
+
+// Per-trip P&L from ProfitAndLoss-by-Customer. Each trip is modeled as a
+// sub-customer named "Trip 25079" etc. — QBO's formal Projects feature isn't
+// enabled on this plan tier, so sub-customer naming is the equivalent. The
+// "Total ParentName" rollup columns are skipped naturally because they don't
+// match the Trip pattern.
+const TRIP_PATTERN = /^Trip\s+\d+/i;
+export const parseTripsProfitability = (report) => {
+  const out = parseProfitAndLossByColumn(report);
+  if (!out) return null;
+  const trips = out.columns
+    .filter(c => TRIP_PATTERN.test(c.name))
+    .map(c => {
+      const m = c.name.match(/(\d+)/);
+      const tripId = m ? m[1] : null;
+      const totalExpenses = (c.cogs || 0) + (c.expenses || 0);
+      const margin = c.income > 0 ? c.netIncome / c.income : 0;
+      return {
+        name: c.name, tripId,
+        income: c.income, cogs: c.cogs, expenses: c.expenses,
+        totalExpenses, netIncome: c.netIncome, margin,
+      };
+    })
+    .sort((a, b) => b.income - a.income);
+  return { trips };
 };
 
 // ProfitAndLossDetail → { categoryName: [{date,type,num,name,klass,memo,amount}] }

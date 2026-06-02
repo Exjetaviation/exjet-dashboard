@@ -112,6 +112,42 @@ export default function Finances() {
   const expByCategory  = summary?.expensesByCategory || [];
   const plDetailMap    = summary?.plDetailByCategory || {};
   const plClasses      = summary?.plByClass?.classes || [];
+  const tripsPL        = summary?.tripsProfitability?.trips || [];
+
+  // Merge per-trip P&L (income / costs / profit) with the per-invoice list
+  // (paid status, line items). Key by trip ID extracted from the customer
+  // name. Trips that exist in only one source still show up (some invoices
+  // aren't yet customer-keyed; some sub-customers may have had bills but
+  // no invoice yet).
+  const tripsMerged = (() => {
+    const byId = new Map();
+    for (const t of tripsPL) {
+      if (!t.tripId) continue;
+      byId.set(t.tripId, { tripId: t.tripId, name: t.name, pl: t, invoices: [] });
+    }
+    for (const inv of tripList) {
+      const id = inv.tripId;
+      if (!id) continue;
+      if (!byId.has(id)) byId.set(id, { tripId: id, name: inv.customer || `Trip ${id}`, pl: null, invoices: [] });
+      byId.get(id).invoices.push(inv);
+    }
+    const merged = Array.from(byId.values()).map(t => {
+      const invoiceTotal = t.invoices.reduce((s, i) => s + (i.total || 0), 0);
+      const outstanding  = t.invoices.reduce((s, i) => s + (i.balance || 0), 0);
+      const aircraft     = t.invoices.find(i => i.aircraft)?.aircraft || null;
+      const lastDate     = t.invoices.map(i => i.date).filter(Boolean).sort().slice(-1)[0] || null;
+      return { ...t, invoiceTotal, outstanding, aircraft, lastDate };
+    });
+    // Sort: trips with non-trivial revenue first (desc), then by latest date.
+    merged.sort((a, b) => (b.pl?.income || b.invoiceTotal) - (a.pl?.income || a.invoiceTotal));
+    return merged;
+  })();
+
+  const tripsTotalProfit  = tripsPL.reduce((s, t) => s + (t.netIncome || 0), 0);
+  const tripsTotalRevenue = tripsPL.reduce((s, t) => s + (t.income || 0), 0);
+  const tripsAvgMargin    = tripsPL.length > 0 && tripsTotalRevenue > 0
+    ? tripsPL.reduce((s, t) => s + (t.income > 0 ? (t.netIncome / t.income) : 0), 0) / tripsPL.length
+    : 0;
 
   // Fleet aircraft (matching the QB class names). Anything QBO reports under a
   // different class — including its "Not Specified" no-class bucket — folds
@@ -763,71 +799,106 @@ export default function Finances() {
       {tab === 'trips' && (
         <div style={s.sec}>
           <div style={s.grid(4)}>
-            <StatCard label="Total Invoices" value={trips?.totalTrips || 0} />
-            <StatCard label="Total Revenue" value={fmtK(trips?.totalRevenue)} color="#4f8ef7" />
-            <StatCard label="Outstanding" value={fmtK(trips?.totalOutstanding)} color="#ef4444" />
-            <StatCard label="Collected" value={fmtK((trips?.totalRevenue||0) - (trips?.totalOutstanding||0))} color="#22c55e" />
+            <StatCard label="Trips Tracked" value={tripsPL.length || tripsMerged.length} sub={`${trips?.totalTrips || 0} invoices`} />
+            <StatCard label="Trip Revenue" value={fmtK(tripsTotalRevenue || trips?.totalRevenue)} color="#4f8ef7" sub="From QB per-trip P&L" />
+            <StatCard label="Trip Profit"  value={fmtK(tripsTotalProfit)} color={tripsTotalProfit >= 0 ? '#22c55e' : '#ef4444'}
+              sub={`Avg margin ${Math.round(tripsAvgMargin * 100)}%`} />
+            <StatCard label="Outstanding"  value={fmtK(trips?.totalOutstanding)} color="#ef4444"
+              sub={`Collected ${fmtK((trips?.totalRevenue || 0) - (trips?.totalOutstanding || 0))}`} />
           </div>
+
           <div style={{ marginTop: '16px' }}>
-            <p style={s.stl}>All Invoices from QuickBooks</p>
+            <p style={s.stl}>Per-Trip P&L · QuickBooks ProfitAndLoss by Customer (Trip sub-customers)</p>
             <div style={s.card}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={s.th}>Invoice</th>
-                    <th style={s.th}>Customer</th>
-                    <th style={s.th}>Description</th>
+                    <th style={s.th}>Trip</th>
                     <th style={s.th}>Aircraft</th>
-                    <th style={s.th}>Date</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Revenue</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Costs</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Profit</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Margin</th>
                     <th style={s.th}>Status</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Invoiced</th>
                     <th style={{ ...s.th, width: '30px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tripList.map((t, i) => (
-                    <>
-                      <tr key={`t-${i}`}
-                        onClick={() => setExpandedTrip(expandedTrip === t.invoiceId ? null : t.invoiceId)}
-                        style={{ cursor: 'pointer', background: expandedTrip === t.invoiceId ? 'rgba(79,142,247,0.04)' : 'transparent' }}>
-                        <td style={{ ...s.td, fontWeight: '600', color: 'var(--accent)' }}>#{t.docNumber}</td>
-                        <td style={s.td}>{t.customer}</td>
-                        <td style={{ ...s.td, color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description || '—'}</td>
-                        <td style={s.td}>
-                          {t.aircraft
-                            ? <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--accent)22', color: 'var(--accent)', fontWeight: '600' }}>{t.aircraft}</span>
-                            : <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>—</span>}
-                        </td>
-                        <td style={{ ...s.td, color: 'var(--text-secondary)' }}>{t.date}</td>
-                        <td style={s.td}>
-                          <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: t.paid ? '#22c55e22' : '#ef444422', color: t.paid ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
-                            {t.paid ? 'Paid' : `Due ${t.dueDate}`}
-                          </span>
-                        </td>
-                        <td style={{ ...s.td, textAlign: 'right', fontWeight: '700', color: '#4f8ef7' }}>{fmt(t.total)}</td>
-                        <td style={{ ...s.td, color: 'var(--text-secondary)', textAlign: 'center' }}>
-                          {expandedTrip === t.invoiceId ? '▲' : '▼'}
-                        </td>
-                      </tr>
-                      {expandedTrip === t.invoiceId && t.lines.map((line, j) => (
-                        <tr key={`l-${i}-${j}`} style={{ background: 'rgba(79,142,247,0.03)' }}>
-                          <td colSpan={2} style={{ ...s.td, paddingLeft: '28px', fontSize: '12px', color: 'var(--text-secondary)' }}>↳ Line {j+1}</td>
-                          <td style={{ ...s.td, fontSize: '12px' }} colSpan={2}>{line.description || '—'}</td>
-                          <td style={{ ...s.td, fontSize: '12px', color: 'var(--text-secondary)' }}>{line.serviceDate || '—'}</td>
-                          <td style={{ ...s.td, fontSize: '12px' }}>
-                            {line.aircraft
-                              ? <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--accent)22', color: 'var(--accent)', fontWeight: '600' }}>{line.aircraft}</span>
-                              : <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>no tag</span>}
+                  {tripsMerged.map((t) => {
+                    const revenue = t.pl?.income || t.invoiceTotal || 0;
+                    const costs   = t.pl ? (t.pl.cogs + t.pl.expenses) : 0;
+                    const profit  = t.pl?.netIncome ?? null;
+                    const margin  = revenue > 0 && profit != null ? profit / revenue : null;
+                    const profitColor = profit == null ? 'var(--text-secondary)' : profit >= 0 ? '#22c55e' : '#ef4444';
+                    const isOpen = expandedTrip === t.tripId;
+                    const fullyPaid = t.invoices.length > 0 && t.outstanding === 0;
+                    const noInvoice = t.invoices.length === 0;
+                    return (
+                      <Fragment key={`trip-${t.tripId}`}>
+                        <tr onClick={() => setExpandedTrip(isOpen ? null : t.tripId)}
+                            style={{ cursor: t.invoices.length ? 'pointer' : 'default', background: isOpen ? 'rgba(79,142,247,0.04)' : 'transparent' }}>
+                          <td style={{ ...s.td, fontWeight: '600', color: 'var(--accent)' }}>
+                            <span style={{ marginRight: 6, color: 'var(--text-secondary)', fontSize: 10 }}>{t.invoices.length ? (isOpen ? '▼' : '▶') : ' '}</span>
+                            {t.name}
                           </td>
-                          <td style={{ ...s.td, textAlign: 'right', fontWeight: '600', color: '#4f8ef7', fontSize: '12px' }}>{fmt(line.amount)}</td>
-                          <td />
+                          <td style={s.td}>
+                            {t.aircraft
+                              ? <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--accent)22', color: 'var(--accent)', fontWeight: '600' }}>{t.aircraft}</span>
+                              : <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>—</span>}
+                          </td>
+                          <td style={{ ...s.td, textAlign: 'right', fontWeight: '600', color: '#4f8ef7' }}>{fmt(revenue)}</td>
+                          <td style={{ ...s.td, textAlign: 'right', color: t.pl ? '#f59e0b' : 'var(--text-secondary)' }}>{t.pl ? fmt(costs) : '—'}</td>
+                          <td style={{ ...s.td, textAlign: 'right', fontWeight: '700', color: profitColor }}>{profit == null ? '—' : fmt(profit)}</td>
+                          <td style={{ ...s.td, textAlign: 'right', color: profitColor, fontWeight: '600' }}>{margin == null ? '—' : `${Math.round(margin * 100)}%`}</td>
+                          <td style={s.td}>
+                            {noInvoice
+                              ? <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>no invoice</span>
+                              : <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: fullyPaid ? '#22c55e22' : '#ef444422', color: fullyPaid ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
+                                  {fullyPaid ? 'Paid' : `Open ${fmt(t.outstanding)}`}
+                                </span>}
+                          </td>
+                          <td style={{ ...s.td, textAlign: 'right', color: 'var(--text-secondary)' }}>{t.invoices.length ? fmt(t.invoiceTotal) : '—'}</td>
+                          <td style={{ ...s.td, color: 'var(--text-secondary)', textAlign: 'center' }}>{t.invoices.length ? (isOpen ? '▲' : '▼') : ''}</td>
                         </tr>
-                      ))}
-                    </>
-                  ))}
+                        {isOpen && t.invoices.map((inv, j) => (
+                          <Fragment key={`inv-${t.tripId}-${j}`}>
+                            <tr style={{ background: 'rgba(79,142,247,0.03)' }}>
+                              <td style={{ ...s.td, paddingLeft: '28px', fontSize: 12 }}>↳ Invoice #{inv.docNumber}</td>
+                              <td style={{ ...s.td, fontSize: 12 }}>{inv.aircraft || '—'}</td>
+                              <td colSpan={3} style={{ ...s.td, fontSize: 12, color: 'var(--text-secondary)' }}>{inv.description || '—'}</td>
+                              <td style={{ ...s.td, fontSize: 12 }}>
+                                <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: inv.paid ? '#22c55e22' : '#ef444422', color: inv.paid ? '#22c55e' : '#ef4444', fontWeight: '600' }}>
+                                  {inv.paid ? 'Paid' : `Due ${inv.dueDate}`}
+                                </span>
+                              </td>
+                              <td style={{ ...s.td, fontSize: 12 }}>{inv.date}</td>
+                              <td style={{ ...s.td, fontSize: 12, textAlign: 'right', fontWeight: 600, color: '#4f8ef7' }}>{fmt(inv.total)}</td>
+                              <td />
+                            </tr>
+                            {inv.lines.map((line, k) => (
+                              <tr key={`line-${t.tripId}-${j}-${k}`} style={{ background: 'rgba(79,142,247,0.02)' }}>
+                                <td colSpan={4} style={{ ...s.td, paddingLeft: '56px', fontSize: 11, color: 'var(--text-secondary)' }}>· {line.description || `Line ${k + 1}`}</td>
+                                <td style={{ ...s.td, fontSize: 11 }}>{line.aircraft || '—'}</td>
+                                <td style={{ ...s.td, fontSize: 11, color: 'var(--text-secondary)' }}>{line.serviceDate || '—'}</td>
+                                <td style={{ ...s.td, fontSize: 11, textAlign: 'right', color: '#4f8ef7' }}>{fmt(line.amount)}</td>
+                                <td />
+                              </tr>
+                            ))}
+                          </Fragment>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
+                  {tripsMerged.length === 0 && (
+                    <tr><td colSpan={9} style={{ ...s.td, textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>No trips yet for {new Date().getFullYear()}.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12, fontStyle: 'italic' }}>
+              Each trip is a QB sub-customer (e.g. "Trip 25079"). Revenue / Costs / Profit are pulled from QB's ProfitAndLoss summarized by Customer — they include every transaction tagged to that sub-customer (bills, invoices, journal entries, card charges).
+            </p>
           </div>
         </div>
       )}
