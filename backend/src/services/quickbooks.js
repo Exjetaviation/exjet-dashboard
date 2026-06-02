@@ -46,7 +46,7 @@ const getAccessToken = async () => {
   return tokens.access_token;
 };
 
-const qbFetch = async (path, params = {}) => {
+const qbFetch = async (path, params = {}, _retried = false) => {
   const token = await getAccessToken();
   const realmId = process.env.QB_REALM_ID;
   const qs = new URLSearchParams({ minorversion: '65', ...params }).toString();
@@ -54,6 +54,12 @@ const qbFetch = async (path, params = {}) => {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
+  // On 401, the access token was rejected (token revoked, refresh-chain skew,
+  // or a transient QBO auth blip). Refresh once via getAccessToken — which
+  // already persists any new refresh_token to Supabase — and retry the call.
+  if (res.status === 401 && !_retried) {
+    return qbFetch(path, params, true);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`QB API error ${res.status}: ${text}`);
@@ -82,6 +88,37 @@ export const getRevenueByCustomer = async (startDate, endDate) => {
 
 export const getExpensesByVendor = async (startDate, endDate) => {
   return qbFetch('reports/VendorExpenses', { start_date: startDate, end_date: endDate });
+};
+
+// Pulls the ProfitAndLoss report as a single total column (no monthly summary)
+// and parses the Expenses section into [{ category, amount }]. Walks nested
+// rows so subcategories (e.g. Maintenance > Engine) flatten into leaf entries.
+export const getExpensesByCategory = async (startDate, endDate) => {
+  const report = await qbFetch('reports/ProfitAndLoss', {
+    start_date: startDate,
+    end_date: endDate,
+  });
+  const topRows = report?.Rows?.Row || [];
+  const expensesSection = topRows.find(
+    r => r?.group === 'Expenses'
+      || r?.Header?.ColData?.[0]?.value?.toLowerCase?.().includes('expense')
+  );
+  if (!expensesSection) return [];
+
+  const results = [];
+  const walk = (rows) => {
+    for (const row of rows || []) {
+      if (row?.type === 'Data' && Array.isArray(row.ColData) && row.ColData.length > 0) {
+        const category = row.ColData[0]?.value || 'Uncategorized';
+        const last = row.ColData[row.ColData.length - 1]?.value;
+        const amount = parseFloat(last) || 0;
+        if (category && amount !== 0) results.push({ category, amount });
+      }
+      if (row?.Rows?.Row) walk(row.Rows.Row);
+    }
+  };
+  walk(expensesSection.Rows?.Row || []);
+  return results;
 };
 
 export const getAccountBalances = async () => {
