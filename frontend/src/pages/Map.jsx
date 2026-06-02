@@ -344,7 +344,10 @@ export default function Map() {
         <div ref={mapWrapRef} className="exjet-map-wrap" style={{ overflow: 'hidden', ...(cssFs ? { position: 'fixed', inset: 0, zIndex: 9999, borderRadius: 0, border: 'none', background: 'var(--bg-primary)' } : { flex: 1, borderRadius: '12px', border: '1px solid var(--border)', position: 'relative' }) }}>
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
 
-          <button onClick={toggleFs} title={isFs ? 'Exit full screen (Esc)' : 'Full screen'} style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+          {/* Fixed bottom-right: sits above the Leaflet attribution and is
+              raised above the selected-aircraft detail card when that card is
+              open. Stays inside mapWrapRef so it's visible in native fullscreen. */}
+          <button onClick={toggleFs} title={isFs ? 'Exit full screen (Esc)' : 'Full screen'} style={{ position: 'fixed', bottom: selectedAc ? 140 : 20, right: 20, zIndex: 10001, padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
             {isFs ? '⤧ Exit full screen' : '⤢ Full screen'}
           </button>
 
