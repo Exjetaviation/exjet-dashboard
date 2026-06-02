@@ -43,6 +43,19 @@ router.get('/debug/expenses', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Raw P&L summarized by Customer (Jan 1 of current year → today). Each
+// customer (including Trip sub-customers) gets its own column with Income /
+// COGS / Expenses / NetIncome. Used to inspect the per-trip data backing the
+// Trips tab. Temporary — same lifetime as the other /debug routes.
+router.get('/debug/pl-by-customer', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const startOfYear = `${new Date().getFullYear()}-01-01`;
+    const raw = await getProfitAndLossByCustomer(startOfYear, today);
+    res.json(raw);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // One-shot raw dump of the new QB report/entity endpoints we're about to wire
 // into the page: A/R aging, A/P aging, balance sheet, cash flow, P&L detail,
 // YTD bills. Lets us verify shapes once before writing per-feature parsers.
