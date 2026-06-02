@@ -12,7 +12,7 @@ import {
   parseExpensesByCategory, parseCOGSByCategory, parseAgingReport,
   parseBalanceSheet, parseCashFlow, parseExpensesByAircraft,
   parsePLDetailByCategory, parseProfitAndLossByClass,
-  parseTripsProfitability,
+  parseTripsProfitability, parseClientsFromPLByCustomer,
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -169,6 +169,7 @@ router.get('/summary', async (req, res) => {
       plDetailByCategory:  parsePLDetailByCategory(val(10)),
       plByClass:           parseProfitAndLossByClass(val(12)),
       tripsProfitability:  parseTripsProfitability(val(13)),
+      clientsByPL:         parseClientsFromPLByCustomer(val(13)),
       billsCount:          bills.length,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
