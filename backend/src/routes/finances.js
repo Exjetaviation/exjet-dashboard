@@ -12,6 +12,7 @@ import {
   parseExpensesByCategory, parseCOGSByCategory, parseAgingReport,
   parseBalanceSheet, parseCashFlow, parseExpensesByAircraft,
   parsePLDetailByCategory, parseProfitAndLossByClass,
+  parseTripsProfitability,
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -120,6 +121,7 @@ router.get('/summary', async (req, res) => {
       getProfitAndLossDetail(startOfYear, today),   // 10 P&L detail (for drill-down)
       getAllBillsYTD(),                             // 11 YTD vendor bills (kept — diagnostic compare)
       getProfitAndLossByClass(startOfYear, today),  // 12 P&L summarized by Class — authoritative per-aircraft
+      getProfitAndLossByCustomer(startOfYear, today), // 13 P&L summarized by Customer — per-trip via sub-customers
     ]);
 
     const val = (i) => results[i].status === 'fulfilled' ? results[i].value : null;
@@ -153,6 +155,7 @@ router.get('/summary', async (req, res) => {
       expensesByAircraft:  parseExpensesByAircraft(bills),
       plDetailByCategory:  parsePLDetailByCategory(val(10)),
       plByClass:           parseProfitAndLossByClass(val(12)),
+      tripsProfitability:  parseTripsProfitability(val(13)),
       billsCount:          bills.length,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
