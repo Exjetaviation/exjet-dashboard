@@ -4,7 +4,10 @@ import {
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
   getAccountBalances, getGeneralLedger,
-  getInvoicesByDateRange, getAllInvoicesYTD
+  getInvoicesByDateRange, getAllInvoicesYTD,
+  getAgedReceivables, getAgedReceivableDetail, getAgedPayables,
+  getBalanceSheetSummary, getCashFlow, getProfitAndLossDetail,
+  getAllBillsYTD
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -33,6 +36,46 @@ router.get('/debug/expenses', async (req, res) => {
     const raw = await getProfitAndLoss(startOfYear, today);
     res.json(raw);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// One-shot raw dump of the new QB report/entity endpoints we're about to wire
+// into the page: A/R aging, A/P aging, balance sheet, cash flow, P&L detail,
+// YTD bills. Lets us verify shapes once before writing per-feature parsers.
+// Temporary — remove (and tighten the requireAuth exemption) once UI is wired.
+router.get('/debug/financials', async (req, res) => {
+  const now = new Date();
+  const startOfYear = `${now.getFullYear()}-01-01`;
+  const today = now.toISOString().split('T')[0];
+
+  const [arAging, arAgingDetail, apAging, bsSummary, cashFlow, plDetail, bills] = await Promise.allSettled([
+    getAgedReceivables(today),
+    getAgedReceivableDetail(today),
+    getAgedPayables(today),
+    getBalanceSheetSummary(today),
+    getCashFlow(startOfYear, today),
+    getProfitAndLossDetail(startOfYear, today),
+    getAllBillsYTD(),
+  ]);
+
+  const settle = (r, name) => r.status === 'fulfilled'
+    ? r.value
+    : { error: r.reason?.message || String(r.reason), source: name };
+
+  // Bills can be a large array — truncate to count + a sample so the response
+  // stays small enough to eyeball in a browser.
+  const billsData = bills.status === 'fulfilled'
+    ? { count: bills.value.length, sample: bills.value.slice(0, 3) }
+    : { error: bills.reason?.message || String(bills.reason), source: 'Bills' };
+
+  res.json({
+    arAging:       settle(arAging, 'AgedReceivables'),
+    arAgingDetail: settle(arAgingDetail, 'AgedReceivableDetail'),
+    apAging:       settle(apAging, 'AgedPayables'),
+    bsSummary:     settle(bsSummary, 'BalanceSheetSummary'),
+    cashFlow:      settle(cashFlow, 'CashFlow'),
+    plDetail:      settle(plDetail, 'ProfitAndLossDetail'),
+    billsYTD:      billsData,
+  });
 });
 // Main summary — pure QB
 router.get('/summary', async (req, res) => {
