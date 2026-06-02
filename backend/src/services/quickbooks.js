@@ -193,3 +193,59 @@ export const getAllInvoicesYTD = async () => {
   const endDate = now.toISOString().split('T')[0];
   return getInvoicesByDateRange(startDate, endDate).then(d => d.QueryResponse?.Invoice || []);
 };
+
+// ===== A/R aging — who owes us, bucketed by how late =====
+export const getAgedReceivables = async (asOfDate) => {
+  return qbFetch('reports/AgedReceivables', { report_date: asOfDate });
+};
+export const getAgedReceivableDetail = async (asOfDate) => {
+  return qbFetch('reports/AgedReceivableDetail', { report_date: asOfDate });
+};
+
+// ===== A/P aging — what we owe vendors, bucketed by how late =====
+export const getAgedPayables = async (asOfDate) => {
+  return qbFetch('reports/AgedPayables', { report_date: asOfDate });
+};
+
+// ===== Balance sheet — assets / liabilities / equity at a point in time =====
+export const getBalanceSheetSummary = async (asOfDate) => {
+  return qbFetch('reports/BalanceSheetSummary', { end_date: asOfDate });
+};
+
+// ===== Cash flow — operating / investing / financing per month =====
+export const getCashFlow = async (startDate, endDate) => {
+  return qbFetch('reports/CashFlow', {
+    start_date: startDate,
+    end_date: endDate,
+    summarize_column_by: 'Month',
+  });
+};
+
+// ===== P&L detail — every transaction behind each account total =====
+export const getProfitAndLossDetail = async (startDate, endDate) => {
+  return qbFetch('reports/ProfitAndLossDetail', {
+    start_date: startDate,
+    end_date: endDate,
+  });
+};
+
+// ===== Bills (vendor-side AP documents) — paginated, mirrors invoice query =====
+export const getBillsByDateRange = async (startDate, endDate) => {
+  const allBills = [];
+  let startPos = 1;
+  const batchSize = 100;
+  while (true) {
+    const data = await qbFetch('query', {
+      query: `SELECT * FROM Bill WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}' STARTPOSITION ${startPos} MAXRESULTS ${batchSize}`,
+    });
+    const batch = data.QueryResponse?.Bill || [];
+    allBills.push(...batch);
+    if (batch.length < batchSize) break;
+    startPos += batchSize;
+  }
+  return allBills;
+};
+export const getAllBillsYTD = async () => {
+  const now = new Date();
+  return getBillsByDateRange(`${now.getFullYear()}-01-01`, now.toISOString().split('T')[0]);
+};
