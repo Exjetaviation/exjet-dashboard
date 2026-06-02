@@ -36,8 +36,13 @@ app.get('/health', (req, res) => res.json({ status: 'Exjet backend running' }));
 app.use('/api/finances/callback', financesRoutes);
 app.use('/api/quotes/auth-callback', quotesRoutes);
 
-// Everything below this line REQUIRES a valid login token.
-app.use('/api', requireAuth);
+// Everything below this line REQUIRES a valid login token — EXCEPT the
+// temporary raw-PnL debug endpoint, so it can be opened directly in a browser.
+// TODO: remove this exemption when /finances/debug/expenses is deleted.
+app.use('/api', (req, res, next) => {
+  if (req.path === '/finances/debug/expenses') return next();
+  return requireAuth(req, res, next);
+});
 
 app.use('/api/foreflight', foreflightRoutes);
 app.use('/api/levelflight', levelflightRoutes);
