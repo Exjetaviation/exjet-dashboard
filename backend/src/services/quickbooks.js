@@ -466,7 +466,7 @@ export const parseProfitAndLossByClass = (report) => {
 // "Total ParentName" rollup columns are skipped naturally because they don't
 // match the Trip pattern.
 const TRIP_PATTERN  = /^Trip\s+\d+/i;
-const TOTAL_PATTERN = /^Total\s+/i;
+const TOTAL_PATTERN = /^Total\s+(.+)$/i;
 export const parseTripsProfitability = (report) => {
   const out = parseProfitAndLossByColumn(report);
   if (!out) return null;
@@ -516,6 +516,50 @@ export const parseTripsProfitability = (report) => {
   }
 
   return { trips, outOfFleet };
+};
+
+// Per-client totals from ProfitAndLoss-by-Customer. "Clients" here means
+// top-level customers (the entities that actually pay us). For a parent
+// customer with sub-customers (e.g. trips), QBO emits a "Total ParentName"
+// rollup column that includes parent direct postings + all sub-customers —
+// we use that as the client total. For customers with no sub-customers
+// (leaf), the plain column is the client total. Trip XXXXX sub-customer
+// columns are skipped (they're aggregated into their parent's Total).
+export const parseClientsFromPLByCustomer = (report) => {
+  const out = parseProfitAndLossByColumn(report);
+  if (!out) return [];
+
+  // Names that have a "Total {name}" rollup column → we'll prefer the rollup.
+  const rolledUp = new Set();
+  for (const c of out.columns) {
+    const m = c.name.match(TOTAL_PATTERN);
+    if (m) rolledUp.add(m[1].trim());
+  }
+
+  const clients = [];
+  for (const c of out.columns) {
+    if (TRIP_PATTERN.test(c.name)) continue;
+    const m = c.name.match(TOTAL_PATTERN);
+    let clientName;
+    if (m) {
+      clientName = m[1].trim();
+    } else if (rolledUp.has(c.name)) {
+      // This is the parent's direct-only column; skip — its rollup will show.
+      continue;
+    } else {
+      clientName = c.name;
+    }
+    const totalExpenses = (c.cogs || 0) + (c.expenses || 0);
+    const margin = c.income > 0 ? c.netIncome / c.income : 0;
+    clients.push({
+      name: clientName,
+      income: c.income, cogs: c.cogs, expenses: c.expenses,
+      totalExpenses, netIncome: c.netIncome, margin,
+    });
+  }
+  return clients
+    .filter(c => c.income !== 0 || c.netIncome !== 0)
+    .sort((a, b) => b.income - a.income);
 };
 
 // ProfitAndLossDetail → { categoryName: [{date,type,num,name,klass,memo,amount}] }

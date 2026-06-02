@@ -114,6 +114,15 @@ export default function Finances() {
   const plClasses      = summary?.plByClass?.classes || [];
   const tripsPL        = summary?.tripsProfitability?.trips || [];
   const outOfFleetPL   = summary?.tripsProfitability?.outOfFleet || null;
+  const clientsByPL    = summary?.clientsByPL || [];
+
+  // Per-client view: prefer the per-Customer P&L (catches every client,
+  // including parents who only billed via trip sub-customers). Falls back
+  // to the old CustomerSales-derived rows if the new data isn't loaded.
+  const clientList = clientsByPL.length > 0
+    ? clientsByPL.map(c => ({ name: c.name, amount: c.income }))
+    : customerRows;
+  const maxClientAmt = clientList[0]?.amount || 1;
 
   // Merge per-trip P&L (income / costs / profit) with the per-invoice list
   // (paid status, line items). Key by trip ID extracted from the customer
@@ -692,16 +701,17 @@ export default function Finances() {
       {tab === 'clients' && (
         <div style={s.sec}>
           <div style={s.grid(3)}>
-            <StatCard label="Total Clients" value={customerRows.length} />
-            <StatCard label="Top Client" value={customerRows[0]?.name || '—'}
-              sub={fmt(customerRows[0]?.amount)} color="var(--accent)" />
+            <StatCard label="Total Clients" value={clientList.length}
+              sub={clientsByPL.length > 0 ? 'From QB P&L by Customer' : 'From CustomerSales report'} />
+            <StatCard label="Top Client" value={clientList[0]?.name || '—'}
+              sub={fmt(clientList[0]?.amount)} color="var(--accent)" />
             <StatCard label="Avg per Client"
-              value={fmtK(customerRows.reduce((s,c)=>s+c.amount,0) / (customerRows.length||1))} />
+              value={fmtK(clientList.reduce((s,c)=>s+c.amount,0) / (clientList.length||1))} />
           </div>
           <div style={{ marginTop: '16px' }}>
             <p style={s.stl}>Revenue by Client</p>
             <div style={s.card}>
-              {customerRows.length === 0 ? (
+              {clientList.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>No client data from QuickBooks.</p>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -715,15 +725,15 @@ export default function Finances() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customerRows.map((c, i) => (
+                    {clientList.map((c, i) => (
                       <tr key={i}>
                         <td style={{ ...s.td, color: 'var(--text-secondary)' }}>{i+1}</td>
                         <td style={{ ...s.td, fontWeight: i === 0 ? '600' : '400' }}>{c.name}</td>
                         <td style={{ ...s.td, textAlign: 'right', fontWeight: '600', color: 'var(--accent)' }}>{fmt(c.amount)}</td>
                         <td style={{ ...s.td, textAlign: 'right', color: 'var(--text-secondary)' }}>
-                          {Math.round((c.amount / (customerRows.reduce((s,x)=>s+x.amount,0)||1)) * 100)}%
+                          {Math.round((c.amount / (clientList.reduce((s,x)=>s+x.amount,0)||1)) * 100)}%
                         </td>
-                        <td style={s.td}><Bar pct={(c.amount/maxCustomer)*100} /></td>
+                        <td style={s.td}><Bar pct={(c.amount/maxClientAmt)*100} /></td>
                       </tr>
                     ))}
                   </tbody>
