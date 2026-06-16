@@ -42,9 +42,14 @@ const darken = (hex, f=0.55) => {
   return `#${((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1)}`;
 };
 const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
-const floorHour = ts=>{const d=new Date(ts);d.setMinutes(0,0,0);return d.getTime();};
-const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+// The calendar reads in Eastern (operator home base). Flight times are shown in
+// ET, with each airport's local time alongside (LevelFlight gives us the airport
+// timezone in leg._calc.from/to.timezone) so a near-midnight departure in another
+// zone reads correctly — e.g. KMKC 23:30 (Central) shows as 00:30 ET · 23:30 local.
+const ET = 'America/New_York';
+const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{timeZone:ET,month:'short',day:'numeric',year:'numeric'});
+const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+const fmtLocal = (ms,tz)=>{ if(!ms||!tz) return null; try { return new Date(ms).toLocaleString('en-US',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return null; } };
 
 export default function Calendar() {
   const {data,loading}  = useApi('/api/levelflight/legs');
@@ -633,7 +638,15 @@ useEffect(() => {
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>✈ {hovered.dispatch?.aircraft?.tailNumber} · Trip #{hovered.dispatch?.tripId}</p>
-                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{fmtTime(hovered.departure?.time)} → {fmtTime(hovered.arrival?.time)}</p>
+                {(()=>{
+                  const dep=hovered.departure?.time, arr=hovered.arrival?.time;
+                  const fromTz=hovered._calc?.from?.timezone, toTz=hovered._calc?.to?.timezone;
+                  const depLocal=fmtLocal(dep,fromTz), arrLocal=fmtLocal(arr,toTz);
+                  return (<>
+                    <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Dep {hovered.departure?.airport}: {fmtTime(dep)} ET{depLocal&&fromTz!==ET?` · ${depLocal} local`:''}</p>
+                    <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Arr {hovered.arrival?.airport}: {fmtTime(arr)} ET{arrLocal&&toTz!==ET?` · ${arrLocal} local`:''}</p>
+                  </>);
+                })()}
                 {hovered._calc?._minutes>0&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{Math.floor(hovered._calc._minutes/60)}h {hovered._calc._minutes%60}m · {hovered._calc?.distance?.value||'—'} nm</p>}
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.dispatch?.client?.company?.name||'No client'}</p>
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Pax: {hovered.passengerCount||0}</p>
