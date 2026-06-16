@@ -3,7 +3,7 @@ import { getLivePositions, getTrails } from '../services/adsb.js';
 import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
 import { queryTrack } from '../services/adsbStore.js';
-import { clipTrackToLeg } from '../services/adsbTrack.js';
+import { clipTrackToLeg, normReg } from '../services/adsbTrack.js';
 
 const router = express.Router();
 
@@ -29,7 +29,7 @@ const PREV_PAD_MS = 10 * 60 * 1000; // 10-minute pad around each leg window
 // Completed legs for `tail` in the last `days`, each with its real ADS-B track
 // (persisted positions clipped to the leg window). Soft: returns [] on any miss.
 router.get('/previous-flights', async (req, res) => {
-  const tail = typeof req.query.tail === 'string' ? req.query.tail.trim().toUpperCase() : '';
+  const tail = normReg(typeof req.query.tail === 'string' ? req.query.tail : '');
   const days = Math.max(1, Math.min(14, parseInt(req.query.days || '3', 10) || 3));
   if (!tail) return res.status(400).json({ error: 'tail is required', flights: [] });
 
@@ -70,7 +70,7 @@ router.get('/previous-flights', async (req, res) => {
 // Local helpers (small and route-specific).
 function eqTail(leg, tail) {
   const t = leg.dispatch?.aircraft?.tailNumber || leg.aircraft?.tailNumber || '';
-  return String(t).trim().toUpperCase() === tail;
+  return normReg(t) === tail; // `tail` is already normalized by the caller
 }
 function monthAnchors(startMs, endMs) {
   const out = []; const d = new Date(startMs);

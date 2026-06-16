@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMoved, detectTakeoff, clipTrackToLeg } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, clipTrackToLeg, normReg } from './adsbTrack.js';
+
+test('normReg canonicalizes case, dashes, and spaces', () => {
+  assert.equal(normReg('n69fp'), 'N69FP');
+  assert.equal(normReg('N-69FP'), 'N69FP');
+  assert.equal(normReg(' N69FP '), 'N69FP');
+  assert.equal(normReg(null), '');
+});
 
 test('hasMoved is false within threshold, true beyond it', () => {
   const a = { lat: 26.0, lon: -80.0 };

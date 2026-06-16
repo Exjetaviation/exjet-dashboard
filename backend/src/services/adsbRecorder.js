@@ -6,9 +6,11 @@
 
 import { getLivePositions } from './adsb.js';
 import { savePositions, pruneOld } from './adsbStore.js';
-import { hasMoved, detectTakeoff } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, normReg } from './adsbTrack.js';
 
-const RECORD_INTERVAL_MS = 15000;
+// getLivePositions() caches for ~20s, so polling faster just re-reads the same
+// snapshot — match the cache TTL so each tick gets a fresh fix.
+const RECORD_INTERVAL_MS = 20000;
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const RETENTION_DAYS = 7;
 const MOVE_THRESHOLD_DEG = 0.0005;
@@ -45,7 +47,7 @@ async function tick() {
 
     if (hasMoved(prev, { lat: p.lat, lon: p.lon }, MOVE_THRESHOLD_DEG)) {
       rows.push({
-        registration: reg, lat: p.lat, lon: p.lon,
+        registration: normReg(reg), lat: p.lat, lon: p.lon,
         altitude_ft: Number.isFinite(p.altitudeFt) ? p.altitudeFt : null,
         on_ground: onGround, t: new Date(now).toISOString(),
       });
