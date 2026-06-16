@@ -13,7 +13,7 @@
 
 import express from 'express';
 import { runAgent } from '../agent/agent.js';
-import { getLatestReviewForFlight, listReviewsByContext } from '../agent/reviewStore.js';
+import { getLatestReviewForFlight, listReviewsByContext, updateReviewConversation } from '../agent/reviewStore.js';
 
 const router = express.Router();
 
@@ -148,11 +148,31 @@ router.post('/chat', async (req, res) => {
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'chat requires a non-empty messages array' });
   }
-  // Persist the new question against the saved review so the corpus carries
-  // the conversation, not just the kickoff.
+  // Follow-ups are persisted onto their parent review row (see
+  // POST /reviews/:id/conversation), not as standalone rows. persist:false
+  // stops the agent from inserting an orphan review=null row per turn.
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   const question = typeof lastUser?.content === 'string' ? lastUser.content : '';
-  await streamAgent(res, messages, question, { flightId: flightId || null });
+  await streamAgent(res, messages, question, { flightId: flightId || null, persist: false });
+});
+
+// POST /api/agent/reviews/:id/conversation
+// Saves the panel's follow-up chat onto its parent review row so re-opening
+// the tab reloads it. Body: { conversation: [{ question, text, toolCalls,
+// grounding }] }. Soft-fails to { ok: false } when persistence is off.
+router.post('/reviews/:id/conversation', async (req, res) => {
+  const { id } = req.params;
+  const { conversation } = req.body || {};
+  if (!Array.isArray(conversation)) {
+    return res.status(400).json({ error: 'conversation must be an array' });
+  }
+  try {
+    const ok = await updateReviewConversation(id, conversation);
+    res.json({ ok });
+  } catch (err) {
+    console.error('/api/agent/reviews/:id/conversation save failed:', err);
+    res.status(500).json({ error: err?.message || 'save failed' });
+  }
 });
 
 export default router;

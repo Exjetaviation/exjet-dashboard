@@ -55,6 +55,34 @@ export async function saveReview(record) {
   }
 }
 
+// Persist the follow-up conversation for one review row. `conversation` is the
+// panel's rendered replies array — [{ question, text, toolCalls, grounding }].
+// Soft-fails (returns false) when Supabase is off, the id is missing, or the
+// update errors, so a failed save never breaks the live chat.
+export async function updateReviewConversation(reviewId, conversation) {
+  if (!reviewId || typeof reviewId !== 'string') return false;
+  if (!Array.isArray(conversation)) return false;
+  const client = getClient();
+  if (!client) {
+    console.warn('[reviewStore] Supabase not configured — skipping conversation save');
+    return false;
+  }
+  try {
+    const { error } = await client
+      .from('agent_reviews')
+      .update({ conversation })
+      .eq('id', reviewId);
+    if (error) {
+      console.warn('[reviewStore] conversation update failed (soft):', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[reviewStore] conversation update unexpected error (soft):', e?.message || e);
+    return false;
+  }
+}
+
 // List saved reviews whose kickoff `question` matches the given flight
 // context (tail + departure ICAO + destination ICAO + departure date).
 // We match by substring on the deterministic kickoff template in
@@ -67,7 +95,7 @@ export async function listReviewsByContext({ tail, departure, destination, depar
   try {
     let q = client
       .from('agent_reviews')
-      .select('id, created_at, review')
+      .select('id, created_at, review, conversation')
       .not('review', 'is', null);
     if (tail)        q = q.ilike('question', `%Tail: ${tail}.%`);
     if (departure && destination) q = q.ilike('question', `%Route: ${departure} to ${destination}.%`);

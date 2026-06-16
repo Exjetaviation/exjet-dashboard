@@ -515,6 +515,9 @@ export default function AgentReviewPanel({ flight, onClose }) {
   const [activeTabId, setActiveTabId] = useState(null);  // tab id | 'new' | null while listing
   const bodyRef = useRef(null);
   const startedRef = useRef(false);
+  const currentReviewIdRef = useRef(null); // parent review row the chat saves onto
+  const repliesRef = useRef([]);           // latest replies, for persistence
+  useEffect(() => { repliesRef.current = replies; }, [replies]);
 
   const kickoffSummary = () => `Readiness review — ${flight?.tail || ''} ${flight?.departure || ''}→${flight?.destination || ''}`.trim();
 
@@ -531,6 +534,22 @@ export default function AgentReviewPanel({ flight, onClose }) {
       }
       return next;
     });
+  };
+
+  // Save the follow-up chat onto its parent review row so re-opening the tab
+  // reloads it. Soft: no parent id (persistence off) or a failed POST never
+  // disrupts the live chat.
+  const persistConversation = (replyList) => {
+    const reviewId = currentReviewIdRef.current;
+    if (!reviewId) return;
+    apiFetch(`/api/agent/reviews/${reviewId}/conversation`, {
+      method: 'POST',
+      body: JSON.stringify({
+        conversation: replyList.map((r) => ({
+          question: r.question, text: r.text, toolCalls: r.toolCalls, grounding: r.grounding,
+        })),
+      }),
+    }).catch(() => { /* soft — losing a save shouldn't break the chat */ });
   };
 
   const handleEvent = (evt, { question }) => {
@@ -568,7 +587,8 @@ export default function AgentReviewPanel({ flight, onClose }) {
         // can return to it without re-running the agent. Skip if reviewId
         // is null (Supabase wasn't configured / persistence soft-failed).
         if (reviewId) {
-          const newTab = { id: reviewId, created_at: new Date().toISOString(), review: rev };
+          currentReviewIdRef.current = reviewId; // follow-ups now save onto this row
+          const newTab = { id: reviewId, created_at: new Date().toISOString(), review: rev, conversation: [] };
           setTabs((prev) => [newTab, ...prev.filter((t) => t.id !== reviewId)]);
           setActiveTabId(reviewId);
         }
@@ -588,8 +608,10 @@ export default function AgentReviewPanel({ flight, onClose }) {
         });
       } else if (text) {
         // Text reply (follow-up or fallback). Append to replies, do NOT
-        // touch the existing checklist.
-        setReplies((r) => [...r, { question, text, toolCalls, grounding, reviewId }]);
+        // touch the existing checklist, and persist onto the parent review.
+        const newReply = { question, text, toolCalls, grounding };
+        setReplies((r) => [...r, newReply]);
+        persistConversation([...repliesRef.current, newReply]);
         setActivity([]);
         setConversation((c) => {
           if (c.length === 0) {
@@ -636,14 +658,24 @@ export default function AgentReviewPanel({ flight, onClose }) {
   // what handleEvent does on a successful stream so the rendered output is
   // identical whether we generated or loaded.
   const applySavedReview = (saved) => {
-    const { review: rev, toolCalls, grounding, reviewId, savedAt: ts } = saved || {};
+    const { review: rev, toolCalls, grounding, reviewId, savedAt: ts, conversation: savedConvo } = saved || {};
     setReview(rev || null);
     setReviewMeta({ toolCalls, grounding, activity: toolCallsToActivity(toolCalls), reviewId });
     setSavedAt(ts || null);
-    setConversation([
+    currentReviewIdRef.current = reviewId || null; // follow-ups save onto this row
+    // Restore the saved follow-up Q&A and rebuild the model-facing history so
+    // the chat continues seamlessly from where it was left.
+    const followUps = Array.isArray(savedConvo) ? savedConvo : [];
+    setReplies(followUps);
+    const convo = [
       { role: 'user', content: kickoffSummary() },
       { role: 'assistant', content: rev?.summary || '(structured review)' },
-    ]);
+    ];
+    for (const r of followUps) {
+      if (r?.question) convo.push({ role: 'user', content: r.question });
+      if (r?.text) convo.push({ role: 'assistant', content: r.text });
+    }
+    setConversation(convo);
     setActivity([]);
     setError(null);
     setLoading(false);
@@ -692,6 +724,7 @@ export default function AgentReviewPanel({ flight, onClose }) {
               grounding: null,
               reviewId: latest.id,
               savedAt: latest.created_at,
+              conversation: latest.conversation,
             });
             return;
           }
@@ -712,6 +745,7 @@ export default function AgentReviewPanel({ flight, onClose }) {
   const regenerate = () => {
     if (loading) return;
     setActiveTabId('new');
+    currentReviewIdRef.current = null; // new review row id arrives on `final`
     setReview(null);
     setReviewMeta(null);
     setSavedAt(null);
@@ -729,13 +763,13 @@ export default function AgentReviewPanel({ flight, onClose }) {
   const selectTab = (tab) => {
     if (loading) return;
     setActiveTabId(tab.id);
-    setReplies([]);
     applySavedReview({
       review: tab.review,
       toolCalls: [],
       grounding: null,
       reviewId: tab.id,
       savedAt: tab.created_at,
+      conversation: tab.conversation,
     });
   };
 
