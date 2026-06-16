@@ -1,5 +1,5 @@
 import { useApi } from '../hooks/useApi';
-import { useAdsb } from '../hooks/useAdsb';
+import { useAdsb, fetchPreviousFlights } from '../hooks/useAdsb';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
@@ -142,6 +142,9 @@ export default function Map() {
   const [cssFs, setCssFs] = useState(false);      // CSS-maximize fallback when the Fullscreen API is unavailable
   const [nativeFs, setNativeFs] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [selectedTail, setSelectedTail] = useState(null);
+  const [prevDays, setPrevDays] = useState(3);
+  const [prevFlights, setPrevFlights] = useState([]);
 
   const legs = data?.legs || [];
   const scheduled = getAircraftPositions(legs);
@@ -267,7 +270,10 @@ export default function Map() {
       const icon = createAircraftIcon(ac.statusColor, ac.isFlying, ac.heading);
       const marker = L.marker([ac.position.lat, ac.position.lng], { icon })
         .addTo(map)
-        .on('click', () => setSelected(ac));
+        .on('click', () => {
+          setSelected(ac);
+          setSelectedTail(cur => (cur === ac.tail ? null : ac.tail));
+        });
 
       // For airborne aircraft, draw the destination airport + a faint dashed
       // line from the aircraft to it.
@@ -301,6 +307,50 @@ export default function Map() {
       didFitRef.current = true;
     }
   }, [aircraft.length, loading, updatedAt]);
+
+  // When an aircraft is selected (or the day range changes), fetch + draw its
+  // previous flight tracks into a dedicated layer group. Clearing the old layer
+  // is not state, so it's safe in the effect body; all setState happens inside
+  // the async resolution (guarded by `alive`) to satisfy set-state-in-effect.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    // Remove any previously drawn historical tracks.
+    if (prevLayerRef.current) {
+      prevLayerRef.current.remove();
+      prevLayerRef.current = null;
+    }
+    if (!selectedTail || !map) return;
+
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetchPreviousFlights(selectedTail, prevDays);
+        if (!alive) return;
+        const flights = res?.flights || [];
+        const group = L.layerGroup();
+        flights.forEach(f => {
+          if (!f.track || f.track.length < 2) return;
+          L.polyline(f.track, { color: '#38bdf8', weight: 2, opacity: 0.45 })
+            .bindTooltip(`${f.from} → ${f.to}`, { className: 'exjet-tooltip', sticky: true })
+            .addTo(group);
+        });
+        if (!alive) return;
+        group.addTo(map);
+        prevLayerRef.current = group;
+        setPrevFlights(flights);
+      } catch {
+        if (alive) setPrevFlights([]);
+      }
+    })();
+
+    return () => {
+      alive = false;
+      if (prevLayerRef.current) {
+        prevLayerRef.current.remove();
+        prevLayerRef.current = null;
+      }
+    };
+  }, [selectedTail, prevDays]);
 
   const flyTo = (ac) => {
     setSelected(ac);
@@ -398,6 +448,42 @@ export default function Map() {
             {showTrail ? 'Flight trail: On' : 'Flight trail: Off'}
           </button>
 
+          {/* Previous-flights panel for the clicked aircraft */}
+          {selectedTail && (
+            <div style={{
+              position: 'absolute', top: 12, left: 12, zIndex: 1000,
+              background: 'rgba(10,10,15,0.92)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '10px 12px', backdropFilter: 'blur(8px)',
+              minWidth: 180, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{selectedTail}</span>
+                <button
+                  onClick={() => setSelectedTail(null)}
+                  style={{ padding: '3px 9px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
+                >Clear</button>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Previous flights</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <select
+                  value={prevDays}
+                  onChange={e => setPrevDays(Number(e.target.value))}
+                  style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+                >
+                  <option value={1}>1 day</option>
+                  <option value={3}>3 days</option>
+                  <option value={7}>7 days</option>
+                </select>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {prevFlights.filter(f => f.track && f.track.length >= 2).length} drawn
+                </span>
+              </div>
+              {prevFlights.length > 0 && prevFlights.every(f => !f.track || f.track.length < 2) && (
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 0' }}>No recorded tracks in range.</p>
+              )}
+            </div>
+          )}
+
           {/* Selected aircraft detail card */}
           {selectedAc && (
             <div style={{
@@ -462,7 +548,7 @@ export default function Map() {
                   onClick={() => { if (selectedAc.currentLeg) navigate(`/flights/${selectedAc.currentLeg._id?.$oid}`, { state: { leg: selectedAc.currentLeg } }); }}
                   style={{ padding: '6px 12px', fontSize: '12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '7px', cursor: 'pointer' }}
                 >View flight →</button>
-                <button onClick={() => setSelected(null)} style={{ padding: '6px 12px', fontSize: '12px', background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '7px', cursor: 'pointer' }}>
+                <button onClick={() => { setSelected(null); setSelectedTail(null); }} style={{ padding: '6px 12px', fontSize: '12px', background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '7px', cursor: 'pointer' }}>
                   Dismiss
                 </button>
               </div>
