@@ -26,7 +26,6 @@ export default function RequireAuth({ children }) {
 
   if (!checked) return null;                          // wait until we actually know
   if (!session) {
-    console.log('REDIRECT FROM RequireAuth - no session');
     return <Navigate to="/login" replace />;
   }
   return children;

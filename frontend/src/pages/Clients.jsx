@@ -77,7 +77,7 @@ export default function Clients() {
               <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading clients...</td></tr>
             ) : clients.length === 0 ? (
               <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>No clients found</td></tr>
-            ) : clients.map((client, i) => {
+            ) : clients.map((client) => {
               const lastLeg = [...client.legs].sort((a, b) => (b.departure?.time || 0) - (a.departure?.time || 0))[0];
               const routes = [...new Set(client.legs.map(l => `${l.departure?.airport}→${l.arrival?.airport}`))];
               const scorePercent = client.score && client.maxScore ? Math.round((client.score / client.maxScore) * 100) : null;

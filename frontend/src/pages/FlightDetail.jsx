@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import AgentReviewPanel from '../components/AgentReviewPanel';
@@ -36,15 +36,9 @@ const formatDateTime = (ms) => {
   return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
 };
 
-const formatMins = (mins) => {
-  if (!mins) return '—';
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-};
-
 export default function FlightDetail() {
   const { state } = useLocation();
   const navigate = useNavigate();
-  const { id } = useParams();
 
   const leg = state?.leg;
 

@@ -20,9 +20,6 @@ const getAircraftPositions = (legs) => {
     const tail = leg.dispatch?.aircraft?.tailNumber;
     if (!tail) return;
 
-    const dep = leg.departure?.time;
-    const arr = leg.arrival?.time;
-
     if (!acMap[tail]) {
       acMap[tail] = {
         tail,
@@ -38,7 +35,6 @@ const getAircraftPositions = (legs) => {
 
     const activeLeg = sorted.find(l => l.departure?.time <= now && l.arrival?.time >= now);
     const lastDeparted = sorted.find(l => l.departure?.time <= now);
-    const lastCompleted = sorted.find(l => l.status === 3 && l.arrival?.time <= now);
     const nextFlight = [...sorted].reverse().find(l => l.departure?.time > now);
 
     let position = null;

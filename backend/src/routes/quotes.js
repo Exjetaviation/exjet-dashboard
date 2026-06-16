@@ -1,6 +1,6 @@
 import express from 'express';
 import { supabase } from '../services/supabase.js';
-import { getUnreadQuoteEmails, markAsRead, sendEmail, getAuthUrl, getTokensFromCode } from '../services/gmail.js';
+import { getUnreadQuoteEmails, sendEmail, getAuthUrl, getTokensFromCode } from '../services/gmail.js';
 import { processEmail } from '../services/quoteEngine.js';
 
 const router = express.Router();
