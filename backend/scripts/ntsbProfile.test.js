@@ -80,4 +80,8 @@ test('buildAirportProfile produces a compact, correct profile', () => {
   assert.equal(p.last_event_date, '2024-05-01');
   assert.equal(p.data_through, '2024-06-01');
   assert.ok(p.pattern_warnings.some((s) => s.includes('CFIT/terrain')));
+
+  // Regression: must NOT leak the internal _patterns field onto input rows —
+  // those objects get upserted into ntsb_raw, which has no such column.
+  for (const r of rows) assert.ok(!('_patterns' in r), 'input row was mutated with _patterns');
 });
