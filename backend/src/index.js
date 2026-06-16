@@ -18,7 +18,7 @@ import { requireAuth } from './middleware/requireAuth.js';
     const { supabase } = await import('./services/supabase.js');
     const { data } = await supabase.from('app_config').select('value').eq('key', 'QB_REFRESH_TOKEN').single();
     if (data?.value) process.env.QB_REFRESH_TOKEN = data.value;
-  } catch (e) {}
+  } catch {}
 })();
 dotenv.config();
 

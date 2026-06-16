@@ -117,24 +117,6 @@ function normalizeWorkOrder(w) {
   };
 }
 
-// Pull tickets out of analyticsTickets response — they live under `totals`
-// (keyed by status bucket) and/or a flat `tickets` array. Merge + dedupe by id.
-function collectTickets(resp) {
-  const out = new Map();
-  const push = (arr) => {
-    if (!Array.isArray(arr)) return;
-    for (const t of arr) {
-      const n = normalizeTicket(t);
-      if (n && n.id && !out.has(n.id)) out.set(n.id, n);
-    }
-  };
-  if (resp?.tickets) push(resp.tickets);
-  if (resp?.totals && typeof resp.totals === 'object') {
-    for (const v of Object.values(resp.totals)) push(v);
-  }
-  return [...out.values()];
-}
-
 // /api/analytics/tickets silently returns no `totals` (and 0 tickets) when the
 // window is too wide (anything past ~6 months). Walk the range in 90-day
 // buckets and aggregate. Returns raw ticket records (not normalized) so the

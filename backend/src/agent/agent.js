@@ -88,7 +88,7 @@ function reviewToPlaintext(review) {
 
 function safeEmit(onEvent, evt) {
   if (typeof onEvent !== 'function') return;
-  try { onEvent(evt); } catch (e) { /* never let a bad listener break the loop */ }
+  try { onEvent(evt); } catch { /* never let a bad listener break the loop */ }
 }
 
 // Read a header off an SDK error in a Headers-or-object-agnostic way.

@@ -28,7 +28,6 @@ export default function CrewCalendar() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [monthOffset, setMonthOffset] = useState(0);
-  const [selectedPilots, setSelectedPilots] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [view, setView] = useState('all'); // 'all' | pilotId
 
@@ -160,7 +159,7 @@ export default function CrewCalendar() {
     },
     monthLabel: { fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', minWidth: '200px', textAlign: 'center' },
     legend: { display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' },
-    legendItem: (color, bg) => ({ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--text-secondary)' }),
+    legendItem: () => ({ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--text-secondary)' }),
     legendDot: (color) => ({ width: '10px', height: '10px', borderRadius: '3px', background: color, flexShrink: 0 }),
   };
 

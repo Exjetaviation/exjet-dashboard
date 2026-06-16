@@ -4,7 +4,7 @@ import {
   getProfitAndLoss, getOutstandingInvoices,
   getRevenueByCustomer, getExpensesByVendor,
   getAccountBalances, getGeneralLedger,
-  getInvoicesByDateRange, getAllInvoicesYTD,
+  getAllInvoicesYTD,
   getAgedReceivables, getAgedReceivableDetail, getAgedPayables,
   getBalanceSheetSummary, getCashFlow, getProfitAndLossDetail,
   getProfitAndLossByClass, getProfitAndLossByCustomer,

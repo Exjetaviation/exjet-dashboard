@@ -4,7 +4,6 @@ import * as lf from './levelflight.js';
 
 export const extractAndStorePricingHistory = async () => {
   const months = 12;
-  const now = Date.now();
   const timestamps = Array.from({ length: months }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - i);

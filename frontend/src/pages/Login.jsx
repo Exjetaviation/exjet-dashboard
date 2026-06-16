@@ -15,7 +15,6 @@ export default function Login() {
     setError(null);
     setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log('LOGIN RESULT — error:', error, '| session:', data?.session);
     setLoading(false);
     if (error) { setError(error.message); return; }
     if (!data?.session) { setError('No session returned'); return; }

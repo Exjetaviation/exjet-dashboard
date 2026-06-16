@@ -5,7 +5,7 @@ import * as ff from '../services/foreflight.js';
 import { supabase } from '../services/supabase.js';
 import {
   getProfitAndLoss, getRevenueByCustomer,
-  getExpensesByVendor, getOutstandingInvoices
+  getOutstandingInvoices
 } from '../services/quickbooks.js';
 
 const router = express.Router();
@@ -20,7 +20,7 @@ const buildContext = async () => {
     const [
       legsRes, dutyRes, crewRes, pilotsRes, aircraftRes,
       quotesRes, rateCardsRes, maintRes,
-      plRes, customersRes, expensesRes, invoicesRes
+      plRes, customersRes, invoicesRes
     ] = await Promise.allSettled([
       lf.getScheduledLegs(now),
       lf.getDutyTimes(now),
@@ -32,7 +32,6 @@ const buildContext = async () => {
       supabase.from('maintenance_events').select('*').order('start_time', { ascending: true }),
       getProfitAndLoss(startOfYear, today),
       getRevenueByCustomer(startOfYear, today),
-      getExpensesByVendor(startOfYear, today),
       getOutstandingInvoices(),
     ]);
 
@@ -46,7 +45,6 @@ const buildContext = async () => {
     const maintEvents= maintRes.status     === 'fulfilled' ? (maintRes.value?.data        || []) : [];
     const pl         = plRes.status        === 'fulfilled' ? plRes.value                         : null;
     const customers  = customersRes.status === 'fulfilled' ? customersRes.value                  : null;
-    const expenses   = expensesRes.status  === 'fulfilled' ? expensesRes.value                   : null;
     const invoices   = invoicesRes.status  === 'fulfilled' ? (invoicesRes.value           || []) : [];
 
     const upcomingLegs = legs.filter(l=>(l.departure?.time||0)>=todayStart.getTime()).sort((a,b)=>(a.departure?.time||0)-(b.departure?.time||0)).slice(0,20);
