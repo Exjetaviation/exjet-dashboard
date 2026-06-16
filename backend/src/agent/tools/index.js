@@ -20,21 +20,9 @@ import {
   widgetsOnDuty,
 } from '../providers/levelflight.js';
 import { toolNames, RENDER_REVIEW_TOOL } from './schemas.js';
-import { createClient } from '@supabase/supabase-js';
 import { embed } from '../embeddings.js';
+import { getServiceClient } from '../serviceClient.js';
 import { tool_get_ntsb_accident_history } from './getNtsbAccidentHistory.js';
-
-// Lazily-built Supabase client for vector search. Same service-key pattern
-// as reviewStore.js — read-only here (calls the match_manual_chunks RPC).
-let _supabase = null;
-function getSupabaseForSearch() {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_KEY must be set for search_manuals');
-  _supabase = createClient(url, key);
-  return _supabase;
-}
 
 /* ─────────────── helpers ─────────────── */
 
@@ -1049,7 +1037,7 @@ async function tool_search_manuals({ query, manual, top_k } = {}) {
     throw new Error('embedding service returned no vector');
   }
 
-  const client = getSupabaseForSearch();
+  const client = getServiceClient('search_manuals');
   const { data, error } = await client.rpc('match_manual_chunks', {
     query_embedding: queryEmbedding,
     match_count: k,

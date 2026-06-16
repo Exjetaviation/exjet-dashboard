@@ -5,20 +5,7 @@
 // (built by scripts/importNtsb.js); the agent never sees raw rows, so the
 // response stays well under ~500 tokens. Cite ntsb_number for a specific event.
 
-import { createClient } from '@supabase/supabase-js';
-
-// Lazily-built Supabase client — same service-key pattern as reviewStore.js.
-let _supabase = null;
-function getSupabase() {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) {
-    throw new Error('SUPABASE_URL / SUPABASE_SERVICE_KEY must be set for get_ntsb_accident_history');
-  }
-  _supabase = createClient(url, key);
-  return _supabase;
-}
+import { getServiceClient } from '../serviceClient.js';
 
 // NTSB/profile airport codes are FAA identifiers (mostly 3-letter for US).
 // Strip the leading K for US ICAO codes and try both forms. KFLL → ['KFLL','FLL'];
@@ -36,7 +23,7 @@ export async function tool_get_ntsb_accident_history({ airport_icao } = {}) {
   if (!id) throw new Error('airport_icao is required');
   const forms = airportQueryForms(id);
 
-  const client = getSupabase();
+  const client = getServiceClient('get_ntsb_accident_history');
   const { data, error } = await client
     .from('ntsb_airport_profiles')
     .select('airport_code, airport_name, state, total_events, fatal_events, part135_relevant_events, top_phases, top_weather_conditions, top_damage_patterns, recent_events, pattern_warnings, last_event_date, data_through')

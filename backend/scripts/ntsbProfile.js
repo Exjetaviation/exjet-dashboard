@@ -11,7 +11,6 @@ export const ENGINE = {
   REC: 'Reciprocating', TF: 'Turbofan', TP: 'Turboprop', TJ: 'Turbojet',
   TS: 'Turboshaft', GTFN: 'Geared Turbofan', ELEC: 'Electric', NONE: 'None', UNK: 'Unknown',
 };
-export const EVENT_TYPE = { ACC: 'Accident', INC: 'Incident' };
 
 export function decode(map, code) {
   const c = String(code || '').trim();
@@ -99,7 +98,6 @@ function plural(n, noun) { return `${n} ${noun}${n === 1 ? '' : 's'}`; }
 // Human-readable warnings from aggregated stats. Each only fires at 2+.
 export function buildPatternWarnings({ relevant = [], damageCounts = new Map(), phaseCounts = new Map(), imcCount = 0, fatalCount = 0 } = {}) {
   const out = [];
-  const total = relevant.length;
 
   const exc = damageCounts.get('runway excursion') || 0;
   if (exc >= 2) {
