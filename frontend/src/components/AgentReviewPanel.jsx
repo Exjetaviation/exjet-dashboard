@@ -36,6 +36,7 @@ const TOOL_LABELS = {
   get_aircraft_compliance: 'Aircraft compliance',
   get_crew_availability: 'Crew availability',
   get_airport_safety_history: 'Airport safety history',
+  get_ntsb_accident_history: 'NTSB accident history',
   render_review: 'Compiling review',
 };
 
@@ -87,6 +88,7 @@ function describeToolCall(name, input) {
   }
   if (name === 'get_aircraft_compliance' && input.tail) return `${label} · ${input.tail}`;
   if (name === 'get_airport_safety_history' && input.icao) return `${label} · ${input.icao}`;
+  if (name === 'get_ntsb_accident_history' && input.airport_icao) return `${label} · ${input.airport_icao}`;
   if (name === 'get_aircraft' && input.tail_or_id) return `${label} · ${input.tail_or_id}`;
   if (name === 'list_flights' && input.tail) return `${label} · ${input.tail}`;
   return label;
