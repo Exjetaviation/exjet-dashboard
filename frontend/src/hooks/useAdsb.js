@@ -51,3 +51,16 @@ export function useAdsb(intervalMs = 20000, includeTrail = false) {
   }, [intervalMs]);
   return { positions, trails, updatedAt };
 }
+
+// One-shot fetch of a single aircraft's previous flights (rolling `days`).
+// Returns { tail, days, flights: [{ legId, from, to, depTime, arrTime, track }] }
+// or { flights: [] } on failure.
+export async function fetchPreviousFlights(tail, days = 3) {
+  try {
+    const r = await apiFetch(`/api/adsb/previous-flights?tail=${encodeURIComponent(tail)}&days=${days}`);
+    const j = await r.json();
+    return j?.flights ? j : { flights: [] };
+  } catch {
+    return { flights: [] };
+  }
+}
