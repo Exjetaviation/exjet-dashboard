@@ -131,20 +131,27 @@ export default function Map() {
   // Live ADS-B wins; aircraft with no live position keep their scheduled-leg
   // position (parked / transponder off), so they still show at last airport.
   const aircraft = scheduled.map(ac => {
-    const l = live[ac.tail];
-    if (l && l.lat != null && l.lon != null) {
+    // Prefer the live ADS-B fix; fall back to the scheduled-leg position.
+    const livePos = live[ac.tail];
+    const hasLive = !!(livePos && livePos.lat != null && livePos.lon != null);
+    const markerLat = hasLive ? livePos.lat : ac.position.lat;
+    const markerLng = hasLive ? livePos.lon : ac.position.lng;
+    const heading = (hasLive ? livePos.track : undefined) ?? 0;
+    const isAirborne = hasLive ? !livePos.onGround : (ac.statusLabel === 'In Flight');
+    if (hasLive) {
       return {
         ...ac,
-        position: { lat: l.lat, lng: l.lon },
-        isFlying: !l.onGround,
-        statusLabel: l.onGround ? 'On Ground · live' : 'In Flight · live',
-        statusColor: l.onGround ? '#22c55e' : '#f59e0b',
-        track: l.track,
-        live: l,
+        position: { lat: markerLat, lng: markerLng },
+        heading,
+        isFlying: isAirborne,
+        statusLabel: livePos.onGround ? 'On Ground · live' : 'In Flight · live',
+        statusColor: livePos.onGround ? '#22c55e' : '#f59e0b',
+        track: livePos.track,
+        live: livePos,
         source: 'adsb',
       };
     }
-    return { ...ac, source: 'scheduled' };
+    return { ...ac, position: { lat: markerLat, lng: markerLng }, heading, isFlying: isAirborne, source: 'scheduled' };
   });
   const liveCount = aircraft.filter(ac => ac.source === 'adsb').length;
 
@@ -231,7 +238,7 @@ export default function Map() {
     markersRef.current = {};
 
     aircraft.forEach(ac => {
-      const icon = createAircraftIcon(ac.statusColor, ac.isFlying, ac.track);
+      const icon = createAircraftIcon(ac.statusColor, ac.isFlying, ac.heading);
       const marker = L.marker([ac.position.lat, ac.position.lng], { icon })
         .addTo(map)
         .on('click', () => setSelected(ac));
