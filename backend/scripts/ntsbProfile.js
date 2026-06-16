@@ -130,9 +130,11 @@ export function buildPatternWarnings({ relevant = [], damageCounts = new Map(), 
 // number_of_engines, engine_type, ntsb_number, airport_name, state.
 export function buildAirportProfile(airport_code, rows, dataThrough) {
   const sorted = [...rows].sort((a, b) => String(b.event_date || '').localeCompare(String(a.event_date || '')));
-  const relevant = sorted.filter(isPart135Relevant);
-  // Annotate each relevant row with its damage patterns once.
-  for (const r of relevant) r._patterns = eventDamagePatterns(`${r.probable_cause || ''} ${r.narrative || ''}`);
+  // Clone relevant rows before annotating with _patterns so we never mutate the
+  // raw row objects that get upserted into ntsb_raw (which has no such column).
+  const relevant = sorted
+    .filter(isPart135Relevant)
+    .map((r) => ({ ...r, _patterns: eventDamagePatterns(`${r.probable_cause || ''} ${r.narrative || ''}`) }));
 
   const damageCounts = new Map();
   for (const r of relevant) for (const p of r._patterns) damageCounts.set(p, (damageCounts.get(p) || 0) + 1);
