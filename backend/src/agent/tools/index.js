@@ -82,19 +82,22 @@ function oid(v) {
 const OID_RE = /^[a-f0-9]{24}$/i;
 const isObjectId = (s) => typeof s === 'string' && OID_RE.test(s);
 
-// Derive lifecycle status for an SMS/safety ticket from its `logs` object.
-function ticketLifecycle(logs) {
-  if (!logs || typeof logs !== 'object') return { stage: null, stages: [], status: 'unknown' };
-  const order = ['opened', 'processed', 'analyzed', 'corrected', 'followedUp', 'closed'];
-  const stages = order.filter((k) => logs[k]);
-  const stage = stages.length ? stages[stages.length - 1] : null;
-  const status = logs.closed ? 'closed' : stage ? 'open' : 'unknown';
-  return { stage, stages, status };
+// Derive lifecycle status for an SMS/safety ticket. LevelFlight records closure
+// with a top-level `closedOn` timestamp (not a `logs.closed` entry — that key is
+// never written), so closure is determined from closedOn; `logs` only supplies
+// the most-advanced workflow stage for display.
+export function ticketLifecycle(logs, closedOn) {
+  const order = ['opened', 'processed', 'analyzed', 'corrected', 'followedUp', 'reviewed', 'closed'];
+  const stages = logs && typeof logs === 'object' ? order.filter((k) => logs[k]) : [];
+  const isClosed = !!closedOn || !!(logs && logs.closed);
+  const stage = isClosed ? 'closed' : (stages.length ? stages[stages.length - 1] : null);
+  const status = isClosed ? 'closed' : (stages.length ? 'open' : 'unknown');
+  return { stage, stages, status, closedOn: closedOn || null };
 }
 
-function normalizeTicket(t) {
+export function normalizeTicket(t) {
   if (!t || typeof t !== 'object') return null;
-  const lifecycle = ticketLifecycle(t.logs);
+  const lifecycle = ticketLifecycle(t.logs, t.closedOn);
   return {
     id: oid(t._id) || t.id_str || (t.id != null ? String(t.id) : null),
     description: t.description ?? null,
