@@ -22,6 +22,7 @@ import {
 import { toolNames, RENDER_REVIEW_TOOL } from './schemas.js';
 import { createClient } from '@supabase/supabase-js';
 import { embed } from '../embeddings.js';
+import { tool_get_ntsb_accident_history } from './getNtsbAccidentHistory.js';
 
 // Lazily-built Supabase client for vector search. Same service-key pattern
 // as reviewStore.js — read-only here (calls the match_manual_chunks RPC).
@@ -1083,6 +1084,7 @@ const handlers = {
   get_aircraft_compliance: tool_get_aircraft_compliance,
   get_crew_availability: tool_get_crew_availability,
   get_airport_safety_history: tool_get_airport_safety_history,
+  get_ntsb_accident_history: tool_get_ntsb_accident_history,
   search_manuals: tool_search_manuals,
 };
 

@@ -171,6 +171,18 @@ export const toolSchemas = [
     },
   },
   {
+    name: 'get_ntsb_accident_history',
+    description:
+      "Pre-aggregated NTSB accident/incident profile for an airport (US airplane events, ~2008–present) from the imported NTSB Aviation Accident Database. Returns a compact summary: { found, airport, airport_name, state, total_events, fatal_events, part135_relevant_events, top_phases, top_weather_conditions, top_damage_patterns, recent_events (last 5, each with date/make/model/phase/severity/damage/ntsb_number), pattern_warnings (pre-computed human-readable notes), last_event_date, data_through }. found:false means no record at that airport. Light general-aviation piston singles are excluded from the Part-135-relevant counts. Use as situational awareness for a departure/destination/alternate — a 'watch this', never a go/no-go gate. Cite the ntsb_number when referencing a specific event, and where a pattern lines up with the day's actual conditions, say so.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        airport_icao: ICAO,
+      },
+      required: ['airport_icao'],
+    },
+  },
+  {
     name: 'search_manuals',
     description:
       "Search Exjet's operational manuals (currently the General Operations Manual) for a relevant section. Use this ONLY when a question genuinely requires a manual reference — regulations, ops spec authorizations, MEL deferrals, fuel policy, duty-time rules, or a procedure that is NOT already answered by data from the other tools. Do not call this 'just to check' something the live data already addresses. Returns the most relevant chunks with manual name, section, and page number. Cite manual + section in your evidence (e.g. 'per GOM §3.4.2').",

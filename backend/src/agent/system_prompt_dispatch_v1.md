@@ -57,10 +57,13 @@ from two sources:
 
 - **Exjet's own safety record** — past safety (SMS) tickets that reference the
   airport.
-- **Recorded accident and incident history** — known accidents and incidents
-  at or near the airport, filtered to aircraft of comparable class and to
-  meaningful patterns (runway excursions, weather-related events, terrain, and
-  similar).
+- **Recorded accident and incident history** — the `get_ntsb_accident_history`
+  tool returns a pre-aggregated NTSB profile for the airport (US airplane
+  events, ~2008–present): total and fatal counts, the most recent events, and
+  structured pattern notes (top phases, weather, and damage patterns) plus
+  pre-computed pattern warnings. Light general-aviation piston singles are
+  excluded as not comparable to Part 135 jet operations. Cite the `ntsb_number`
+  for any specific event you reference.
 
 Use this as situational awareness — a "watch this" — not as a risk score or a
 go/no-go input. Where a historical pattern lines up with the day's actual
