@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import FlyingTimer from '../components/FlyingTimer';
 
 const STATUS = {
   0: { color: '#4f8ef7', label: 'Scheduled' },
@@ -85,6 +86,7 @@ const getAircraftPositions = (legs) => {
       statusColor,
       isFlying,
       currentLeg,
+      activeLeg: activeLeg || null,
       nextFlight,
     };
   }).filter(ac => ac.position);
@@ -110,6 +112,20 @@ const createAircraftIcon = (color, isFlying, heading = 0) => {
   });
 };
 
+const destinationIcon = L.divIcon({
+  className: 'aircraft-dest-icon',
+  html: `
+    <div style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;
+      filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));">
+      <svg viewBox="0 0 24 24" width="16" height="16" style="display:block">
+        <circle cx="12" cy="12" r="6" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
+        <circle cx="12" cy="12" r="1.5" fill="#94a3b8"/>
+      </svg>
+    </div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
 export default function Map() {
   const { data, loading } = useApi('/api/levelflight/legs');
   const [showTrail, setShowTrail] = useState(false);
@@ -119,6 +135,8 @@ export default function Map() {
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
   const trailLayerRef = useRef(null);
+  const overlayLayerRef = useRef(null);   // destination icons + dashed dest lines, redrawn each update
+  const prevLayerRef = useRef(null);      // historical (previous-flight) tracks for the selected aircraft
   const didFitRef = useRef(false);
   const mapWrapRef = useRef(null);
   const [cssFs, setCssFs] = useState(false);      // CSS-maximize fallback when the Fullscreen API is unavailable
@@ -176,11 +194,14 @@ export default function Map() {
 
     mapInstanceRef.current = map;
     trailLayerRef.current = L.layerGroup().addTo(map);
+    overlayLayerRef.current = L.layerGroup().addTo(map);
 
     return () => {
       map.remove();
       mapInstanceRef.current = null;
       trailLayerRef.current = null;
+      overlayLayerRef.current = null;
+      prevLayerRef.current = null;
     };
   }, []);
 
@@ -237,11 +258,27 @@ export default function Map() {
     Object.values(markersRef.current).forEach(m => m.remove());
     markersRef.current = {};
 
+    // Redraw destination icons + dashed dest lines into a layer group so they
+    // don't accumulate across live polls.
+    const overlay = overlayLayerRef.current;
+    overlay?.clearLayers();
+
     aircraft.forEach(ac => {
       const icon = createAircraftIcon(ac.statusColor, ac.isFlying, ac.heading);
       const marker = L.marker([ac.position.lat, ac.position.lng], { icon })
         .addTo(map)
         .on('click', () => setSelected(ac));
+
+      // For airborne aircraft, draw the destination airport + a faint dashed
+      // line from the aircraft to it.
+      const destLoc = ac.activeLeg?._calc?.to?.location;
+      if (overlay && ac.isFlying && destLoc && destLoc.lat != null && destLoc.lng != null) {
+        L.polyline(
+          [[ac.position.lat, ac.position.lng], [destLoc.lat, destLoc.lng]],
+          { color: '#94a3b8', weight: 1.5, opacity: 0.5, dashArray: '4 6' },
+        ).addTo(overlay);
+        L.marker([destLoc.lat, destLoc.lng], { icon: destinationIcon, interactive: false }).addTo(overlay);
+      }
 
       const liveLine = ac.live
         ? `<br/>${ac.live.altitudeFt != null ? `${ac.live.altitudeFt.toLocaleString()} ft` : '—'} · ${ac.live.groundSpeedKt != null ? `${Math.round(ac.live.groundSpeedKt)} kt` : '—'}${ac.live.callsign ? ` · ${ac.live.callsign}` : ''}`
@@ -390,6 +427,12 @@ export default function Map() {
                     {selectedAc.live.callsign || selectedAc.tail}
                     {selectedAc.live.track != null ? ` · hdg ${Math.round(selectedAc.live.track)}°` : ''}
                   </p>
+                  {selectedAc.isFlying && (
+                    <FlyingTimer
+                      sinceMs={live[selectedAc.tail]?.airborneSinceMs}
+                      style={{ display: 'inline-block', marginTop: '4px', fontSize: '12px', fontWeight: 600, color: '#f59e0b' }}
+                    />
+                  )}
                 </div>
               )}
               {selectedAc.currentLeg && (
