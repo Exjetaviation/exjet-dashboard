@@ -11,6 +11,7 @@ import maintenanceRoutes from './routes/maintenance.js';
 import agentRoutes from './routes/agent.js';
 import adsbRoutes from './routes/adsb.js';
 import { requireAuth } from './middleware/requireAuth.js';
+import { startRecorder } from './services/adsbRecorder.js';
 
 // Load QB refresh token from Supabase on startup
 (async () => {
@@ -55,4 +56,7 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/adsb', adsbRoutes);
 // Note: /api/test and /api/debug routers intentionally removed (finding F-03).
 
-app.listen(PORT, () => console.log(`Exjet backend listening on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Exjet backend listening on port ${PORT}`);
+  startRecorder();
+});
