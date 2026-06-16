@@ -52,10 +52,24 @@ export default function Calendar() {
   const {data:maintData} = useApi('/api/maintenance');
   const {positions:live} = useAdsb(20000);  // live ADS-B onGround status per tail
   const navigate = useNavigate();
-  const [view,setView]     = useState('week');
-  const [offset,setOffset] = useState(0);
-  const [zoom,setZoom]     = useState(1);
-  const [autoFit, setAutoFit] = useState(true);
+  const [view,setView]     = useState(() => {
+    const saved = localStorage.getItem('exjet.calendar.view');
+    return saved && VIEWS[saved] ? saved : 'week';
+  });
+  useEffect(() => { localStorage.setItem('exjet.calendar.view', view); }, [view]);
+  const [offset,setOffset] = useState(() => {
+    const s = localStorage.getItem('exjet.calendar.offset');
+    return s !== null && !isNaN(+s) ? +s : 0;
+  });
+  const [zoom,setZoom]     = useState(() => {
+    const s = localStorage.getItem('exjet.calendar.zoom');
+    return s !== null && +s > 0 ? +s : 1;
+  });
+  const [autoFit, setAutoFit] = useState(() => localStorage.getItem('exjet.calendar.autoFit') !== 'false');
+  useEffect(() => { localStorage.setItem('exjet.calendar.offset', String(offset)); }, [offset]);
+  useEffect(() => { localStorage.setItem('exjet.calendar.zoom', String(zoom)); }, [zoom]);
+  useEffect(() => { localStorage.setItem('exjet.calendar.autoFit', String(autoFit)); }, [autoFit]);
+  const didRestoreScroll = useRef(false);
   const [hovered,setHovered]   = useState(null);
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
@@ -129,7 +143,19 @@ useEffect(() => {
   if (bodyRef.current) observer.observe(bodyRef.current);
   return () => observer.disconnect();
 }, [autoFit, calcFitZoom, view]);
-  useEffect(() => { const t=setTimeout(scrollToCenter,120); return ()=>clearTimeout(t); }, [scrollToCenter,loading,view,zoom]);
+  // Only center the now bar when the user clicks "Today" — no auto-centering on
+  // re-render, zoom change, or the 60s tick. On load, restore the last scroll
+  // position once (after autoFit/zoom has settled the layout).
+  useEffect(() => {
+    if (didRestoreScroll.current || loading) return;
+    const el = bodyRef.current; if (!el) return;
+    const s = localStorage.getItem('exjet.calendar.scroll');
+    const t = setTimeout(() => {
+      if (s !== null && !isNaN(+s)) el.scrollLeft = +s;
+      didRestoreScroll.current = true;
+    }, 160);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   const onPD = useCallback(e => {
     const el=bodyRef.current; if(!el) return;
@@ -323,6 +349,7 @@ useEffect(() => {
               if(hdrRef.current)hdrRef.current.scrollLeft=e.target.scrollLeft;
               const lbl=document.getElementById('lbl-col');
               if(lbl)lbl.scrollTop=e.target.scrollTop;
+              if(didRestoreScroll.current) localStorage.setItem('exjet.calendar.scroll', String(e.target.scrollLeft));
             }}
             style={{flex:1,minWidth:0,overflowX:'scroll',overflowY:'auto',cursor:'grab'}}>
             <div style={{width:totalW,position:'relative'}}>
