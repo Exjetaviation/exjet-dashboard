@@ -1,6 +1,14 @@
 // Pure helpers for ADS-B track recording and previous-flight reconstruction.
 // No I/O — unit-tested in adsbTrack.test.js.
 
+// Canonical aircraft key: uppercase, alphanumeric only. The recorder stores
+// positions keyed by the ADS-B fleet registration while previous-flights looks
+// them up by LevelFlight's tailNumber — normalizing both sides means a value
+// like "N-69FP" or "n69fp" still matches "N69FP".
+export function normReg(s) {
+  return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 // True if `next` differs from `prev` by more than `thresholdDeg` in lat+lon
 // (Manhattan in degrees, matching the existing trail dedup). No prev => true.
 export function hasMoved(prev, next, thresholdDeg) {
