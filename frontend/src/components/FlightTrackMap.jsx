@@ -16,6 +16,21 @@ function pinIcon(color) {
   });
 }
 
+// Top-down plane divIcon. The inner `.plane-rot` element is rotated each frame to
+// face the direction of travel (the SVG nose points up / north at 0deg).
+function planeIcon() {
+  return L.divIcon({
+    className: 'exjet-plane',
+    html: `<div class="plane-rot" style="width:22px;height:22px;will-change:transform;">
+      <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2 L14 10 L22 13 L22 15 L14 13 L13 20 L16 22 L16 23 L12 22 L8 23 L8 22 L11 20 L10 13 L2 15 L2 13 L10 10 Z" fill="#e2e8f0" stroke="#0b1220" stroke-width="0.8"/>
+      </svg>
+    </div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11], // centered on the position
+  });
+}
+
 // Standalone Leaflet map for ONE flight's flown path. Draws the track polyline +
 // departure/arrival markers and fits bounds. Always renders the map container
 // (so it initializes once and survives the track arriving asynchronously); shows
@@ -56,6 +71,50 @@ export default function FlightTrackMap({ track = [], from, to, source, depLabel,
     map._trackLayer = group;
     map.fitBounds(L.latLngBounds(track), { padding: [40, 40] });
   }, [track, from, to, source, depLabel, arrLabel]);
+
+  // Animate a plane looping along the track (~6s), rotated to face travel.
+  // Its own marker + effect so it never duplicates or leaks across track changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || track.length < 2) return;
+
+    // Per-segment endpoints + cumulative planar length over the whole path.
+    const segs = [];
+    let total = 0;
+    for (let i = 1; i < track.length; i++) {
+      const a = track[i - 1], b = track[i];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      segs.push({ a, b, len, cum: total });
+      total += len;
+    }
+    if (total === 0) return; // degenerate (all points identical)
+
+    const plane = L.marker(track[0], { icon: planeIcon(), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+
+    const DURATION = 6000;
+    let rafId, startTs;
+    const step = (ts) => {
+      if (startTs === undefined) startTs = ts;
+      const dist = (((ts - startTs) % DURATION) / DURATION) * total;
+      let seg = segs[segs.length - 1];
+      for (const s of segs) { if (dist <= s.cum + s.len) { seg = s; break; } }
+      const segT = seg.len > 0 ? (dist - seg.cum) / seg.len : 0;
+      const lat = seg.a[0] + (seg.b[0] - seg.a[0]) * segT;
+      const lng = seg.a[1] + (seg.b[1] - seg.a[1]) * segT;
+      plane.setLatLng([lat, lng]);
+      const deg = Math.atan2(seg.b[1] - seg.a[1], seg.b[0] - seg.a[0]) * 180 / Math.PI; // atan2(dLng, dLat): 0=N, 90=E
+      const el = plane.getElement();
+      const rot = el && el.querySelector('.plane-rot');
+      if (rot) rot.style.transform = `rotate(${deg}deg)`;
+      rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      plane.remove();
+    };
+  }, [track]);
 
   return (
     <div style={{ position: 'relative', marginBottom: 20 }}>
