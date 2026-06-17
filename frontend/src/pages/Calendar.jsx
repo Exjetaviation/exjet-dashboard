@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAdsb } from '../hooks/useAdsb';
 import { useNavigate } from 'react-router-dom';
-import { overnightExtraCols } from '../lib/calendarRange';
+import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
 
 const STATUS_COLORS = [
   '#4f8ef7','#22c55e','#a855f7','#f59e0b','#ef4444',
@@ -144,6 +144,16 @@ export default function Calendar() {
   }, [rangeStart,totalMs,totalW]);
 
   const goToToday = useCallback(() => { setOffset(0); setTimeout(scrollToCenter,80); }, [scrollToCenter]);
+  // Drill down one level from a clicked header column: Week/Month day -> Day view of
+  // that day; Year month -> Month view of that month. Offset mirrors getRangeStart.
+  const drillTo = useCallback((targetView, ts) => {
+    const off = targetView === 'month'
+      ? monthOffsetFromNow(Date.now(), ts)
+      : dayOffsetFromNow(Date.now(), ts);
+    setView(targetView);
+    setOffset(off);
+    setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollLeft = 0; }, 0);
+  }, []);
   const calcFitZoom = useCallback(() => {
   if (bodyRef.current) {
     return (bodyRef.current.clientWidth) / (fitCols * cfg.baseColW);
@@ -333,8 +343,16 @@ useEffect(() => {
                   const daysInThisMonth = view==='year'&&col.isMonthStart
                     ? new Date(col.d.getFullYear(), col.d.getMonth()+1, 0).getDate()
                     : 0;
+                  // Non-Day views drill down on click: Year -> Month, Week/Month -> Day.
+                  const drillTarget = view==='year' ? 'month' : view==='day' ? null : 'day';
+                  const baseBg = col.isToday?'rgba(79,142,247,0.12)':'transparent';
                   return (
-                    <div key={col.i} style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart||col.isDayStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:col.isToday?'rgba(79,142,247,0.12)':'transparent',flexShrink:0,overflow:'visible',position:'relative'}}>
+                    <div key={col.i}
+                      onClick={drillTarget ? () => drillTo(drillTarget, col.ts) : undefined}
+                      onMouseEnter={drillTarget ? (e)=>{ e.currentTarget.style.background='rgba(79,142,247,0.22)'; } : undefined}
+                      onMouseLeave={drillTarget ? (e)=>{ e.currentTarget.style.background=baseBg; } : undefined}
+                      title={drillTarget ? (drillTarget==='month'?'Open month':'Open day') : undefined}
+                      style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart||col.isDayStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:baseBg,flexShrink:0,overflow:'visible',position:'relative',cursor:drillTarget?'pointer':'default'}}>
                       {view==='year' ? (
                         col.isMonthStart && (
                           <div style={{position:'absolute',left:0,width:daysInThisMonth*colW,height:'100%',display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:2}}>
