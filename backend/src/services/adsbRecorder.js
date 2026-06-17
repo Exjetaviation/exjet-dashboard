@@ -12,7 +12,7 @@ import { hasMoved, detectTakeoff, normReg } from './adsbTrack.js';
 // snapshot — match the cache TTL so each tick gets a fresh fix.
 const RECORD_INTERVAL_MS = 20000;
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
-const RETENTION_DAYS = 7;
+const RETENTION_DAYS = 90;
 const MOVE_THRESHOLD_DEG = 0.0005;
 
 // reg -> { lat, lon, onGround, airborneSince }
