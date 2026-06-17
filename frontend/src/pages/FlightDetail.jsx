@@ -2,6 +2,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import AgentReviewPanel from '../components/AgentReviewPanel';
+import FlightTrackMap from '../components/FlightTrackMap';
+import { fetchFlightTrack } from '../hooks/useAdsb';
 
 const Section = ({ title, children }) => (
   <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
@@ -49,6 +51,7 @@ export default function FlightDetail() {
   const [ffIcao, setFfIcao] = useState(null);
   const [ffLoading, setFfLoading] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [flightTrack, setFlightTrack] = useState(null);
 
   const ffFlightId = leg?.foreflight?.flightId;
 
@@ -71,6 +74,21 @@ export default function FlightDetail() {
       )
     ).finally(() => setFfLoading(false));
   }, [ffFlightId]);
+
+  const legId = leg?._id?.$oid;
+  useEffect(() => {
+    if (!legId) return;
+    let alive = true;
+    (async () => {
+      const res = await fetchFlightTrack(legId, {
+        tail: leg?.dispatch?.aircraft?.tailNumber,
+        dep: leg?.departure?.time,
+        arr: leg?.arrival?.time,
+      });
+      if (alive) setFlightTrack(res);
+    })();
+    return () => { alive = false; };
+  }, [legId]);
 
   if (!leg) {
     return (
@@ -129,6 +147,13 @@ export default function FlightDetail() {
           ✨ AI
         </button>
       </div>
+
+      <FlightTrackMap
+        track={flightTrack?.track || []}
+        from={leg.departure?.airport}
+        to={leg.arrival?.airport}
+        source={flightTrack?.source}
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
 

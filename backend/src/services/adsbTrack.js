@@ -39,3 +39,42 @@ export function clipTrackToLeg(positions, leg, padMs) {
     .sort((a, b) => a.t - b.t)
     .map((p) => [p.lat, p.lon]);
 }
+
+// Months (UTC, 1st of month) spanning [startMs, endMs], plus the prior month, as
+// anchor timestamps for LevelFlight's scheduledLegs queries. Moved here from
+// routes/adsb.js so the reconciler can reuse it.
+export function monthAnchors(startMs, endMs) {
+  const out = []; const d = new Date(startMs);
+  let y = d.getUTCFullYear(), m = d.getUTCMonth();
+  for (;;) { const t = Date.UTC(y, m, 1); if (t > endMs) break; out.push(t); m++; if (m > 11) { m = 0; y++; } if (out.length > 24) break; }
+  out.unshift(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+  return out;
+}
+
+// Normalized tail number for a LevelFlight leg.
+export function legTail(leg) {
+  return normReg(leg?.dispatch?.aircraft?.tailNumber || leg?.aircraft?.tailNumber || '');
+}
+
+// From raw LevelFlight leg lists, return de-duplicated COMPLETED legs (arrival in
+// the past), normalized to { id, tail, from, to, depTime, arrTime }. `now` is
+// epoch ms. Pure — no I/O.
+export function selectCompletedLegs(legs, now) {
+  const seen = new Set();
+  const out = [];
+  for (const l of legs || []) {
+    const id = l?._id?.$oid;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const depTime = l?.departure?.time, arrTime = l?.arrival?.time;
+    if (!depTime || !arrTime) continue;
+    if (arrTime > now) continue; // not completed yet
+    out.push({ id, tail: legTail(l), from: l.departure?.airport, to: l.arrival?.airport, depTime, arrTime });
+  }
+  return out;
+}
+
+// Drop legs whose id is already stored. `existingIds` is a Set. Pure.
+export function selectLegsToSnapshot(completedLegs, existingIds) {
+  return completedLegs.filter((leg) => !existingIds.has(leg.id));
+}
