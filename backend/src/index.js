@@ -12,6 +12,7 @@ import agentRoutes from './routes/agent.js';
 import adsbRoutes from './routes/adsb.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { startRecorder } from './services/adsbRecorder.js';
+import { startReconciler } from './services/flightTrackReconciler.js';
 
 // Load QB refresh token from Supabase on startup
 (async () => {
@@ -59,4 +60,5 @@ app.use('/api/adsb', adsbRoutes);
 app.listen(PORT, () => {
   console.log(`Exjet backend listening on port ${PORT}`);
   startRecorder();
+  startReconciler();
 });
