@@ -4,6 +4,7 @@ import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
 import { queryTrack } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
+import { getFlightTrack } from '../services/flightTrackStore.js';
 
 const router = express.Router();
 
@@ -71,5 +72,44 @@ router.get('/previous-flights', async (req, res) => {
 function eqTail(leg, tail) {
   return legTail(leg) === tail; // `tail` is already normalized by the caller
 }
+
+// GET /api/adsb/flight-track/:legId?tail=N69FP&dep=<ms>&arr=<ms>
+// Permanent snapshot for one completed flight. If none exists yet (in-progress /
+// not-yet-reconciled), falls back to a live clip of raw positions when tail+dep
+// are supplied. Soft: returns an empty track on any miss.
+router.get('/flight-track/:legId', async (req, res) => {
+  const legId = req.params.legId;
+  try {
+    const snap = await getFlightTrack(legId);
+    if (snap) {
+      return res.json({
+        legId,
+        source: 'snapshot',
+        from: snap.from_airport,
+        to: snap.to_airport,
+        depTime: Date.parse(snap.dep_time) || null,
+        arrTime: Date.parse(snap.arr_time) || null,
+        track: snap.track || [],
+      });
+    }
+
+    const tail = normReg(typeof req.query.tail === 'string' ? req.query.tail : '');
+    const dep = parseInt(req.query.dep, 10);
+    if (tail && Number.isFinite(dep)) {
+      const now = Date.now();
+      const arr = parseInt(req.query.arr, 10);
+      const arrTime = Number.isFinite(arr) ? arr : now;
+      const startIso = new Date(dep - PREV_PAD_MS).toISOString();
+      const endIso = new Date(arrTime + PREV_PAD_MS).toISOString();
+      const positions = await queryTrack(tail, startIso, endIso);
+      const track = clipTrackToLeg(positions, { depTime: dep, arrTime }, PREV_PAD_MS);
+      return res.json({ legId, source: 'live', from: null, to: null, depTime: dep, arrTime, track });
+    }
+
+    return res.json({ legId, source: 'none', track: [] });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'flight-track failed', track: [] });
+  }
+});
 
 export default router;
