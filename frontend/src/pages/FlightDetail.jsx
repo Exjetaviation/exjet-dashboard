@@ -85,7 +85,20 @@ export default function FlightDetail() {
         dep: leg?.departure?.time,
         arr: leg?.arrival?.time,
       });
-      if (alive) setFlightTrack(res);
+      if (!alive) return;
+      if (res.track?.length) {
+        setFlightTrack(res);
+      } else {
+        // No real ADS-B track (historical flight) — fall back to a direct
+        // departure->arrival line from the airport coords the leg carries.
+        const a = leg?._calc?.from?.location;
+        const b = leg?._calc?.to?.location;
+        if (a?.lat != null && a?.lng != null && b?.lat != null && b?.lng != null) {
+          setFlightTrack({ track: [[a.lat, a.lng], [b.lat, b.lng]], source: 'direct' });
+        } else {
+          setFlightTrack(res); // no coords either — leaves the empty state
+        }
+      }
     })();
     return () => { alive = false; };
   }, [legId]);

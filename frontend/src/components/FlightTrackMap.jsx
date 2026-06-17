@@ -29,7 +29,10 @@ export default function FlightTrackMap({ track = [], from, to, source }) {
     if (map._trackLayer) { map._trackLayer.remove(); map._trackLayer = null; }
     if (!track.length) return;
     const group = L.layerGroup();
-    L.polyline(track, { color: '#38bdf8', weight: 3, opacity: 0.85 }).addTo(group);
+    const lineStyle = source === 'direct'
+      ? { color: '#94a3b8', weight: 2, opacity: 0.7, dashArray: '6 6' } // dashed grey = planned/approximate
+      : { color: '#38bdf8', weight: 3, opacity: 0.85 };                  // solid blue = real flown track
+    L.polyline(track, lineStyle).addTo(group);
     const start = track[0], end = track[track.length - 1];
     L.circleMarker(start, { radius: 6, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 })
       .bindTooltip(from || 'Departure', { className: 'exjet-tooltip' }).addTo(group);
@@ -38,7 +41,7 @@ export default function FlightTrackMap({ track = [], from, to, source }) {
     group.addTo(map);
     map._trackLayer = group;
     map.fitBounds(L.latLngBounds(track), { padding: [40, 40] });
-  }, [track, from, to]);
+  }, [track, from, to, source]);
 
   return (
     <div style={{ position: 'relative', marginBottom: 20 }}>
@@ -48,9 +51,15 @@ export default function FlightTrackMap({ track = [], from, to, source }) {
           No flight path recorded for this flight.
         </div>
       )}
-      {source === 'live' && track.length > 0 && (
-        <span style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, fontSize: 11, padding: '3px 8px', borderRadius: 6, background: 'rgba(56,189,248,0.15)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.4)' }}>
-          live
+      {(source === 'live' || source === 'direct') && track.length > 0 && (
+        <span style={{
+          position: 'absolute', top: 10, right: 10, zIndex: 500, fontSize: 11,
+          padding: '3px 8px', borderRadius: 6,
+          background: source === 'direct' ? 'rgba(148,163,184,0.15)' : 'rgba(56,189,248,0.15)',
+          color: source === 'direct' ? '#94a3b8' : '#38bdf8',
+          border: source === 'direct' ? '1px solid rgba(148,163,184,0.4)' : '1px solid rgba(56,189,248,0.4)',
+        }}>
+          {source === 'direct' ? 'direct route' : 'live'}
         </span>
       )}
     </div>
