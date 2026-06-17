@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAdsb } from '../hooks/useAdsb';
 import { useNavigate } from 'react-router-dom';
+import { overnightExtraCols } from '../lib/calendarRange';
 
 const STATUS_COLORS = [
   '#4f8ef7','#22c55e','#a855f7','#f59e0b','#ef4444',
@@ -111,9 +112,18 @@ export default function Calendar() {
 
   const rangeStart = getRangeStart();
 
-  const effectiveCols = view === 'month'
+  const legs = data?.legs || [];
+
+  // Columns that should FILL the viewport (drives autoFit). Day view fits the focused
+  // 24h; month fits its day-count; week/year fit cfg.cols.
+  const fitCols = view === 'month'
     ? new Date(new Date(rangeStart).getFullYear(), new Date(rangeStart).getMonth()+1, 0).getDate()
     : cfg.cols;
+  // Day view only: extra hourly columns past midnight to fully contain overnight
+  // flights (0 on a normal day -> identical to before). These render but are NOT
+  // counted in the fit, so the focused day stays full-size and the tail scrolls.
+  const dayExtraCols = view === 'day' ? overnightExtraCols(legs, rangeStart, cfg.colMs) : 0;
+  const effectiveCols = fitCols + dayExtraCols;
 
   const colW    = Math.max(8, Math.round(cfg.baseColW * zoom));
   const totalMs = effectiveCols * cfg.colMs;
@@ -136,10 +146,10 @@ export default function Calendar() {
   const goToToday = useCallback(() => { setOffset(0); setTimeout(scrollToCenter,80); }, [scrollToCenter]);
   const calcFitZoom = useCallback(() => {
   if (bodyRef.current) {
-    return (bodyRef.current.clientWidth) / (effectiveCols * cfg.baseColW);
+    return (bodyRef.current.clientWidth) / (fitCols * cfg.baseColW);
   }
   return 1;
-}, [effectiveCols, cfg.baseColW]);
+}, [fitCols, cfg.baseColW]);
 
 useEffect(() => {
   if (!autoFit) return;
@@ -179,7 +189,6 @@ useEffect(() => {
     setTimeout(()=>{drag.current.moved=false;},150);
   },[]);
 
-  const legs = data?.legs||[];
   const dutyTimes = dutyData?.dutyTimes||[];
 
   const tripColorMap={}; let colorIdx=0;
@@ -246,9 +255,14 @@ useEffect(() => {
     const isToday=floorDay(ts)===floorDay(Date.now());
     const isMonthStart=d.getDate()===1;
     let label='';
+    const isDayStart = view==='day' && i>0 && d.getHours()===0; // interior midnight
     if (view==='day') {
-      const h=d.getHours();
-      label=h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
+      if (isDayStart) {
+        label=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); // e.g. "Wed, Jun 18"
+      } else {
+        const h=d.getHours();
+        label=h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
+      }
     } else if (view==='week') {
       label=`${d.toLocaleDateString('en-US',{weekday:'short'})} ${d.getDate()}`;
     } else if (view==='month') {
@@ -256,7 +270,7 @@ useEffect(() => {
     } else {
       label=isMonthStart?d.toLocaleDateString('en-US',{month:'short'}):'';
     }
-    return {i,ts,label,isToday,isMonthStart,d};
+    return {i,ts,label,isToday,isMonthStart,isDayStart,d};
   });
 
   const navBtn=(label,onClick)=>(
@@ -290,7 +304,7 @@ useEffect(() => {
             <button onClick={()=>setZoom(z=>Math.max(0.1,Math.round((z-0.2)*10)/10))} style={{width:'30px',height:'30px',fontSize:'16px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>−</button>
             <span style={{fontSize:'11px',color:'var(--text-secondary)',minWidth:'34px',textAlign:'center'}}>{Math.round(zoom*100)}%</span>
             <button onClick={()=>setZoom(z=>Math.min(4,Math.round((z+0.2)*10)/10))} style={{width:'30px',height:'30px',fontSize:'16px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>+</button>
-            <button onClick={()=>setZoom((bodyRef.current?.clientWidth||800)/(effectiveCols*cfg.baseColW))} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--accent)',fontWeight:'600'}}>Fit</button>
+            <button onClick={()=>setZoom((bodyRef.current?.clientWidth||800)/(fitCols*cfg.baseColW))} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--accent)',fontWeight:'600'}}>Fit</button>
             <button onClick={()=>setZoom(1)} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>1:1</button>
           </div>
           <button onClick={goToToday} style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:'var(--accent)',color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer'}}>Today</button>
@@ -320,7 +334,7 @@ useEffect(() => {
                     ? new Date(col.d.getFullYear(), col.d.getMonth()+1, 0).getDate()
                     : 0;
                   return (
-                    <div key={col.i} style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:col.isToday?'rgba(79,142,247,0.12)':'transparent',flexShrink:0,overflow:'visible',position:'relative'}}>
+                    <div key={col.i} style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart||col.isDayStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:col.isToday?'rgba(79,142,247,0.12)':'transparent',flexShrink:0,overflow:'visible',position:'relative'}}>
                       {view==='year' ? (
                         col.isMonthStart && (
                           <div style={{position:'absolute',left:0,width:daysInThisMonth*colW,height:'100%',display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:2}}>
@@ -328,7 +342,7 @@ useEffect(() => {
                           </div>
                         )
                       ) : (
-                        col.label && <span style={{fontSize:view==='month'?'11px':'12px',fontWeight:col.isToday||col.isMonthStart?'700':'400',color:col.isToday?'var(--accent)':col.isMonthStart?'#dde':'var(--text-secondary)',whiteSpace:'nowrap'}}>{col.label}</span>
+                        col.label && <span style={{fontSize:view==='month'?'11px':'12px',fontWeight:col.isToday||col.isMonthStart||col.isDayStart?'700':'400',color:col.isToday?'var(--accent)':col.isMonthStart||col.isDayStart?'#dde':'var(--text-secondary)',whiteSpace:'nowrap'}}>{col.label}</span>
                       )}
                     </div>
                   );
@@ -365,7 +379,7 @@ useEffect(() => {
 
                   {/* Grid lines */}
                   {cols.map(col=>(
-                    <div key={col.i} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:col.isMonthStart?2:1,background:col.isMonthStart?'rgba(255,255,255,0.13)':'rgba(255,255,255,0.03)',pointerEvents:'none'}}/>
+                    <div key={col.i} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:col.isMonthStart||col.isDayStart?2:1,background:col.isMonthStart||col.isDayStart?'rgba(255,255,255,0.13)':'rgba(255,255,255,0.03)',pointerEvents:'none'}}/>
                   ))}
 
                   {/* Today highlight */}
