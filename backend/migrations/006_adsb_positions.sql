@@ -1,8 +1,8 @@
 -- 006_adsb_positions.sql
 -- Persisted ADS-B position history for the fleet map. Written by the always-on
--- recorder (src/services/adsbRecorder.js) every ~15s, independent of any client.
+-- recorder (src/services/adsbRecorder.js) every ~20s, independent of any client.
 -- Used to reconstruct previous flights' real flown paths. Pruned to a rolling
--- window (default 7 days) by the recorder. Soft-fails if Supabase is absent.
+-- window (default 90 days) by the recorder. Soft-fails if Supabase is absent.
 
 create table if not exists public.adsb_positions (
     id           bigint generated always as identity primary key,
