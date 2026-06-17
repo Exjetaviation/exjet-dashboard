@@ -116,6 +116,14 @@ export default function FlightDetail() {
 
   const checklist = leg.checklist?.trip || {};
 
+  // Rich tooltip labels for the map's departure/arrival pins: code · name + time.
+  const pinLabel = (code, name, verb, time) => {
+    const head = name ? `<strong>${code}</strong> · ${name}` : `<strong>${code}</strong>`;
+    return time ? `${head}<br>${verb} ${formatDateTime(time)}` : head;
+  };
+  const depLabel = pinLabel(leg.departure?.airport || 'Departure', leg._calc?.from?.name, 'Departed', leg.departure?.time);
+  const arrLabel = pinLabel(leg.arrival?.airport || 'Arrival', leg._calc?.to?.name, 'Arrived', leg.arrival?.time);
+
   const aiFlight = {
     tail: leg.dispatch?.aircraft?.tailNumber || null,
     departure: leg.departure?.airport || null,
@@ -166,6 +174,8 @@ export default function FlightDetail() {
         from={leg.departure?.airport}
         to={leg.arrival?.airport}
         source={flightTrack?.source}
+        depLabel={depLabel}
+        arrLabel={arrLabel}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
