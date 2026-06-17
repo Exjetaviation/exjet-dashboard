@@ -3,7 +3,7 @@ import { getLivePositions, getTrails } from '../services/adsb.js';
 import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
 import { queryTrack } from '../services/adsbStore.js';
-import { clipTrackToLeg, normReg } from '../services/adsbTrack.js';
+import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
 
 const router = express.Router();
 
@@ -69,15 +69,7 @@ router.get('/previous-flights', async (req, res) => {
 
 // Local helpers (small and route-specific).
 function eqTail(leg, tail) {
-  const t = leg.dispatch?.aircraft?.tailNumber || leg.aircraft?.tailNumber || '';
-  return normReg(t) === tail; // `tail` is already normalized by the caller
-}
-function monthAnchors(startMs, endMs) {
-  const out = []; const d = new Date(startMs);
-  let y = d.getUTCFullYear(), m = d.getUTCMonth();
-  for (;;) { const t = Date.UTC(y, m, 1); if (t > endMs) break; out.push(t); m++; if (m > 11) { m = 0; y++; } if (out.length > 24) break; }
-  out.unshift(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
-  return out;
+  return legTail(leg) === tail; // `tail` is already normalized by the caller
 }
 
 export default router;
