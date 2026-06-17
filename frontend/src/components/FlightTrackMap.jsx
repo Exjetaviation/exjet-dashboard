@@ -2,11 +2,25 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+// Teardrop map-pin divIcon, tip anchored at the coordinate. `color` fills the pin.
+function pinIcon(color) {
+  return L.divIcon({
+    className: 'exjet-pin',
+    html: `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9z" fill="${color}" stroke="#0b1220" stroke-width="1.5"/>
+      <circle cx="12" cy="9" r="3.2" fill="#0b1220"/>
+    </svg>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 24],     // tip sits on the coordinate
+    tooltipAnchor: [0, -22],  // tooltip floats above the pin
+  });
+}
+
 // Standalone Leaflet map for ONE flight's flown path. Draws the track polyline +
 // departure/arrival markers and fits bounds. Always renders the map container
 // (so it initializes once and survives the track arriving asynchronously); shows
 // an overlay message when there is no track. Self-contained — no Map.jsx import.
-export default function FlightTrackMap({ track = [], from, to, source }) {
+export default function FlightTrackMap({ track = [], from, to, source, depLabel, arrLabel }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
 
@@ -34,14 +48,14 @@ export default function FlightTrackMap({ track = [], from, to, source }) {
       : { color: '#38bdf8', weight: 3, opacity: 0.85 };                  // solid blue = real flown track
     L.polyline(track, lineStyle).addTo(group);
     const start = track[0], end = track[track.length - 1];
-    L.circleMarker(start, { radius: 6, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1 })
-      .bindTooltip(from || 'Departure', { className: 'exjet-tooltip' }).addTo(group);
-    L.circleMarker(end, { radius: 6, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 1 })
-      .bindTooltip(to || 'Arrival', { className: 'exjet-tooltip' }).addTo(group);
+    L.marker(start, { icon: pinIcon('#22c55e') })
+      .bindTooltip(depLabel || from || 'Departure', { className: 'exjet-tooltip' }).addTo(group);
+    L.marker(end, { icon: pinIcon('#ef4444') })
+      .bindTooltip(arrLabel || to || 'Arrival', { className: 'exjet-tooltip' }).addTo(group);
     group.addTo(map);
     map._trackLayer = group;
     map.fitBounds(L.latLngBounds(track), { padding: [40, 40] });
-  }, [track, from, to, source]);
+  }, [track, from, to, source, depLabel, arrLabel]);
 
   return (
     <div style={{ position: 'relative', marginBottom: 20 }}>
