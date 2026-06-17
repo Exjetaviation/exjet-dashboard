@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { overnightExtraCols } from './calendarRange.js';
+import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from './calendarRange.js';
 
 const H = 3600000;
 const day = Date.UTC(2026, 5, 17, 0, 0, 0); // a day start, epoch ms (helper is tz-agnostic)
@@ -40,4 +40,26 @@ test('skips legs missing times and null entries', () => {
 test('caps the extension at maxExtra (default 48)', () => {
   const legs = [{ departure: { time: day + 23 * H }, arrival: { time: day + 1000 * H } }];
   assert.equal(overnightExtraCols(legs, day, H), 48);
+});
+
+// Build local-time instants so the local-midnight flooring in the helpers is
+// deterministic regardless of the test runner's timezone.
+const mk = (y, mo, d, h = 0) => new Date(y, mo, d, h, 0, 0, 0).getTime();
+
+test('dayOffsetFromNow: same day is 0, later same day still 0', () => {
+  assert.equal(dayOffsetFromNow(mk(2026, 5, 17, 9), mk(2026, 5, 17, 15)), 0);
+});
+
+test('dayOffsetFromNow: next day is +1, previous day is -1', () => {
+  assert.equal(dayOffsetFromNow(mk(2026, 5, 17, 23), mk(2026, 5, 18, 1)), 1);
+  assert.equal(dayOffsetFromNow(mk(2026, 5, 17, 1), mk(2026, 5, 16, 23)), -1);
+});
+
+test('monthOffsetFromNow: same month 0, next month +1', () => {
+  assert.equal(monthOffsetFromNow(mk(2026, 5, 17), mk(2026, 5, 2)), 0);
+  assert.equal(monthOffsetFromNow(mk(2026, 5, 17), mk(2026, 6, 2)), 1);
+});
+
+test('monthOffsetFromNow: crosses year boundary (Jan 2026 -> Dec 2025 = -1)', () => {
+  assert.equal(monthOffsetFromNow(mk(2026, 0, 5), mk(2025, 11, 20)), -1);
 });
