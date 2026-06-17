@@ -16,3 +16,23 @@ export function overnightExtraCols(legs, dayStartMs, colMs, maxExtra = 48) {
   if (maxArr <= dayEnd) return 0;
   return Math.min(Math.ceil((maxArr - dayEnd) / colMs), maxExtra);
 }
+
+// Local midnight (ms) for a timestamp — matches how getRangeStart() builds the
+// Day range (it zeroes the local time-of-day).
+function floorDayLocal(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Whole-day delta between two instants, by local calendar day. Drives Week/Month
+// header -> Day view. Math.round absorbs DST-shortened/lengthened days.
+export function dayOffsetFromNow(nowMs, targetMs) {
+  return Math.round((floorDayLocal(targetMs) - floorDayLocal(nowMs)) / 86400000);
+}
+
+// Calendar-month delta between two instants. Drives Year header -> Month view.
+export function monthOffsetFromNow(nowMs, targetMs) {
+  const n = new Date(nowMs), t = new Date(targetMs);
+  return (t.getFullYear() - n.getFullYear()) * 12 + (t.getMonth() - n.getMonth());
+}
