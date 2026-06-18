@@ -533,6 +533,15 @@ git commit -m "feat(scheduling): mirror freshness classifier"
 
 ---
 
+## Post-review refinements (applied 2026-06-18)
+
+Minor hardening applied after the final code review (all 12 tests green):
+- `reconcile.js`: in the insert and clean-update branches, `lf_oid` is spread **after** `...values` so an incoming key can never clobber the canonical id; added clarifying comments on the `locally_modified` upsert assumption and the `undefined`/`null` snapshot-comparison note.
+- `008_scheduling.sql`: added `check (origin in ('levelflight', 'native'))` to all four operational tables.
+- `freshness.test.js`: added an exact-10-minute boundary test.
+
+Known follow-up for the connector plan: make `upstream_changed` **sticky** (`existing.upstream_changed || snapshotChanged`) so the "LevelFlight changed this" flag persists until the user reverts/dismisses, rather than recomputing each sync.
+
 ## Next plan (not in scope here)
 
 The follow-on plan wires these pure cores to the world: port the LevelFlight connector (Cognito auth, retry/backoff, chunking) from `~/exjet-ingest/ingest.ts`; write the LevelFlight→mirror field mappers for trips/legs/crew/passengers; the scheduled sync jobs (rolling −30/+90d window, every few minutes); persist `scheduling_sync_status`; and expose `GET /api/scheduling/sync-status`. The read UI (Schedule board + Trips list/detail reusing dashboard components) follows after that.
