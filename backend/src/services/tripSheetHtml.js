@@ -34,12 +34,20 @@ function fboCell(label, fbo) {
     ${fbo.crewNote ? `<div class="fbonote">${esc(fbo.crewNote)}</div>` : ''}</div>`;
 }
 
+const WINGS = '<svg class="wings" width="132" height="16" viewBox="0 0 132 16" fill="none" stroke="#aab4c2" stroke-width="1" stroke-linecap="round"><circle cx="66" cy="8" r="2.6" fill="#c4ced9" stroke="none"/><path d="M61 8 L46 5 M61 8 L42 7 M61 9 L44 9.5 M61 9 L48 11.5 M61 10 L53 13"/><path d="M71 8 L86 5 M71 8 L90 7 M71 9 L88 9.5 M71 9 L84 11.5 M71 10 L79 13"/></svg>';
+
 function legBlock(leg, i, n) {
   const c = leg.crew || {};
   const crew = [crewCell('PIC', c.pic), crewCell('SIC', c.sic), ...(c.ca || []).map((m) => crewCell('CA', m))].filter(Boolean).join('');
   const meta = [leg.eft ? 'EFT ' + esc(leg.eft) : '', leg.distance != null ? esc(leg.distance) + ' nm' : '', leg.fuelBurn != null ? 'Burn ' + esc(leg.fuelBurn) + ' lbs' : '', leg.pax != null ? esc(leg.pax) + ' PAX' : ''].filter(Boolean).join(' · ');
+  const ft = leg.flightType || {};
   return `<div class="leg">
-    <div class="leghd"><span class="legno">LEG ${i + 1} of ${n}${leg.callSign ? ' · ' + esc(leg.callSign) : ''}</span><span class="legmeta">${meta}</span></div>
+    <div class="legsep">
+      ${WINGS}
+      <div class="legtitle">LEG ${i + 1} OF ${n}</div>
+      <div class="legtype ${ft.part === 135 ? 'is135' : 'is91'}">${esc(ft.label || '')}</div>
+      <div class="legsub">${leg.callSign ? '<span class="csign">' + esc(leg.callSign) + '</span>' : ''}${meta ? `<span class="legmeta">${meta}</span>` : ''}</div>
+    </div>
     <div class="legroute">
       <div><div class="apt">${esc(leg.from || '')}</div><div class="aptn">${esc(leg.fromName || '')}${leg.fromElev != null ? ` · elev ${esc(leg.fromElev)}'` : ''}</div><div class="aptt">${esc(fmtLocal(leg.depTime, leg.depTz))}</div><div class="aptz">${esc(fmtZ(leg.depTime))}</div></div>
       <div class="line"><span class="plane">&#9992;</span></div>
@@ -103,9 +111,15 @@ export function renderTripSheetHtml(vm, { print = false } = {}) {
   .totals { display:flex; gap:18px; margin-left:auto; font-size:11px; color:#8a98ad; }
   .totals b { color:#fff; font-size:15px; display:block; }
   .sec { font-size:10px; letter-spacing:3px; color:#6b7890; margin:16px 30px 6px; }
-  .leg { padding:12px 30px; border-bottom:1px solid #1a2638; }
-  .leghd { display:flex; justify-content:space-between; align-items:baseline; }
-  .legno { font-size:11px; letter-spacing:2px; color:#c4ced9; font-weight:700; }
+  .leg { padding:4px 30px 20px; }
+  .legsep { text-align:center; padding:18px 0 12px; margin-top:8px; border-top:1px solid #233247; }
+  .wings { display:block; margin:0 auto 7px; opacity:.92; }
+  .legtitle { font-size:13px; letter-spacing:5px; color:#fff; font-weight:700; }
+  .legtype { display:inline-block; margin-top:6px; font-size:10px; letter-spacing:2px; padding:2px 11px; border-radius:20px; }
+  .legtype.is135 { color:#0b1018; background:linear-gradient(90deg,#cfd6e0,#aab4c2); font-weight:700; }
+  .legtype.is91 { color:#cfe0f5; border:1px solid #2a3852; }
+  .legsub { margin-top:8px; display:flex; gap:12px; justify-content:center; align-items:center; flex-wrap:wrap; }
+  .csign { font-size:10px; letter-spacing:1px; color:#8a98ad; border:1px solid #233247; border-radius:5px; padding:1px 7px; }
   .legmeta { font-size:10px; color:#8a98ad; }
   .legroute { display:flex; align-items:center; gap:10px; margin:8px 0; }
   .apt { font-size:18px; font-weight:600; color:#fff; }
