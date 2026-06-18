@@ -1,20 +1,39 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import FlightsFilterBar from '../components/FlightsFilterBar';
 import FlightsList from '../components/FlightsList';
+import TripsList from '../components/TripsList';
 
 export default function Flights() {
   const { data, loading, error } = useApi('/api/levelflight/legs');
   const legs = data?.legs || [];
   const [visible, setVisible] = useState([]);
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'trips' ? 'trips' : 'legs';
+  const setView = (v) => setParams((p) => { const n = new URLSearchParams(p); v === 'trips' ? n.set('view', 'trips') : n.delete('view'); return n; }, { replace: true });
+
+  const Tab = ({ id, label }) => (
+    <button onClick={() => setView(id)}
+      style={{ padding: '8px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: 'none', border: 'none',
+        color: view === id ? 'var(--accent)' : 'var(--text-secondary)',
+        borderBottom: view === id ? '2px solid var(--accent)' : '2px solid transparent' }}>
+      {label}
+    </button>
+  );
 
   return (
     <div>
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '16px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)' }}>Flights</h1>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {loading ? 'Loading...' : `${legs.length} total · ${visible.length} shown · click a column to sort · click a row for details`}
+          {loading ? 'Loading...' : `${legs.length} legs · ${visible.length} shown`}
         </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        <Tab id="legs" label="Legs" />
+        <Tab id="trips" label="Trips" />
       </div>
 
       {error && (
@@ -24,7 +43,9 @@ export default function Flights() {
       )}
 
       <FlightsFilterBar legs={legs} onChange={setVisible} />
-      <FlightsList legs={visible} loading={loading} />
+      {view === 'trips'
+        ? <TripsList legs={visible} loading={loading} />
+        : <FlightsList legs={visible} loading={loading} />}
     </div>
   );
 }
