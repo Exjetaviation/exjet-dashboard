@@ -33,7 +33,8 @@ export default function Quotes() {
       const r = await apiFetch(`/api/quotes/dispatch/${sel}/pdf`);
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `exjet-quote-${sel}.pdf`;
+      const qn = rows.find((q) => q.dispatchId === sel)?.quoteNumber;
+      const a = document.createElement('a'); a.href = url; a.download = `exjet-quote-${qn || sel}.pdf`;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     } catch { /* ignore */ }
     setPdfBusy(false);
