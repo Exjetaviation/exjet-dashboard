@@ -1,7 +1,7 @@
-// backend/src/services/tripSheetData.test.js
+// backend/src/services/itineraryData.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapTripLeg, mapClient } from './tripSheetData.js';
+import { mapItineraryLeg, mapClient } from './itineraryData.js';
 
 const leg = {
   departure: { airport: 'KFXE', time: 1000, fbo: { name: 'Banyan', address: { street: '5360 NW 20th Ter', city: 'Fort Lauderdale', state: 'FL' }, phones: ['+1 954-491-3170'] } },
@@ -19,8 +19,8 @@ const leg = {
   },
 };
 
-test('mapTripLeg maps route, crew (PIC=seat2/SIC=seat3), fbo, coords', () => {
-  const m = mapTripLeg(leg);
+test('mapItineraryLeg maps route, crew (PIC=seat2/SIC=seat3), fbo, coords', () => {
+  const m = mapItineraryLeg(leg);
   assert.equal(m.from, 'KFXE');
   assert.equal(m.to, 'KMIA');
   assert.equal(m.eft, '0:42');
@@ -36,8 +36,8 @@ test('mapTripLeg maps route, crew (PIC=seat2/SIC=seat3), fbo, coords', () => {
   assert.equal(m.depFbo.phone, '+1 954-491-3170');
 });
 
-test('mapTripLeg tolerates missing crew/fbo/coords', () => {
-  const m = mapTripLeg({ departure: { airport: 'A' }, arrival: { airport: 'B' } });
+test('mapItineraryLeg tolerates missing crew/fbo/coords', () => {
+  const m = mapItineraryLeg({ departure: { airport: 'A' }, arrival: { airport: 'B' } });
   assert.equal(m.crew.pic, null);
   assert.deepEqual(m.crew.ca, []);
   assert.equal(m.depFbo, null);
