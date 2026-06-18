@@ -4,3 +4,4 @@ dist/
 backend/manuals/
 .DS_Store
 **/.DS_Store
+.superpowers/
