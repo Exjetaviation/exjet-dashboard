@@ -22,6 +22,7 @@ import Maintenance from './pages/Maintenance';
 import AssistantPage from './pages/AssistantPage';
 import CrewCalendar from './pages/CrewCalendar';
 import Scheduling from './pages/Scheduling';
+import SchedulingTripDetail from './pages/SchedulingTripDetail';
 import { supabase } from './lib/supabase';
 
 function Dashboard() {
@@ -75,6 +76,7 @@ function Dashboard() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/flights" element={<Flights />} />
           <Route path="/scheduling" element={<Scheduling />} />
+          <Route path="/scheduling/trips/:id" element={<SchedulingTripDetail />} />
           <Route path="/flights/:id" element={<FlightDetail />} />
           <Route path="/trips/:id" element={<TripDetail />} />
           <Route path="/crew" element={<Crew />} />
