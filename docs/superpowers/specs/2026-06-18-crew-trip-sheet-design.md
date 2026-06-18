@@ -93,9 +93,11 @@ dashboard.
 - **Leg with no `dispatch._id`** → action hidden.
 - **LevelFlight token/HTTP failure** → 502/500 with a JSON error; frontend shows an
   inline failure message (no crash).
-- **Release HTML references LevelFlight CSS/images** → Puppeteer fetches them over the
-  network (Railway has egress); the plan verifies the PDF renders with styling intact,
-  and waits for `networkidle`/a short settle before printing.
+- **Self-contained HTML** (verified): the release uses inline `style` attributes with
+  **no external CSS/JS/images**, so it renders identically in the iframe and Puppeteer
+  with no authed-asset problem. The PDF renderer must NOT block on the quote's
+  `window.__mapReady` flag (the release never sets it) — add an opt-out so the trip
+  sheet prints immediately after `networkidle0`.
 - **PII** → never exposed publicly; the route is auth-guarded and the View is in-app.
 
 ## Testing
