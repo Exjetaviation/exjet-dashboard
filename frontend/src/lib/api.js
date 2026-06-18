@@ -2,6 +2,8 @@ import { supabase } from './supabase';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+export const API_BASE = BASE_URL;
+
 // Use this for EVERY backend call. It attaches the login token automatically.
 export async function apiFetch(endpoint, options = {}) {
   const { data } = await supabase.auth.getSession();
