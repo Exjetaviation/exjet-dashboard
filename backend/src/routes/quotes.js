@@ -6,7 +6,7 @@ import { getDispatchList } from '../services/levelflight.js';
 import { mapDispatchToQuote } from '../services/quoteMap.js';
 import { renderQuoteHtml } from '../services/quoteHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
-import { resolveLegCoords } from '../services/airports.js';
+import { getAirportCoords, attachCoords } from '../services/airportCoords.js';
 
 const router = express.Router();
 
@@ -128,7 +128,7 @@ async function buildViewModel(dispatchId) {
   const dispatch = (data?.dispatches || []).find((d) => (d?._id?.$oid || d?._id) === dispatchId);
   if (!dispatch) return null;
   const vm = mapDispatchToQuote(dispatch);
-  vm.legs = resolveLegCoords(vm.legs);
+  vm.legs = attachCoords(vm.legs, await getAirportCoords());
   vm.acceptUrl = vm.acceptId ? `${ACCEPT_BASE}/${vm.acceptId}/accept` : null;
   vm.preparedOn = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   vm.amenities = vm.amenities || ['Flight Attendant', 'WIFI'];
