@@ -7,6 +7,7 @@ const links = [
   { to: '/map', label: 'Fleet Map', icon: '🗺' },
   { to: '/calendar', label: 'Calendar', icon: '▦' },
   { to: '/flights', label: 'Flights', icon: '✈' },
+  { to: '/scheduling', label: 'Scheduling', icon: '🗓' },
   { to: '/crew', label: 'Crew', icon: '👤' },
   { to: '/aircraft', label: 'Aircraft', icon: '🛩' },
   { to: '/clients', label: 'Clients', icon: '◎' },
