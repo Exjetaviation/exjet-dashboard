@@ -23,3 +23,8 @@ test('freshnessLabel is stale past the window (default 10 min)', () => {
   const twentyMinAgo = '2026-06-18T18:40:00.000Z';
   assert.deepEqual(freshnessLabel(twentyMinAgo, NOW), { state: 'stale', text: 'Synced 20 min ago' });
 });
+
+test('freshnessLabel is fresh exactly at the 10-minute boundary', () => {
+  const tenMinAgo = '2026-06-18T18:50:00.000Z';
+  assert.deepEqual(freshnessLabel(tenMinAgo, NOW), { state: 'fresh', text: 'Synced 10 min ago' });
+});

@@ -6,6 +6,8 @@
 // No I/O — the caller fetches existing rows and performs the upsert.
 
 // Order-independent JSON string, so snapshot comparison ignores key order.
+// Note: undefined and null both serialize to 'null'. LevelFlight snapshots come
+// from parsed JSON (which has no undefined), so this is safe for comparison.
 export function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
   if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
@@ -30,8 +32,9 @@ export function reconcileRecord(incoming, existing, now) {
     return {
       action: 'insert',
       set: {
-        lf_oid: lfOid,
+        // lf_oid after ...values so an incoming key can never clobber it.
         ...values,
+        lf_oid: lfOid,
         origin: 'levelflight',
         lf_synced_snapshot: snapshot,
         locally_modified: false,
@@ -42,12 +45,14 @@ export function reconcileRecord(incoming, existing, now) {
   }
 
   if (!existing.locally_modified) {
-    // Clean mirror: refresh working copy + snapshot.
+    // Clean mirror: refresh working copy + snapshot. locally_modified is already
+    // false here (guarded above); a partial upsert leaves it untouched, so we
+    // don't restate it. lf_oid goes after ...values so it can't be clobbered.
     return {
       action: 'update',
       set: {
-        lf_oid: lfOid,
         ...values,
+        lf_oid: lfOid,
         lf_synced_snapshot: snapshot,
         upstream_changed: false,
         synced_at: now,
