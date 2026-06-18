@@ -7,7 +7,7 @@
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
-export async function renderQuotePdf(html) {
+export async function renderQuotePdf(html, { waitForMapReady = true } = {}) {
   const localExe = process.env.PUPPETEER_EXECUTABLE_PATH;
   const browser = await puppeteer.launch({
     args: localExe ? ['--no-sandbox', '--disable-setuid-sandbox'] : chromium.args,
@@ -17,8 +17,10 @@ export async function renderQuotePdf(html) {
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
-    await page.waitForFunction('window.__mapReady === true', { timeout: 15000 })
-      .catch(() => console.warn('[quotePdf] map not ready before print (rendering without it)'));
+    if (waitForMapReady) {
+      await page.waitForFunction('window.__mapReady === true', { timeout: 15000 })
+        .catch(() => console.warn('[quotePdf] map not ready before print (rendering without it)'));
+    }
     return await page.pdf({ format: 'Letter', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
   } finally {
     await browser.close();
