@@ -1,7 +1,14 @@
 // backend/src/services/tripSheet.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { indexEmployees, mapReleaseLeg, mapManifest, mapMaintenance } from './tripSheet.js';
+import { indexEmployees, mapReleaseLeg, mapManifest, mapMaintenance, flightType } from './tripSheet.js';
+
+test('flightType maps charter vs part 91 purposes', () => {
+  assert.deepEqual(flightType(8), { part: 91, label: 'Part 91 · Owner' });
+  assert.deepEqual(flightType(4), { part: 91, label: 'Part 91 · Positioning' });
+  assert.deepEqual(flightType(undefined), { part: 135, label: '135 · Charter' });
+  assert.deepEqual(flightType(1), { part: 135, label: '135 · Charter' });
+});
 
 const release = {
   callSign: 'SKYHOP 69',
