@@ -14,6 +14,8 @@ export default function Quotes() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [query, setQuery] = useState('');
+  const [sortKey, setSortKey] = useState('date'); // 'date' | 'quote'
+  const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
 
   useEffect(() => {
     let on = true;
@@ -51,8 +53,15 @@ export default function Quotes() {
     const base = q
       ? rows.filter((r) => [r.from, r.to, r.tail, r.quoteNumber].some((v) => String(v || '').toLowerCase().includes(q)))
       : rows;
-    return base.map((r) => ({ ...r, departure: { time: r.depTime } }));
-  }, [rows, query]);
+    const val = (r) => sortKey === 'quote' ? Number(r.quoteNumber) : r.depTime;
+    const sorted = [...base].sort((a, b) => {
+      const av = val(a), bv = val(b);
+      const an = av == null || Number.isNaN(av), bn = bv == null || Number.isNaN(bv);
+      if (an && bn) return 0; if (an) return 1; if (bn) return -1; // nulls last
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+    return sorted.map((r) => ({ ...r, departure: { time: r.depTime } }));
+  }, [rows, query, sortKey, sortDir]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
@@ -88,6 +97,19 @@ export default function Quotes() {
         </div>
 
         <div style={{ flex: '0 0 380px', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sort</span>
+            {[['date', 'Date'], ['quote', 'Quote #']].map(([k, label]) => (
+              <button key={k} onClick={() => setSortKey(k)}
+                style={{ padding: '5px 10px', fontSize: 12, borderRadius: 7, cursor: 'pointer', border: '1px solid var(--border)', background: sortKey === k ? 'var(--accent)' : 'var(--bg-card)', color: sortKey === k ? '#fff' : 'var(--text-secondary)' }}>
+                {label}
+              </button>
+            ))}
+            <button title="Ascending" onClick={() => setSortDir('asc')}
+              style={{ padding: '5px 9px', fontSize: 13, borderRadius: 7, cursor: 'pointer', border: '1px solid var(--border)', background: sortDir === 'asc' ? 'var(--accent)' : 'var(--bg-card)', color: sortDir === 'asc' ? '#fff' : 'var(--text-secondary)' }}>↑</button>
+            <button title="Descending" onClick={() => setSortDir('desc')}
+              style={{ padding: '5px 9px', fontSize: 13, borderRadius: 7, cursor: 'pointer', border: '1px solid var(--border)', background: sortDir === 'desc' ? 'var(--accent)' : 'var(--bg-card)', color: sortDir === 'desc' ? '#fff' : 'var(--text-secondary)' }}>↓</button>
+          </div>
           {visible.map((q) => (
             <div key={q.dispatchId} onClick={() => setSel(q.dispatchId)}
               style={{ padding: 12, marginBottom: 8, borderRadius: 10, cursor: 'pointer', border: '1px solid var(--border)', background: sel === q.dispatchId ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)' }}>
