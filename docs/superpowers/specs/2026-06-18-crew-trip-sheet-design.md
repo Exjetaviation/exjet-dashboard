@@ -16,6 +16,22 @@ LevelFlight already produces this exact document (it's the emailed
 viable: maintenance/currency status, crew DOB/weight, and the passport manifest are
 **not exposed** by the documented endpoints.
 
+## CORRECTION (post-implementation)
+
+The original "proxy the release HTML" approach was **wrong**: `/api/dispatch/{id}/release`
+returns **`application/json`** (a rich payload — `operation, aircraft, releases, pax,
+employees, mx, components, closedEvents, company`), not rendered HTML. Proxying it
+dumped raw JSON to the user. Corrected approach: the **backend** maps that JSON to a
+view-model and renders our **own** branded "Midnight" trip sheet (matching the quote/
+itinerary), returning finished HTML/PDF — the frontend never receives JSON. Sections
+built from the JSON: cover (trip/aircraft/client/totals/TSA), per-leg (call sign,
+local+Z times, elevation, distance/EFT/fuel, comms, METARs from `weather.*.raw`, FBOs,
+crew with DOB/phone joined from `employees[]`, released-by/crew-note), animated route
+map, passenger manifest (`pax[]`: weight/DOB/citizenship/passport), and aircraft
+status & currency (`aircraft._camp`, `components`, `mx`, `closedEvents`). Files:
+`services/tripSheet.js` (mappers + `buildCrewTripSheet`), `services/tripSheetHtml.js`
+(`renderTripSheetHtml`), `routes/tripSheet.js`.
+
 ## Key finding (verified live)
 
 The authenticated endpoint **`GET /api/dispatch/{id}/release`** returns the **complete
