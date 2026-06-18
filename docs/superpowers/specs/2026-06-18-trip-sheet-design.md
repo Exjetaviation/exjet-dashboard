@@ -30,9 +30,13 @@ pattern, Midnight styling).
 `getTripLog(dispatchId)` returns `{ dispatch, aircraft, attendants, ... }` with FULL
 `dispatch.legs`. Per leg: `departure/arrival` (`airport`, `time`, `fbo` {name,address,
 phones}), `_calc` (`distance.value`, `time` (EFT), `from/to.location` {lat,lng}),
-`passengerCount`, `pilots[]`, `attendants[]`, `passengers[]`. Dispatch: `tripId`,
-`quoteId`, `client` {`company`,`customer`} (company `_id` → `/api/company-get/{id}` for
-address). Weather is NOT in LevelFlight → Open‑Meteo by airport lat/lng.
+`passengerCount`, `pilots[]` (`seat` 2=PIC / 3=SIC, `user.firstName/lastName`),
+`attendants[]` (`user`), `passengers[]`. Dispatch: `tripId`, `quoteId`, `client`
+{`company` {`name`, `address` {street,city,postalCode,country}, `phones`}, `customer`
+{`firstName`,`lastName`,`_fullName`}} — verified live, the **full client address is
+already in the trip log**, so no separate `company-get` call is needed. Weather is NOT
+in LevelFlight → Open‑Meteo by airport lat/lng (`daily.{time,temperature_2m_max,
+temperature_2m_min,weather_code}[]`, `temperature_unit=fahrenheit`).
 
 ## Architecture (mirrors the quote feature)
 
@@ -55,8 +59,8 @@ In-memory cache per `lat,lng` (1h).
   fromLatLng, toLatLng, fbo: { name, address, phone }, crew: { pic, sic, ca } }`.
   Crew from `leg.pilots[]` (PIC = first, SIC = second — confirm ordering/role field
   live) and `leg.attendants[]` (CA), names `firstName + lastName`.
-- `client`: `{ name, company, address }` from `dispatch.client.customer`/`company` +
-  `company-get` for the address.
+- `client`: `{ name, company, address }` from `dispatch.client.customer`/`company`
+  (address taken directly from `client.company.address` — no extra fetch).
 - `tripNumber` (`dispatch.tripId`), `quoteNumber` (`dispatch.quoteId`), aircraft
   (tail, type, paxSeats).
 - `weather`: for each unique airport with coords, `getDailyForecast(lat,lng)`.
