@@ -1,21 +1,76 @@
 // backend/src/services/tripSheet.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchReleaseHtml } from './tripSheet.js';
+import { indexEmployees, mapReleaseLeg, mapManifest, mapMaintenance } from './tripSheet.js';
 
-test('fetchReleaseHtml returns HTML on success', async () => {
-  const fakeGet = async () => '<html>Flight Release</html>';
-  const html = await fetchReleaseHtml('abc', { get: fakeGet });
-  assert.equal(html, '<html>Flight Release</html>');
+const release = {
+  callSign: 'SKYHOP 69',
+  departure: { airport: 'KFXE', time: 1000, fbo: { name: 'Banyan', address: { street: '5360 NW 20th Ter', city: 'Fort Lauderdale', state: 'FL' }, phones: ['954-491-3170'], comms: { arinc: '130.8', atg: '130.8' }, crewNote: 'Fuel $6.39' } },
+  arrival: { airport: 'KMKC', time: 4000, fbo: { name: 'Signature' } },
+  passengerCount: 2,
+  pilots: [
+    { seat: 3, user: { _id: { $oid: 'u-sic' }, firstName: 'Sam', lastName: 'Sic' } },
+    { seat: 2, user: { _id: { $oid: 'u-pic' }, firstName: 'Pat', lastName: 'Pic' } },
+  ],
+  attendants: [{ seat: 5, user: { _id: { $oid: 'u-ca' }, firstName: 'Ava', lastName: 'Att' } }],
+  weather: { departure: { raw: 'METAR KFXE 181553Z ...' }, arrival: { raw: 'METAR KMKC 181554Z ...' } },
+  _calc: {
+    time: '2:43', minutes: 163, distance: { value: 1063 }, fuel: { value: 9350 },
+    from: { name: 'Fort Lauderdale Exec', elevation: 13, timezone: 'America/New_York', comms: { TWR: ' 120.900', GND: ' 121.750' }, location: { lat: 26.19, lng: -80.17 } },
+    to: { name: 'Kansas City', elevation: 756, comms: { TWR: ' 133.300' }, location: { lat: 39.12, lng: -94.59 } },
+  },
+  releasedBy: { userName: 'Adolfo Martinez', timestamp: 500 },
+  crewNote: 'SLOT PPr 11040729A',
+  dispatch: { tripId: 25095, quoteId: 8841, _internal: { summary: 'KFXE, KMKC, KFXE' } },
+};
+
+const employees = [
+  { _id: { $oid: 'u-pic' }, firstName: 'Pat', lastName: 'Pic', birthday: 211000000000, phones: ['954-701-1015'] },
+];
+
+test('mapReleaseLeg maps route, comms, METARs, FBO, fuel', () => {
+  const m = mapReleaseLeg(release, indexEmployees(employees));
+  assert.equal(m.callSign, 'SKYHOP 69');
+  assert.equal(m.from, 'KFXE'); assert.equal(m.to, 'KMKC');
+  assert.equal(m.eft, '2:43'); assert.equal(m.distance, 1063); assert.equal(m.fuelBurn, 9350);
+  assert.deepEqual(m.fromLatLng, [26.19, -80.17]);
+  assert.deepEqual(m.depComms, { TWR: '120.900', GND: '121.750' });
+  assert.equal(m.depMetar, 'METAR KFXE 181553Z ...');
+  assert.equal(m.depFbo.name, 'Banyan');
+  assert.equal(m.depFbo.arinc, '130.8');
+  assert.equal(m.depFbo.phones[0], '954-491-3170');
 });
 
-test('fetchReleaseHtml returns null when the fetch throws (e.g. 404)', async () => {
-  const fakeGet = async () => { const e = new Error('Request failed'); e.response = { status: 404 }; throw e; };
-  const html = await fetchReleaseHtml('missing', { get: fakeGet });
-  assert.equal(html, null);
+test('mapReleaseLeg picks PIC=seat2 / SIC=seat3 and joins employee DOB/phone', () => {
+  const m = mapReleaseLeg(release, indexEmployees(employees));
+  assert.equal(m.crew.pic.name, 'Pat Pic');
+  assert.equal(m.crew.pic.phone, '954-701-1015');   // joined from employees
+  assert.equal(m.crew.pic.dob, 211000000000);
+  assert.equal(m.crew.sic.name, 'Sam Sic');
+  assert.equal(m.crew.sic.phone, null);              // not in employee directory
+  assert.deepEqual(m.crew.ca.map((x) => x.name), ['Ava Att']);
 });
 
-test('fetchReleaseHtml returns null on empty body', async () => {
-  const html = await fetchReleaseHtml('abc', { get: async () => '' });
-  assert.equal(html, null);
+test('mapManifest produces manifest rows with passport', () => {
+  const rows = mapManifest([
+    { _fullName: 'Jane Doe', gender: 'Female', weight: 160, birthday: 5, citizenship: 'US', documents: [{ number: 'AAF591281', country: 'AR' }] },
+  ]);
+  assert.equal(rows[0].name, 'Jane Doe');
+  assert.equal(rows[0].weight, 160);
+  assert.equal(rows[0].passport, 'AAF591281 - AR');
+});
+
+test('mapMaintenance summarizes airframe, engines, upcoming, closed', () => {
+  const m = mapMaintenance({
+    aircraft: { type: { name: 'Gulfstream GIV SP' }, serial: '1180', _camp: { hours: 9530, landings: 5571, reported: 9 }, components: { engines: { 1: { model: 'TAY 611-8', serial: '16463' } }, apu: { model: 'GTCP36', serial: 'P-542' } } },
+    mx: [{ name: 'FAN FILTER INSP', hours: { due: 9505, remaining: 50 } }, { name: 'NDT INSP', hours: { due: 9516, remaining: 600 } }],
+    closedEvents: [{ title: 'Microwave inop', eventDate: 1778456220000, id: 25 }],
+  });
+  assert.equal(m.airframe.type, 'Gulfstream GIV SP');
+  assert.equal(m.airframe.hours, 9530);
+  assert.equal(m.engines[0].model, 'TAY 611-8');
+  assert.equal(m.apu.serial, 'P-542');
+  assert.equal(m.upcoming[0].name, 'FAN FILTER INSP'); // sorted by remaining asc
+  assert.equal(m.upcoming[0].remaining, 50);
+  assert.equal(m.closed[0].title, 'Microwave inop');
 });
