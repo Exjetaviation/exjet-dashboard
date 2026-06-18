@@ -2,11 +2,10 @@ import express from 'express';
 import { supabase } from '../services/supabase.js';
 import { getUnreadQuoteEmails, sendEmail, getAuthUrl, getTokensFromCode } from '../services/gmail.js';
 import { processEmail } from '../services/quoteEngine.js';
-import { getDispatchList } from '../services/levelflight.js';
-import { mapDispatchToQuote } from '../services/quoteMap.js';
+import { getDispatchList, getTripLog } from '../services/levelflight.js';
+import { mapDispatchToQuote, mapLegDetail } from '../services/quoteMap.js';
 import { renderQuoteHtml } from '../services/quoteHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
-import { getAirportCoords, attachCoords } from '../services/airportCoords.js';
 
 const router = express.Router();
 
@@ -123,16 +122,28 @@ router.delete('/:id', async (req, res) => {
 
 const ACCEPT_BASE = 'https://api.levelflight.com/client';
 
+// The per-dispatch flightLog returns FULL legs (airports, times, distance, EFT, and
+// inline _calc.from/to.location coords) — the complete data the document needs.
 async function buildViewModel(dispatchId) {
-  const data = await getDispatchList(1);
-  const dispatch = (data?.dispatches || []).find((d) => (d?._id?.$oid || d?._id) === dispatchId);
+  const tl = await getTripLog(dispatchId);
+  const dispatch = tl?.dispatch;
   if (!dispatch) return null;
-  const vm = mapDispatchToQuote(dispatch);
-  vm.legs = attachCoords(vm.legs, await getAirportCoords());
-  vm.acceptUrl = vm.acceptId ? `${ACCEPT_BASE}/${vm.acceptId}/accept` : null;
-  vm.preparedOn = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  vm.amenities = vm.amenities || ['Flight Attendant', 'WIFI'];
-  return vm;
+  const ac = tl?.aircraft || dispatch?.aircraft || {};
+  const internal = dispatch?._internal || {};
+  return {
+    dispatchId,
+    quoteNumber: dispatch?.quoteId != null ? String(dispatch.quoteId) : null,
+    tail: ac?.tailNumber ?? null,
+    aircraftType: ac?.type?.name ?? null,
+    maxPax: ac?.paxSeats ?? null,
+    total: internal?.price?.breakdown?.calculatedTotal ?? internal?.price?.total ?? null,
+    amenities: ['Flight Attendant', 'WIFI'],
+    preparedOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    // NOTE: the LevelFlight client accept-link id is not exposed in the API; using the
+    // dispatch id as a best guess — verify by clicking it on a real quote.
+    acceptUrl: `${ACCEPT_BASE}/${dispatchId}/accept`,
+    legs: (dispatch?.legs || []).map(mapLegDetail),
+  };
 }
 
 // GET /api/quotes/list — all LevelFlight quotes as summary rows.
@@ -142,7 +153,7 @@ router.get('/list', async (req, res) => {
     const rows = (data?.dispatches || []).map((d) => {
       const q = mapDispatchToQuote(d);
       const first = q.legs[0] || {}; const last = q.legs[q.legs.length - 1] || {};
-      return { dispatchId: q.dispatchId, tail: q.tail, from: first.from, to: last.to,
+      return { dispatchId: q.dispatchId, quoteNumber: q.quoteNumber, tail: q.tail, from: first.from, to: last.to,
         depTime: first.depTime, legs: q.legs.length, total: q.total };
     });
     res.json({ quotes: rows });

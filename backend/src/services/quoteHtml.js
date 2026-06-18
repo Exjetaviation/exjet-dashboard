@@ -17,7 +17,7 @@ function legRow(leg, i) {
       <div class="line"><span class="plane">&#9992;</span></div>
       <div style="text-align:right"><div class="apt">${esc(leg.to)}</div></div>
     </div>
-    <div class="legmeta">${leg.pax != null ? esc(leg.pax) + ' PAX' : ''}<br>${leg.distance != null ? esc(leg.distance) + ' nm' : ''}</div>
+    <div class="legmeta">${leg.pax != null ? esc(leg.pax) + ' PAX' : ''}<br>${[leg.eft ? esc(leg.eft) : '', leg.distance != null ? esc(leg.distance) + ' nm' : ''].filter(Boolean).join(' · ')}</div>
   </div>`;
 }
 

@@ -51,6 +51,7 @@ export function mapDispatchToQuote(d) {
   return {
     dispatchId,
     acceptId: d?.clientAcceptId || dispatchId,
+    quoteNumber: d?.quoteId != null ? String(d.quoteId) : null,
     tail: d?.aircraft?.tailNumber ?? null,
     aircraftType: d?.aircraft?.type?.name ?? null,
     maxPax: d?.aircraft?.paxSeats ?? null,
@@ -58,5 +59,23 @@ export function mapDispatchToQuote(d) {
     depTime,
     arrTime,
     legs,
+  };
+}
+
+// Map ONE full LevelFlight leg (from getTripLog().dispatch.legs) to a quote leg —
+// with per-leg airports, times, distance, EFT, pax, and inline coordinates from
+// _calc.from/to.location (the same source the flights-page map uses).
+export function mapLegDetail(l) {
+  const loc = (x) => (x && x.lat != null && x.lng != null) ? [x.lat, x.lng] : null;
+  return {
+    from: l?.departure?.airport ?? null,
+    to: l?.arrival?.airport ?? null,
+    depTime: l?.departure?.time ?? null,
+    arrTime: l?.arrival?.time ?? null,
+    distance: l?._calc?.distance?.value ?? null,
+    eft: l?._calc?.time ?? null,
+    pax: l?.passengerCount ?? null,
+    fromLatLng: loc(l?._calc?.from?.location),
+    toLatLng: loc(l?._calc?.to?.location),
   };
 }
