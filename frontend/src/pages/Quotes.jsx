@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, API_BASE } from '../lib/api';
 import FlightsFilterBar from '../components/FlightsFilterBar';
 
 const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -45,6 +45,20 @@ export default function Quotes() {
     setPdfBusy(false);
   };
 
+  const copyLink = () => {
+    if (!sel) return;
+    navigator.clipboard?.writeText(`${API_BASE}/quote/${sel}`);
+  };
+  const emailLink = async () => {
+    if (!sel) return;
+    const to = window.prompt('Client email to send the quote link to:');
+    if (!to) return;
+    try {
+      await apiFetch(`/api/quotes/dispatch/${sel}/send-link`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
+      window.alert('Quote link sent.');
+    } catch { window.alert('Failed to send link.'); }
+  };
+
   // The flights filter bar filters by `departure.time`; shape rows to match so we
   // reuse the same date-range/limit UX as the flights page. Memoized so it's a
   // STABLE reference (a fresh array each render makes the bar re-emit in a loop).
@@ -88,6 +102,8 @@ export default function Quotes() {
                 <button onClick={downloadPdf} disabled={pdfBusy} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
                   {pdfBusy ? 'Generating…' : 'Download PDF'}
                 </button>
+                <button onClick={copyLink} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Copy client link</button>
+                <button onClick={emailLink} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Email link</button>
               </div>
               {previewLoading
                 ? <div style={{ margin: 'auto', color: 'var(--text-secondary)' }}>Loading preview…</div>
