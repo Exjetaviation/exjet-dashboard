@@ -16,6 +16,8 @@ import publicItineraryRoutes from './routes/publicItinerary.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { startRecorder } from './services/adsbRecorder.js';
 import { startReconciler } from './services/flightTrackReconciler.js';
+import schedulingRoutes from './routes/scheduling.js';
+import { startSyncWorker } from './scheduling/syncWorker.js';
 
 // Load QB refresh token from Supabase on startup
 (async () => {
@@ -64,10 +66,12 @@ app.use('/api/finances', financesRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/adsb', adsbRoutes);
+app.use('/api/scheduling', schedulingRoutes);
 // Note: /api/test and /api/debug routers intentionally removed (finding F-03).
 
 app.listen(PORT, () => {
   console.log(`Exjet backend listening on port ${PORT}`);
   startRecorder();
   startReconciler();
+  startSyncWorker();
 });

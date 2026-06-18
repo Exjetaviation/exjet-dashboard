@@ -1,0 +1,28 @@
+// backend/src/scheduling/syncWorker.js
+//
+// Background worker that runs the scheduled-legs mirror on an interval, mirroring
+// the existing startRecorder/startReconciler pattern. Opt-in: does nothing unless
+// SCHEDULING_SYNC=on, so starting the backend doesn't hit LevelFlight until enabled.
+import { runScheduledLegsSync } from './runScheduledLegsSync.js';
+import { computeMonthStarts } from './syncWindow.js';
+import { syncLf } from './syncLf.js';
+import { syncDb } from './syncDb.js';
+
+const SYNC_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
+let started = false;
+
+export async function syncNow() {
+  const now = new Date().toISOString();
+  const monthStarts = computeMonthStarts(Date.now());
+  return runScheduledLegsSync({ lf: syncLf, db: syncDb, now, monthStarts });
+}
+
+export function startSyncWorker() {
+  if (process.env.SCHEDULING_SYNC !== 'on') return; // opt-in
+  if (started) return;
+  started = true;
+  const run = () =>
+    syncNow().catch((e) => console.warn('[scheduling sync] failed:', e?.message || e));
+  run();
+  setInterval(run, SYNC_INTERVAL_MS);
+}
