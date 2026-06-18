@@ -1,7 +1,7 @@
-// backend/src/services/tripSheetHtml.test.js
+// backend/src/services/itineraryHtml.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderTripSheetHtml } from './tripSheetHtml.js';
+import { renderItineraryHtml } from './itineraryHtml.js';
 
 const vm = {
   dispatchId: 'abc', tripNumber: '5012', quoteNumber: '8841',
@@ -19,9 +19,9 @@ const vm = {
   preparedOn: 'Jun 18, 2026',
 };
 
-test('renderTripSheetHtml includes trip/quote #, crew, fbo, weather, map', () => {
-  const h = renderTripSheetHtml(vm, {});
-  assert.match(h, /TRIP SHEET/);
+test('renderItineraryHtml includes trip/quote #, crew, fbo, weather, map', () => {
+  const h = renderItineraryHtml(vm, {});
+  assert.match(h, /PASSENGER ITINERARY/);
   assert.match(h, /5012/);
   assert.match(h, /8841/);
   assert.match(h, /Pat Pic/);
@@ -34,8 +34,8 @@ test('renderTripSheetHtml includes trip/quote #, crew, fbo, weather, map', () =>
   assert.match(h, /id="map"/);
 });
 
-test('renderTripSheetHtml web mode adds the Download PDF bar', () => {
-  const h = renderTripSheetHtml({ ...vm, pdfUrl: '/tripsheet/abc/pdf' }, { web: true });
+test('renderItineraryHtml web mode adds the Download PDF bar', () => {
+  const h = renderItineraryHtml({ ...vm, pdfUrl: '/itinerary/abc/pdf' }, { web: true });
   assert.match(h, /Download PDF/);
-  assert.match(h, /\/tripsheet\/abc\/pdf/);
+  assert.match(h, /\/itinerary\/abc\/pdf/);
 });

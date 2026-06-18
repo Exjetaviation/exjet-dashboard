@@ -44,9 +44,9 @@ export default function FlightDetail() {
 
   const leg = state?.leg;
 
-  const [tsCopied, setTsCopied] = useState(false);
+  const [itinCopied, setItinCopied] = useState(false);
   const dispatchId = leg?.dispatch?._id?.$oid || leg?.dispatch?._id || null;
-  const tripSheetUrl = dispatchId ? `${API_BASE}/tripsheet/${dispatchId}` : null;
+  const itineraryUrl = dispatchId ? `${API_BASE}/itinerary/${dispatchId}` : null;
 
   const [ffBriefing, setFfBriefing] = useState(null);
   const [ffNavlog, setFfNavlog] = useState(null);
@@ -151,19 +151,19 @@ export default function FlightDetail() {
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
             {leg.dispatch?.aircraft?.tailNumber} · Trip #{leg.dispatch?.tripId} · Quote #{leg.dispatch?.quoteId}
           </p>
-          {tripSheetUrl && (
+          {itineraryUrl && (
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
-              <a href={tripSheetUrl} target="_blank" rel="noopener noreferrer"
+              <a href={itineraryUrl} target="_blank" rel="noopener noreferrer"
                 style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', borderRadius: '8px', fontSize: '12px', textDecoration: 'none' }}>
-                View trip sheet ↗
+                View itinerary ↗
               </a>
-              <a href={`${tripSheetUrl}/pdf`} target="_blank" rel="noopener noreferrer"
+              <a href={`${itineraryUrl}/pdf`} target="_blank" rel="noopener noreferrer"
                 style={{ padding: '6px 12px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', textDecoration: 'none' }}>
                 Download PDF
               </a>
-              <button onClick={() => { navigator.clipboard?.writeText(tripSheetUrl); setTsCopied(true); setTimeout(() => setTsCopied(false), 2000); }}
+              <button onClick={() => { navigator.clipboard?.writeText(itineraryUrl); setItinCopied(true); setTimeout(() => setItinCopied(false), 2000); }}
                 style={{ padding: '6px 12px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>
-                {tsCopied ? 'Copied ✓' : 'Copy link'}
+                {itinCopied ? 'Copied ✓' : 'Copy link'}
               </button>
             </div>
           )}

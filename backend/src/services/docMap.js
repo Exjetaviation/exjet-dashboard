@@ -1,6 +1,6 @@
 // backend/src/services/docMap.js
 // Shared Leaflet route + looping plane animation, embedded as inline JS in both the
-// quote and trip-sheet documents. Reads viewModel.legs[].fromLatLng / .toLatLng.
+// quote and itinerary documents. Reads viewModel.legs[].fromLatLng / .toLatLng.
 export function mapScript(viewModel) {
   const pts = (viewModel.legs || [])
     .filter((l) => l.fromLatLng && l.toLatLng)
