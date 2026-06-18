@@ -58,9 +58,14 @@ export default function Quotes() {
     setEmailMsg('Sending…');
     try {
       const r = await apiFetch(`/api/quotes/dispatch/${sel}/send-link`, { method: 'POST', body: JSON.stringify({ to: emailTo.trim() }) });
-      if (!r.ok) throw new Error('send failed');
+      if (!r.ok) {
+        let detail = '';
+        try { const j = await r.json(); detail = j?.error ? `: ${j.error}` : ''; } catch { /* non-JSON body */ }
+        setEmailMsg(`Failed (HTTP ${r.status})${detail}`);
+        return;
+      }
       setEmailMsg('Quote link sent ✓'); setEmailOpen(false); setEmailTo('');
-    } catch { setEmailMsg('Failed to send link.'); }
+    } catch (e) { setEmailMsg(`Failed: ${e?.message || 'network error'}`); }
   };
 
   // The flights filter bar filters by `departure.time`; shape rows to match so we
