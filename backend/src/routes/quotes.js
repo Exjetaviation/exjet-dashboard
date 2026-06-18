@@ -146,11 +146,34 @@ async function buildViewModel(dispatchId) {
   };
 }
 
-// GET /api/quotes/list — all LevelFlight quotes as summary rows.
+// Fetch every page of dispatches (25/page), in parallel chunks, cached briefly.
+// LevelFlight has ~1000 dispatches, so paginate fully but don't refetch per request.
+let _listCache = { at: 0, data: null };
+const LIST_TTL_MS = 5 * 60 * 1000;
+async function getAllDispatches() {
+  if (_listCache.data && Date.now() - _listCache.at < LIST_TTL_MS) return _listCache.data;
+  const all = [];
+  const CHUNK = 8;
+  let page = 1, done = false;
+  while (!done && page <= 80) {
+    const batch = Array.from({ length: CHUNK }, (_, i) => page + i);
+    const results = await Promise.all(batch.map((p) => getDispatchList(p).catch(() => ({ dispatches: [] }))));
+    for (const r of results) {
+      const ds = r?.dispatches || [];
+      all.push(...ds);
+      if (ds.length < 25) done = true;
+    }
+    page += CHUNK;
+  }
+  _listCache = { at: Date.now(), data: all };
+  return all;
+}
+
+// GET /api/quotes/list — all LevelFlight quotes as summary rows (all pages).
 router.get('/list', async (req, res) => {
   try {
-    const data = await getDispatchList(1);
-    const rows = (data?.dispatches || []).map((d) => {
+    const dispatches = await getAllDispatches();
+    const rows = dispatches.map((d) => {
       const q = mapDispatchToQuote(d);
       const first = q.legs[0] || {}; const last = q.legs[q.legs.length - 1] || {};
       return { dispatchId: q.dispatchId, quoteNumber: q.quoteNumber, tail: q.tail, from: first.from, to: last.to,
