@@ -177,4 +177,20 @@ router.get('/dispatch/:id/pdf', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/quotes/dispatch/:id/send-link  body { to } — email the public quote link.
+router.post('/dispatch/:id/send-link', async (req, res) => {
+  try {
+    const to = (req.body?.to || '').trim();
+    if (!to) return res.status(400).json({ error: 'Recipient email required' });
+    const base = `${req.protocol}://${req.get('host')}`;
+    const link = `${base}/quote/${req.params.id}`;
+    await sendEmail({
+      to,
+      subject: 'Your Exjet Charter Quote',
+      body: `Thank you for considering Exjet Aviation.\n\nView your charter quote here:\n${link}\n\nYou can review the itinerary, terms, and request to book directly from that page.`,
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
