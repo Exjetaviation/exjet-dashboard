@@ -39,3 +39,27 @@ test('prefers explicit clientAcceptId when present', () => {
   const q = mapDispatchToQuote({ ...dispatch, clientAcceptId: 'abc123' });
   assert.equal(q.acceptId, 'abc123');
 });
+
+// Real /api/dispatch/list shape: route in _internal.summary, times in order/end,
+// aircraft.paxSeats — no detailed legs[] array.
+test('derives legs/tail/pax/total from the real dispatch-list shape', () => {
+  const real = {
+    _id: { $oid: 'abc123' },
+    _internal: {
+      summary: 'KFXE, MDLR, KTMB, KFXE',
+      order: 1803207660000,
+      end: 1803231420000,
+      price: { breakdown: { calculatedTotal: 45560 }, total: 45560 },
+    },
+    aircraft: { tailNumber: 'N69FP', type: { name: 'Gulfstream GIV SP' }, paxSeats: 15 },
+  };
+  const q = mapDispatchToQuote(real);
+  assert.equal(q.tail, 'N69FP');
+  assert.equal(q.maxPax, 15);
+  assert.equal(q.total, 45560);
+  assert.equal(q.legs.length, 3); // 4 airports -> 3 legs
+  assert.deepEqual(q.legs.map((l) => [l.from, l.to]), [['KFXE','MDLR'],['MDLR','KTMB'],['KTMB','KFXE']]);
+  assert.equal(q.legs[0].depTime, 1803207660000);          // first leg gets trip start
+  assert.equal(q.legs[2].arrTime, 1803231420000);          // last leg gets trip end
+  assert.equal(q.depTime, 1803207660000);
+});
