@@ -103,9 +103,9 @@ export function renderQuoteHtml(vm, { print = false } = {}) {
   ${vm.legs.map(legRow).join('')}
   <div id="map"></div>
   <div class="total"><span class="l">TOTAL</span><span class="v">${money(vm.total)}</span></div>
-  <div class="terms"><details ${print ? 'open' : ''}><summary><span>TERMS &amp; CONDITIONS</span><span style="float:right;color:#8893a5">tap to expand &#9662;</span></summary><div class="body">${QUOTE_TERMS_HTML}</div></details></div>
   <div class="sign"><div><div class="ln"></div><div class="lbl">Accepted by</div></div><div><div class="ln"></div><div class="lbl">Print name</div></div><div style="flex:0 0 130px"><div class="ln"></div><div class="lbl">Date</div></div></div>
   ${vm.acceptUrl ? `<a class="cta" href="${esc(vm.acceptUrl)}">REQUEST TO BOOK &#8594;</a>` : '<div class="cta" style="opacity:.5">BOOKING LINK UNAVAILABLE</div>'}
+  <div class="terms"><details ${print ? 'open' : ''}><summary><span>TERMS &amp; CONDITIONS</span><span style="float:right;color:#8893a5">tap to expand &#9662;</span></summary><div class="body">${QUOTE_TERMS_HTML}</div></details></div>
 </div>
 <script>${mapScript(vm)}</script>
 </body></html>`;

@@ -41,18 +41,6 @@ export default function Quotes() {
 
   return (
     <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 90px)' }}>
-      <div style={{ flex: '0 0 380px', overflowY: 'auto' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Quotes</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{loading ? 'Loading…' : `${rows.length} from LevelFlight`}</p>
-        {rows.map((q) => (
-          <div key={q.dispatchId} onClick={() => setSel(q.dispatchId)}
-            style={{ padding: 12, marginTop: 8, borderRadius: 10, cursor: 'pointer', border: '1px solid var(--border)', background: sel === q.dispatchId ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)' }}>
-            <div style={{ fontWeight: 700, color: 'var(--accent)' }}>{q.from || '—'} → {q.to || '—'}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{q.tail || '—'} · {fmtDate(q.depTime)} · {q.legs} leg{q.legs === 1 ? '' : 's'}</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>{money(q.total)}</div>
-          </div>
-        ))}
-      </div>
       <div style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {sel ? (
           <>
@@ -66,6 +54,18 @@ export default function Quotes() {
               : <iframe title="quote" srcDoc={html} style={{ flex: 1, border: 0, background: '#0b1018' }} />}
           </>
         ) : <div style={{ margin: 'auto', color: 'var(--text-secondary)' }}>Select a quote to preview</div>}
+      </div>
+      <div style={{ flex: '0 0 380px', overflowY: 'auto' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Quotes</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{loading ? 'Loading…' : `${rows.length} from LevelFlight`}</p>
+        {rows.map((q) => (
+          <div key={q.dispatchId} onClick={() => setSel(q.dispatchId)}
+            style={{ padding: 12, marginTop: 8, borderRadius: 10, cursor: 'pointer', border: '1px solid var(--border)', background: sel === q.dispatchId ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)' }}>
+            <div style={{ fontWeight: 700, color: 'var(--accent)' }}>{q.from || '—'} → {q.to || '—'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{q.tail || '—'} · {fmtDate(q.depTime)} · {q.legs} leg{q.legs === 1 ? '' : 's'}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>{money(q.total)}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
