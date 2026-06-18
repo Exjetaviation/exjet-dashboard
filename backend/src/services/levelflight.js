@@ -78,8 +78,8 @@ export const getTripLog = async (dispatchOid) => {
 };
 export const getDispatchRelease = async (dispatchOid) => {
   const client = await lf();
-  const res = await client.get(`/api/dispatch/${dispatchOid}/release`, { responseType: 'text' });
-  return res.data; // self-contained HTML string (full Flight Release / Trip Sheet)
+  const res = await client.get(`/api/dispatch/${dispatchOid}/release`);
+  return res.data; // rich JSON: { operation, aircraft, releases, pax, employees, mx, components, closedEvents, company, ... }
 };
 export const getAircraftCalendar = async (aircraftOid, startMs, endMs) => {
   const client = await lf();
