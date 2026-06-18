@@ -20,7 +20,7 @@ const range = (a, b) => (fmtDate(a) === fmtDate(b) ? fmtDate(a) : `${fmtDate(a)}
 
 const HIDE = new Set(['aircraft']);
 
-export default function TripsList({ legs = [], loading = false }) {
+export default function TripsList({ legs = [], loading = false, basePath = '/trips' }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(() => new Set());
   const trips = groupLegsIntoTrips(legs);
@@ -53,7 +53,7 @@ export default function TripsList({ legs = [], loading = false }) {
               </div>
               {hasDispatch && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button onClick={() => navigate(`/trips/${t.dispatchId}`, { state: { trip: t } })}
+                  <button onClick={() => navigate(`${basePath}/${t.dispatchId}`, { state: { trip: t } })}
                     style={{ padding: '5px 10px', background: 'var(--bg-secondary, #11161f)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>View trip ↗</button>
                   <a href={`${API_BASE}/itinerary/${t.dispatchId}`} target="_blank" rel="noopener noreferrer"
                     style={{ padding: '5px 10px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, textDecoration: 'none' }}>Itinerary</a>
