@@ -36,6 +36,11 @@ router.get('/legs', async (req, res) => {
 
 const TRIP_COLS = 'lf_oid, trip_number, status, locally_modified, upstream_changed, lf_synced_snapshot';
 
+// PostgREST returns code PGRST116 from .single() when no row matched.
+function isNotFound(error) {
+  return error?.code === 'PGRST116';
+}
+
 // Shape a scheduling_trips row for the API (adds labels + the LF-original status).
 function shapeTrip(row) {
   const orig = row.lf_synced_snapshot?.status ?? null;
@@ -56,10 +61,14 @@ router.get('/trips/:lfOid', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('scheduling_trips').select(TRIP_COLS).eq('lf_oid', req.params.lfOid).single();
-    if (error) throw error;
+    if (error) {
+      if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
+      throw error;
+    }
     res.json({ trip: shapeTrip(data) });
   } catch (e) {
-    res.status(404).json({ error: e.message });
+    console.error('GET /api/scheduling/trips/:lfOid:', e.message);
+    res.status(500).json({ error: 'Failed to load trip' });
   }
 });
 
@@ -73,10 +82,14 @@ router.patch('/trips/:lfOid', async (req, res) => {
       .update({ status, locally_modified: true, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
       .eq('lf_oid', req.params.lfOid)
       .select(TRIP_COLS).single();
-    if (error) throw error;
+    if (error) {
+      if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
+      throw error;
+    }
     res.json({ trip: shapeTrip(data) });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    console.error('PATCH /api/scheduling/trips/:lfOid:', e.message);
+    res.status(500).json({ error: 'Failed to update trip' });
   }
 });
 
@@ -85,17 +98,24 @@ router.post('/trips/:lfOid/revert', async (req, res) => {
   try {
     const { data: cur, error: e1 } = await supabase
       .from('scheduling_trips').select('lf_synced_snapshot').eq('lf_oid', req.params.lfOid).single();
-    if (e1) throw e1;
+    if (e1) {
+      if (isNotFound(e1)) return res.status(404).json({ error: 'Trip not found' });
+      throw e1;
+    }
     const cols = tripColumnsFromSnapshot(cur.lf_synced_snapshot);
     const { data, error } = await supabase
       .from('scheduling_trips')
       .update({ ...cols, locally_modified: false, upstream_changed: false, modified_by: null, modified_at: new Date().toISOString() })
       .eq('lf_oid', req.params.lfOid)
       .select(TRIP_COLS).single();
-    if (error) throw error;
+    if (error) {
+      if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
+      throw error;
+    }
     res.json({ trip: shapeTrip(data) });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    console.error('POST /api/scheduling/trips/:lfOid/revert:', e.message);
+    res.status(500).json({ error: 'Failed to revert trip' });
   }
 });
 
