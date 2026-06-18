@@ -67,7 +67,8 @@ export function reconcileRecord(incoming, existing, now) {
     set: {
       lf_oid: lfOid,
       lf_synced_snapshot: snapshot,
-      upstream_changed: !snapshotsEqual(existing.lf_synced_snapshot, snapshot),
+      // Sticky: once flagged, stays flagged until the user reverts/dismisses.
+      upstream_changed: (existing.upstream_changed ?? false) || !snapshotsEqual(existing.lf_synced_snapshot, snapshot),
       synced_at: now,
     },
   };
