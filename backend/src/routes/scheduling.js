@@ -5,8 +5,16 @@ import { formatSyncStatus } from '../scheduling/formatSyncStatus.js';
 import { mirrorLegsFromRows } from '../scheduling/mirrorLegs.js';
 import { dispatchStatusLabel, isEditableStatus } from '../scheduling/dispatchStatus.js';
 import { tripColumnsFromSnapshot } from '../scheduling/tripFromSnapshot.js';
+import { canEditScheduling } from '../scheduling/canEdit.js';
 
 const router = express.Router();
+
+// Authorization gate for mutating scheduling routes (read routes stay open to any
+// authenticated user). req.user.role comes from requireAuth (Supabase app_role).
+function requireSchedulingEditor(req, res, next) {
+  if (canEditScheduling(req.user?.role)) return next();
+  return res.status(403).json({ error: 'You do not have permission to edit scheduling (requires a dispatcher / scheduler role).' });
+}
 
 // GET /api/scheduling/sync-status — mirror freshness for the dashboard indicator.
 router.get('/sync-status', async (req, res) => {
@@ -56,16 +64,24 @@ function shapeTrip(row) {
   };
 }
 
-// GET /api/scheduling/trips/:lfOid — one trip's status + provenance.
+// GET /api/scheduling/trips/:lfOid — one trip's status + provenance + its legs.
+// Legs come from the mirror (not router state) so the page works on refresh /
+// direct link.
 router.get('/trips/:lfOid', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('scheduling_trips').select(TRIP_COLS).eq('lf_oid', req.params.lfOid).single();
+    const { data: row, error } = await supabase
+      .from('scheduling_trips').select('id, ' + TRIP_COLS).eq('lf_oid', req.params.lfOid).single();
     if (error) {
       if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
       throw error;
     }
-    res.json({ trip: shapeTrip(data) });
+    const { data: legRows, error: legErr } = await supabase
+      .from('scheduling_legs')
+      .select('lf_synced_snapshot, origin, locally_modified, upstream_changed')
+      .eq('trip_id', row.id)
+      .order('seq');
+    if (legErr) throw legErr;
+    res.json({ trip: shapeTrip(row), legs: mirrorLegsFromRows(legRows) });
   } catch (e) {
     console.error('GET /api/scheduling/trips/:lfOid:', e.message);
     res.status(500).json({ error: 'Failed to load trip' });
@@ -73,7 +89,7 @@ router.get('/trips/:lfOid', async (req, res) => {
 });
 
 // PATCH /api/scheduling/trips/:lfOid — local-override the status (never touches LevelFlight).
-router.patch('/trips/:lfOid', async (req, res) => {
+router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   try {
     const status = req.body?.status;
     if (!isEditableStatus(status)) return res.status(400).json({ error: 'invalid status' });
@@ -94,7 +110,7 @@ router.patch('/trips/:lfOid', async (req, res) => {
 });
 
 // POST /api/scheduling/trips/:lfOid/revert — restore the working copy from the LF snapshot.
-router.post('/trips/:lfOid/revert', async (req, res) => {
+router.post('/trips/:lfOid/revert', requireSchedulingEditor, async (req, res) => {
   try {
     const { data: cur, error: e1 } = await supabase
       .from('scheduling_trips').select('lf_synced_snapshot').eq('lf_oid', req.params.lfOid).single();

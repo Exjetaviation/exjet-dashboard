@@ -15,8 +15,9 @@ export default function SchedulingTripDetail() {
   const { id } = useParams();
   const { state } = useLocation();
   const navigate = useNavigate();
-  const trip = state?.trip && state.trip.dispatchId === id ? state.trip : null; // legs for display
+  const stateTrip = state?.trip && state.trip.dispatchId === id ? state.trip : null; // fast-path hydration
   const [meta, setMeta] = useState(null);   // status + provenance from the backend
+  const [legs, setLegs] = useState([]);     // legs from the mirror (survives refresh)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -24,7 +25,8 @@ export default function SchedulingTripDetail() {
     try {
       const r = await apiFetch(`/api/scheduling/trips/${id}`);
       const j = await r.json();
-      if (j.trip) setMeta(j.trip); else setError(j.error || 'Trip not found');
+      if (j.trip) { setMeta(j.trip); setLegs(j.legs || []); }
+      else setError(j.error || 'Trip not found');
     } catch (e) { setError(e.message); }
   }, [id]);
 
@@ -33,7 +35,8 @@ export default function SchedulingTripDetail() {
   const setStatus = async (code) => {
     setBusy(true); setError(null);
     try {
-      await apiFetch(`/api/scheduling/trips/${id}`, { method: 'PATCH', body: JSON.stringify({ status: Number(code) }) });
+      const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'PATCH', body: JSON.stringify({ status: Number(code) }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Update failed (${r.status})`); }
       await load();
     } catch (e) { setError(e.message); }
     setBusy(false);
@@ -42,13 +45,24 @@ export default function SchedulingTripDetail() {
   const revert = async () => {
     setBusy(true); setError(null);
     try {
-      await apiFetch(`/api/scheduling/trips/${id}/revert`, { method: 'POST' });
+      const r = await apiFetch(`/api/scheduling/trips/${id}/revert`, { method: 'POST' });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Revert failed (${r.status})`); }
       await load();
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
 
-  const title = trip?.routeSummary || (meta?.trip_number ? `Trip #${meta.trip_number}` : 'Trip');
+  // Legs: prefer the mirror response; fall back to router state during the first paint.
+  const legsForView = legs.length ? legs : (stateTrip?.legs || []);
+  // Header: use router state when present, else derive from the legs.
+  const tail = stateTrip?.tail || legsForView[0]?.dispatch?.aircraft?.tailNumber || null;
+  const client = stateTrip?.client || legsForView[0]?.dispatch?.client?.company?.name || null;
+  const airports = legsForView.length
+    ? legsForView.flatMap((l, i) => (i === 0 ? [l.departure?.airport, l.arrival?.airport] : [l.arrival?.airport])).filter(Boolean)
+    : [];
+  const routeSummary = stateTrip?.routeSummary || (airports.length ? airports.join(' → ') : null);
+  const title = routeSummary || (meta?.trip_number ? `Trip #${meta.trip_number}` : 'Trip');
+  const subtitle = [meta?.trip_number ? `Trip #${meta.trip_number}` : null, tail, client].filter(Boolean).join(' · ');
 
   return (
     <div>
@@ -57,9 +71,7 @@ export default function SchedulingTripDetail() {
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>← Scheduling</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            {meta?.trip_number ? `Trip #${meta.trip_number}` : ''}{trip?.tail ? ` · ${trip.tail}` : ''}{trip?.client ? ` · ${trip.client}` : ''}
-          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{subtitle}</p>
         </div>
       </div>
 
@@ -84,8 +96,8 @@ export default function SchedulingTripDetail() {
         )}
       </div>
 
-      {trip?.legs ? <FlightsList legs={trip.legs} hideColumns={HIDE} /> : (
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Open this trip from the Scheduling list to see its legs.</p>
+      {legsForView.length ? <FlightsList legs={legsForView} hideColumns={HIDE} /> : (
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No legs found for this trip.</p>
       )}
     </div>
   );
