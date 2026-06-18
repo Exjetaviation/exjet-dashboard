@@ -113,3 +113,9 @@ export const getAircraftExpirableDocs = async () => {
   const res = await client.get('/api/dashboard/aircraftExpirableDocuments');
   return res.data;
 };
+
+export const getDispatchList = async (page = 1) => {
+  const client = await lf();
+  const res = await client.post('/api/dispatch/list', { page });
+  return res.data; // { success, message, dispatches, page }
+};
