@@ -20,7 +20,7 @@ const range = (a, b) => (fmtDate(a) === fmtDate(b) ? fmtDate(a) : `${fmtDate(a)}
 
 const HIDE = new Set(['aircraft']);
 
-export default function TripsList({ legs = [], loading = false, basePath = '/trips' }) {
+export default function TripsList({ legs = [], loading = false, basePath = '/trips', tripBasePath }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(() => new Set());
   const trips = groupLegsIntoTrips(legs);
@@ -63,7 +63,7 @@ export default function TripsList({ legs = [], loading = false, basePath = '/tri
             </div>
             {expanded && (
               <div style={{ borderTop: '1px solid var(--border)' }}>
-                <FlightsList legs={t.legs} hideColumns={HIDE} />
+                <FlightsList legs={t.legs} hideColumns={HIDE} tripBasePath={tripBasePath} />
               </div>
             )}
           </div>
