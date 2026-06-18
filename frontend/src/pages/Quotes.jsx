@@ -16,6 +16,9 @@ export default function Quotes() {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState('date'); // 'date' | 'quote'
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailMsg, setEmailMsg] = useState('');
 
   useEffect(() => {
     let on = true;
@@ -48,15 +51,16 @@ export default function Quotes() {
   const copyLink = () => {
     if (!sel) return;
     navigator.clipboard?.writeText(`${API_BASE}/quote/${sel}`);
+    setEmailMsg('Client link copied to clipboard.');
   };
-  const emailLink = async () => {
-    if (!sel) return;
-    const to = window.prompt('Client email to send the quote link to:');
-    if (!to) return;
+  const sendEmailLink = async () => {
+    if (!sel || !emailTo.trim()) { setEmailMsg('Enter a client email first.'); return; }
+    setEmailMsg('Sending…');
     try {
-      await apiFetch(`/api/quotes/dispatch/${sel}/send-link`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
-      window.alert('Quote link sent.');
-    } catch { window.alert('Failed to send link.'); }
+      const r = await apiFetch(`/api/quotes/dispatch/${sel}/send-link`, { method: 'POST', body: JSON.stringify({ to: emailTo.trim() }) });
+      if (!r.ok) throw new Error('send failed');
+      setEmailMsg('Quote link sent ✓'); setEmailOpen(false); setEmailTo('');
+    } catch { setEmailMsg('Failed to send link.'); }
   };
 
   // The flights filter bar filters by `departure.time`; shape rows to match so we
@@ -98,12 +102,20 @@ export default function Quotes() {
         <div style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {sel ? (
             <>
-              <div style={{ display: 'flex', gap: 8, padding: 10, borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: 8, padding: 10, borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={downloadPdf} disabled={pdfBusy} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
                   {pdfBusy ? 'Generating…' : 'Download PDF'}
                 </button>
                 <button onClick={copyLink} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Copy client link</button>
-                <button onClick={emailLink} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Email link</button>
+                <button onClick={() => { setEmailOpen((o) => !o); setEmailMsg(''); }} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Email link</button>
+                {emailOpen && (
+                  <>
+                    <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="client@email.com"
+                      style={{ padding: '7px 10px', fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)' }} />
+                    <button onClick={sendEmailLink} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Send</button>
+                  </>
+                )}
+                {emailMsg && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{emailMsg}</span>}
               </div>
               {previewLoading
                 ? <div style={{ margin: 'auto', color: 'var(--text-secondary)' }}>Loading preview…</div>
