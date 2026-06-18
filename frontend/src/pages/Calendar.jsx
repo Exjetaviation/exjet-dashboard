@@ -52,8 +52,8 @@ const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{timeZone:ET,month:'shor
 const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
 const fmtLocal = (ms,tz)=>{ if(!ms||!tz) return null; try { return new Date(ms).toLocaleString('en-US',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return null; } };
 
-export default function Calendar() {
-  const {data,loading}  = useApi('/api/levelflight/legs');
+export default function Calendar({ legsEndpoint = '/api/levelflight/legs' } = {}) {
+  const {data,loading}  = useApi(legsEndpoint);
   const {data:dutyData} = useApi('/api/levelflight/duty');
   const {data:maintData} = useApi('/api/maintenance');
   const {positions:live} = useAdsb(20000);  // live ADS-B onGround status per tail
