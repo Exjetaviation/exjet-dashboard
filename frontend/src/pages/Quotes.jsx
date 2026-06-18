@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import FlightsFilterBar from '../components/FlightsFilterBar';
 
@@ -43,8 +43,12 @@ export default function Quotes() {
   };
 
   // The flights filter bar filters by `departure.time`; shape rows to match so we
-  // reuse the same date-range/limit UX as the flights page.
-  const legsForFilter = rows.map((r) => ({ ...r, departure: { time: r.depTime } }));
+  // reuse the same date-range/limit UX as the flights page. Memoized so it's a
+  // STABLE reference (a fresh array each render makes the bar re-emit in a loop).
+  const legsForFilter = useMemo(
+    () => rows.map((r) => ({ ...r, departure: { time: r.depTime } })),
+    [rows],
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
