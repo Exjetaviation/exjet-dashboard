@@ -2,8 +2,9 @@ import express from 'express';
 import { supabase } from '../services/supabase.js';
 import { getUnreadQuoteEmails, sendEmail, getAuthUrl, getTokensFromCode } from '../services/gmail.js';
 import { processEmail } from '../services/quoteEngine.js';
-import { getDispatchList, getTripLog } from '../services/levelflight.js';
-import { mapDispatchToQuote, mapLegDetail } from '../services/quoteMap.js';
+import { getDispatchList } from '../services/levelflight.js';
+import { mapDispatchToQuote } from '../services/quoteMap.js';
+import { buildViewModel } from '../services/quoteData.js';
 import { renderQuoteHtml } from '../services/quoteHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
 
@@ -120,32 +121,6 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-const ACCEPT_BASE = 'https://api.levelflight.com/client';
-
-// The per-dispatch flightLog returns FULL legs (airports, times, distance, EFT, and
-// inline _calc.from/to.location coords) — the complete data the document needs.
-async function buildViewModel(dispatchId) {
-  const tl = await getTripLog(dispatchId);
-  const dispatch = tl?.dispatch;
-  if (!dispatch) return null;
-  const ac = tl?.aircraft || dispatch?.aircraft || {};
-  const internal = dispatch?._internal || {};
-  return {
-    dispatchId,
-    quoteNumber: dispatch?.quoteId != null ? String(dispatch.quoteId) : null,
-    tail: ac?.tailNumber ?? null,
-    aircraftType: ac?.type?.name ?? null,
-    maxPax: ac?.paxSeats ?? null,
-    total: internal?.price?.breakdown?.calculatedTotal ?? internal?.price?.total ?? null,
-    amenities: ['Flight Attendant', 'WIFI'],
-    preparedOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-    // NOTE: the LevelFlight client accept-link id is not exposed in the API; using the
-    // dispatch id as a best guess — verify by clicking it on a real quote.
-    acceptUrl: `${ACCEPT_BASE}/${dispatchId}/accept`,
-    legs: (dispatch?.legs || []).map(mapLegDetail),
-  };
-}
-
 // Fetch every page of dispatches (25/page), in parallel chunks, cached briefly.
 // LevelFlight has ~1000 dispatches, so paginate fully but don't refetch per request.
 let _listCache = { at: 0, data: null };
@@ -199,6 +174,22 @@ router.get('/dispatch/:id/pdf', async (req, res) => {
     if (!vm) return res.status(404).json({ error: 'Quote not found' });
     const pdf = await renderQuotePdf(renderQuoteHtml(vm, { print: true }));
     res.type('application/pdf').set('Content-Disposition', `inline; filename="exjet-quote-${vm.quoteNumber || req.params.id}.pdf"`).send(pdf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/quotes/dispatch/:id/send-link  body { to } — email the public quote link.
+router.post('/dispatch/:id/send-link', async (req, res) => {
+  try {
+    const to = (req.body?.to || '').trim();
+    if (!to) return res.status(400).json({ error: 'Recipient email required' });
+    const base = `${req.protocol}://${req.get('host')}`;
+    const link = `${base}/quote/${req.params.id}`;
+    await sendEmail({
+      to,
+      subject: 'Your Exjet Charter Quote',
+      body: `Thank you for considering Exjet Aviation.\n\nView your charter quote here:\n${link}\n\nYou can review the itinerary, terms, and request to book directly from that page.`,
+    });
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
