@@ -3,8 +3,17 @@
 // Real `db` adapter for the sync orchestrator, over Supabase (service role).
 // Fulfills the interface runScheduledLegsSync expects:
 //   existingByLfOid(table, lfOids) -> Map<lf_oid, { locally_modified, lf_synced_snapshot, upstream_changed }>
-//   upsert(table, rows)            -> Array<{ id, lf_oid }>
+//   insertRows(table, rows)        -> Array<{ id, lf_oid }>   (brand-new rows)
+//   updateByLfOid(table, set)      -> { id, lf_oid }          (one existing row)
 //   recordSyncStatus(entity, info) -> void
+//
+// IMPORTANT — why insert and update are separate (not one bulk upsert):
+// a single PostgREST upsert of a heterogeneous batch unions the keys across all
+// rows and NULL-fills the missing ones on conflict. A locally-modified row
+// deliberately omits its working-copy columns to protect them, so a sibling row
+// in the same batch would NULL those columns (and crash on NOT NULL columns like
+// legs.trip_id). Per-row .update(patch).eq('lf_oid') touches ONLY the named
+// columns, which is what preserves locally-modified working copies.
 import { supabase } from '../services/supabase.js';
 
 export const syncDb = {
@@ -20,14 +29,28 @@ export const syncDb = {
     return m;
   },
 
-  async upsert(table, rows) {
+  // Brand-new rows only — homogeneous full column sets, safe to bulk-insert.
+  async insertRows(table, rows) {
     if (!rows.length) return [];
     const { data, error } = await supabase
       .from(table)
-      .upsert(rows, { onConflict: 'lf_oid' })
+      .insert(rows)
       .select('id, lf_oid');
-    if (error) throw new Error(`upsert(${table}): ${error.message}`);
+    if (error) throw new Error(`insert(${table}): ${error.message}`);
     return data || [];
+  },
+
+  // Update one existing row by lf_oid, touching ONLY the columns in `set`.
+  async updateByLfOid(table, set) {
+    const { lf_oid, ...patch } = set;
+    const { data, error } = await supabase
+      .from(table)
+      .update(patch)
+      .eq('lf_oid', lf_oid)
+      .select('id, lf_oid')
+      .single();
+    if (error) throw new Error(`update(${table}, ${lf_oid}): ${error.message}`);
+    return data;
   },
 
   async recordSyncStatus(entity, { status, message, counts, now }) {

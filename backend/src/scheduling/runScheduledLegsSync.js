@@ -4,9 +4,9 @@
 // Dependency-injected (lf + db adapters) so it is fully unit-testable; the real
 // adapters and the setInterval worker live in the next plan.
 //
-// Flow: fetch each month bucket -> map -> upsert trips -> resolve leg.trip_id ->
-// upsert legs -> resolve crew.leg_id -> upsert crew -> record sync status.
-// Upserts run parent-before-child so foreign keys always resolve, and each entity
+// Flow: fetch each month bucket -> map -> write trips -> resolve leg.trip_id ->
+// write legs -> resolve crew.leg_id -> write crew -> record sync status.
+// Writes run parent-before-child so foreign keys always resolve, and each entity
 // goes through reconcileBatch so locally-modified rows are never overwritten.
 import { reconcileBatch } from './reconcileBatch.js';
 import { mapScheduledLegs } from './mapScheduledLegs.js';
@@ -18,15 +18,29 @@ function uniqueByLfOid(records) {
   return [...m.values()];
 }
 
-// Reconcile a page of incoming records against existing mirror rows and upsert
-// the results. Returns Map<lfOid, uuid> for the rows now in the table.
+// Reconcile a page of incoming records against existing mirror rows and write
+// the results. New rows are bulk-inserted; existing rows are updated one at a
+// time so each update touches ONLY the columns reconcile chose — which is what
+// keeps a locally-modified row's working copy from being clobbered by a sibling.
+// Returns Map<lfOid, uuid> for the rows now in the table.
 async function syncEntity(db, table, incoming, now) {
   if (incoming.length === 0) return new Map();
   const existing = await db.existingByLfOid(table, incoming.map((r) => r.lfOid));
   const ops = reconcileBatch(incoming, existing, now);
-  const upserted = await db.upsert(table, ops.map((op) => op.set));
   const idByLfOid = new Map();
-  for (const row of upserted) idByLfOid.set(row.lf_oid, row.id);
+
+  const inserts = ops.filter((op) => op.action === 'insert').map((op) => op.set);
+  if (inserts.length) {
+    const rows = await db.insertRows(table, inserts);
+    for (const row of rows) idByLfOid.set(row.lf_oid, row.id);
+  }
+
+  for (const op of ops) {
+    if (op.action !== 'update') continue;
+    const row = await db.updateByLfOid(table, op.set);
+    if (row) idByLfOid.set(row.lf_oid, row.id);
+  }
+
   return idByLfOid;
 }
 
