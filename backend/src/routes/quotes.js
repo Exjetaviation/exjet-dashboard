@@ -2,8 +2,9 @@ import express from 'express';
 import { supabase } from '../services/supabase.js';
 import { getUnreadQuoteEmails, sendEmail, getAuthUrl, getTokensFromCode } from '../services/gmail.js';
 import { processEmail } from '../services/quoteEngine.js';
-import { getDispatchList, getTripLog } from '../services/levelflight.js';
-import { mapDispatchToQuote, mapLegDetail } from '../services/quoteMap.js';
+import { getDispatchList } from '../services/levelflight.js';
+import { mapDispatchToQuote } from '../services/quoteMap.js';
+import { buildViewModel } from '../services/quoteData.js';
 import { renderQuoteHtml } from '../services/quoteHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
 
@@ -119,32 +120,6 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-const ACCEPT_BASE = 'https://api.levelflight.com/client';
-
-// The per-dispatch flightLog returns FULL legs (airports, times, distance, EFT, and
-// inline _calc.from/to.location coords) — the complete data the document needs.
-async function buildViewModel(dispatchId) {
-  const tl = await getTripLog(dispatchId);
-  const dispatch = tl?.dispatch;
-  if (!dispatch) return null;
-  const ac = tl?.aircraft || dispatch?.aircraft || {};
-  const internal = dispatch?._internal || {};
-  return {
-    dispatchId,
-    quoteNumber: dispatch?.quoteId != null ? String(dispatch.quoteId) : null,
-    tail: ac?.tailNumber ?? null,
-    aircraftType: ac?.type?.name ?? null,
-    maxPax: ac?.paxSeats ?? null,
-    total: internal?.price?.breakdown?.calculatedTotal ?? internal?.price?.total ?? null,
-    amenities: ['Flight Attendant', 'WIFI'],
-    preparedOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-    // NOTE: the LevelFlight client accept-link id is not exposed in the API; using the
-    // dispatch id as a best guess — verify by clicking it on a real quote.
-    acceptUrl: `${ACCEPT_BASE}/${dispatchId}/accept`,
-    legs: (dispatch?.legs || []).map(mapLegDetail),
-  };
-}
 
 // Fetch every page of dispatches (25/page), in parallel chunks, cached briefly.
 // LevelFlight has ~1000 dispatches, so paginate fully but don't refetch per request.
