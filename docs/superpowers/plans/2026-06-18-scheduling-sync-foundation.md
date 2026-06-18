@@ -520,8 +520,9 @@ Expected: PASS — all 4 tests pass.
 
 - [ ] **Step 5: Run the whole scheduling test suite**
 
-Run: `node --test backend/src/scheduling/`
+Run: `node --test backend/src/scheduling/*.test.js`
 Expected: PASS — all tests across reconcile, reconcileBatch, and freshness pass.
+(Note: pass the `*.test.js` glob, not the bare directory — Node 25's test runner does not auto-discover a bare directory path.)
 
 - [ ] **Step 6: Commit**
 
