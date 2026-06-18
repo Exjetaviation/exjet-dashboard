@@ -1,7 +1,7 @@
-// backend/src/services/tripSheetData.js
-// Builds the trip-sheet view-model from getTripLog (operational dispatches carry FULL
-// legs: crew, FBO, coords). Pure mappers (mapTripLeg, mapClient) are unit-tested; the
-// I/O (getTripLog, weather) lives in buildTripSheet.
+// backend/src/services/itineraryData.js
+// Builds the passenger-itinerary view-model from getTripLog (operational dispatches
+// carry FULL legs: crew, FBO, coords). Pure mappers (mapItineraryLeg, mapClient) are
+// unit-tested; the I/O (getTripLog, weather) lives in buildItinerary.
 import { getTripLog } from './levelflight.js';
 import { getDailyForecast } from './weather.js';
 
@@ -24,7 +24,7 @@ function mapCrew(leg) {
   return { pic: pic || null, sic: sic || null, ca };
 }
 
-export function mapTripLeg(l) {
+export function mapItineraryLeg(l) {
   return {
     from: l?.departure?.airport ?? null,
     to: l?.arrival?.airport ?? null,
@@ -53,12 +53,12 @@ export function mapClient(dispatch) {
   return { name: name || null, company: comp.name || null, address: address || null };
 }
 
-export async function buildTripSheet(dispatchId) {
+export async function buildItinerary(dispatchId) {
   const tl = await getTripLog(dispatchId);
   const dispatch = tl?.dispatch;
   if (!dispatch) return null;
   const ac = tl?.aircraft || dispatch?.aircraft || {};
-  const legs = (dispatch.legs || []).map(mapTripLeg);
+  const legs = (dispatch.legs || []).map(mapItineraryLeg);
 
   // Unique airports (with coords) across all legs -> one forecast each.
   const airports = new Map();

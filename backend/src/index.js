@@ -11,7 +11,7 @@ import maintenanceRoutes from './routes/maintenance.js';
 import agentRoutes from './routes/agent.js';
 import adsbRoutes from './routes/adsb.js';
 import publicQuotesRoutes from './routes/publicQuotes.js';
-import publicTripSheetsRoutes from './routes/publicTripSheets.js';
+import publicItineraryRoutes from './routes/publicItinerary.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { startRecorder } from './services/adsbRecorder.js';
 import { startReconciler } from './services/flightTrackReconciler.js';
@@ -42,8 +42,8 @@ app.use('/api/quotes/auth-callback', quotesRoutes);
 
 // Public quote pages — unauthenticated access via 24-char dispatch ID.
 app.use('/quote', publicQuotesRoutes);
-// Public trip-sheet pages — same unauthenticated dispatch-ID access model.
-app.use('/tripsheet', publicTripSheetsRoutes);
+// Public passenger-itinerary pages — same unauthenticated dispatch-ID access model.
+app.use('/itinerary', publicItineraryRoutes);
 
 // Everything below this line REQUIRES a valid login token — EXCEPT temporary
 // /finances/debug/* endpoints, so they can be opened directly in a browser.

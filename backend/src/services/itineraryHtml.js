@@ -1,7 +1,7 @@
-// backend/src/services/tripSheetHtml.js
-// Renders a trip-sheet view-model to a self-contained "Midnight" HTML document used
-// for the public web page AND the Puppeteer PDF (single source of truth). Mirrors the
-// quote document's styling and reuses the shared map+plane script.
+// backend/src/services/itineraryHtml.js
+// Renders a passenger-itinerary view-model to a self-contained "Midnight" HTML document
+// used for the public web page AND the Puppeteer PDF (single source of truth). Mirrors
+// the quote document's styling and reuses the shared map+plane script.
 import { LOGO_DATA_URI, aircraftPhotos } from '../assets/quote/assets.js';
 import { mapScript } from './docMap.js';
 
@@ -46,12 +46,12 @@ function weatherBlock(weather) {
   return `<div class="sec">WEATHER</div><div class="wxwrap">${cards}</div>`;
 }
 
-export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
+export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
   const photos = aircraftPhotos(vm.tail);
   const photoImg = (src, alt) => (src ? `<img src="${src}" alt="${alt}" class="acimg">` : '');
   const cl = vm.client || {};
   return `<!doctype html><html><head><meta charset="utf-8">
-<title>Exjet Trip Sheet${vm.tripNumber ? ' #' + esc(vm.tripNumber) : ''}</title>
+<title>Exjet Passenger Itinerary${vm.tripNumber ? ' #' + esc(vm.tripNumber) : ''}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -103,7 +103,7 @@ export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
   <div class="hdr">
     <div>${LOGO_DATA_URI ? `<img class="logo" src="${LOGO_DATA_URI}" alt="Exjet">` : '<div class="tail">EXJET</div>'}
       <div class="addr">4250 Execuair Street, Suite G · Orlando, FL 32827<br>+1 (407) 677-7792</div></div>
-    <div class="qmeta"><div class="qlabel">TRIP SHEET</div>
+    <div class="qmeta"><div class="qlabel">PASSENGER ITINERARY</div>
       <div style="margin-top:10px">Trip <span style="color:#fff;font-weight:600">${esc(vm.tripNumber || '—')}</span><br>Quote ${esc(vm.quoteNumber || '—')}<br>${esc(vm.preparedOn || '')}</div></div>
   </div>
   <div class="rule"></div>
@@ -117,7 +117,7 @@ export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
   ${vm.legs.map(legBlock).join('')}
   <div id="map"></div>
   ${weatherBlock(vm.weather)}
-  <div class="foot">Generated ${esc(vm.preparedOn || '')} · Exjet Aviation · Operational document.</div>
+  <div class="foot">Generated ${esc(vm.preparedOn || '')} · Exjet Aviation · Passenger itinerary.</div>
 </div>
 <script>${mapScript(vm)}</script>
 </body></html>`;

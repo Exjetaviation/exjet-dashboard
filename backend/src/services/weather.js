@@ -1,6 +1,6 @@
 // backend/src/services/weather.js
 // Daily forecast by airport lat/lng from Open-Meteo (free, no API key). Soft-fails to
-// [] so a weather outage never breaks the trip sheet. WMO weather codes -> labels.
+// [] so a weather outage never breaks the itinerary. WMO weather codes -> labels.
 import axios from 'axios';
 
 const WMO = {
