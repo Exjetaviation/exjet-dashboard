@@ -17,6 +17,14 @@ const trimComms = (c) => {
 };
 const fmtAddr = (a) => (a ? [a.street, a.city, a.state, a.postalCode].filter(Boolean).join(', ') : '') || null;
 
+// LevelFlight purpose ids that are non-revenue Part 91 ops (from /api/leg/purposes).
+// Anything else (incl. the implicit/default charter purpose) is a Part 135 charter.
+const PURPOSE_91 = { 4: 'Positioning', 5: 'Maintenance', 6: 'Training', 8: 'Owner', 9: 'Company', 11: 'Owner Lease', 12: 'Owner Fractional' };
+export function flightType(purpose) {
+  const name = PURPOSE_91[purpose];
+  return name ? { part: 91, label: `Part 91 · ${name}` } : { part: 135, label: '135 · Charter' };
+}
+
 function mapFbo(node) {
   const f = node?.fbo;
   if (!f) return null;
@@ -51,6 +59,7 @@ export function mapReleaseLeg(r, empById = new Map()) {
   const ca = (r?.attendants || []).map((a) => crewMember(a, empById)).filter(Boolean);
   return {
     callSign: r?.callSign || null,
+    flightType: flightType(r?.purpose ?? r?.dispatch?.purpose),
     from: r?.departure?.airport ?? null,
     to: r?.arrival?.airport ?? null,
     fromName: r?._calc?.from?.name ?? null,
