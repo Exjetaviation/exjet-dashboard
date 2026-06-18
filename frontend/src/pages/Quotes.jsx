@@ -86,12 +86,17 @@ export default function Quotes() {
     return sorted.map((r) => ({ ...r, departure: { time: r.depTime } }));
   }, [rows, query, sortKey, sortDir]);
 
+  // When searching, show ALL matches across every date (bypass the date-range
+  // filter); otherwise show the date-filtered set from FlightsFilterBar.
+  const searching = query.trim().length > 0;
+  const shownRows = searching ? legsForFilter : visible;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Quotes</h1>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '2px 0 10px' }}>
-          {loading ? 'Loading…' : `${visible.length} shown · ${rows.length} total from LevelFlight`}
+          {loading ? 'Loading…' : `${shownRows.length} shown · ${rows.length} total from LevelFlight${searching ? ' · searching all dates' : ''}`}
         </p>
         <input
           type="text"
@@ -100,7 +105,9 @@ export default function Quotes() {
           placeholder="Search route, quote #, or tail…"
           style={{ width: '100%', maxWidth: 360, padding: '8px 12px', marginBottom: 10, fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', boxSizing: 'border-box' }}
         />
-        <FlightsFilterBar legs={legsForFilter} onChange={setVisible} />
+        <div style={{ opacity: searching ? 0.45 : 1, pointerEvents: searching ? 'none' : 'auto' }} title={searching ? 'Date filter is bypassed while searching' : undefined}>
+          <FlightsFilterBar legs={legsForFilter} onChange={setVisible} />
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
@@ -143,7 +150,7 @@ export default function Quotes() {
             <button title="Descending" onClick={() => setSortDir('desc')}
               style={{ padding: '5px 9px', fontSize: 13, borderRadius: 7, cursor: 'pointer', border: '1px solid var(--border)', background: sortDir === 'desc' ? 'var(--accent)' : 'var(--bg-card)', color: sortDir === 'desc' ? '#fff' : 'var(--text-secondary)' }}>↓</button>
           </div>
-          {visible.map((q) => (
+          {shownRows.map((q) => (
             <div key={q.dispatchId} onClick={() => setSel(q.dispatchId)}
               style={{ padding: 12, marginBottom: 8, borderRadius: 10, cursor: 'pointer', border: '1px solid var(--border)', background: sel === q.dispatchId ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -154,7 +161,7 @@ export default function Quotes() {
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>{money(q.total)}</div>
             </div>
           ))}
-          {!loading && visible.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: 13, padding: 8 }}>No quotes match the filter.</div>}
+          {!loading && shownRows.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: 13, padding: 8 }}>{searching ? 'No quotes match your search.' : 'No quotes match the filter.'}</div>}
         </div>
       </div>
     </div>
