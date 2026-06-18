@@ -175,7 +175,7 @@ router.get('/dispatch/:id/pdf', async (req, res) => {
     const vm = await buildViewModel(req.params.id);
     if (!vm) return res.status(404).json({ error: 'Quote not found' });
     const pdf = await renderQuotePdf(renderQuoteHtml(vm, { print: true }));
-    res.type('application/pdf').set('Content-Disposition', `inline; filename="exjet-quote-${req.params.id}.pdf"`).send(pdf);
+    res.type('application/pdf').set('Content-Disposition', `inline; filename="exjet-quote-${vm.quoteNumber || req.params.id}.pdf"`).send(pdf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

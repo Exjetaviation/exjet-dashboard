@@ -46,6 +46,7 @@ export function renderQuoteHtml(vm, { print = false } = {}) {
   const photos = aircraftPhotos(vm.tail);
   const photoImg = (src, alt) => src ? `<img src="${src}" alt="${alt}" class="acimg">` : '';
   return `<!doctype html><html><head><meta charset="utf-8">
+<title>Exjet Charter Quote${vm.quoteNumber ? ' #' + esc(vm.quoteNumber) : ''}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
