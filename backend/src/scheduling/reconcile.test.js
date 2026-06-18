@@ -78,3 +78,11 @@ test('reconcileRecord does not flag upstream_changed when snapshot is unchanged'
   assert.equal(result.set.upstream_changed, false);
   assert.equal('status' in result.set, false);
 });
+
+test('reconcileRecord keeps upstream_changed sticky once set', () => {
+  const incoming = { lfOid: 'lf1', values: { status: 'booked' }, snapshot: { status: 'quote' } };
+  const existing = { locally_modified: true, upstream_changed: true, lf_synced_snapshot: { status: 'quote' } };
+  const result = reconcileRecord(incoming, existing, NOW);
+  // snapshot is unchanged, but the flag was already set — it must stay true.
+  assert.equal(result.set.upstream_changed, true);
+});
