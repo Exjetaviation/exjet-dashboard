@@ -36,13 +36,34 @@ function mapScript(viewModel) {
         s.forEach((p) => { L.circleMarker(p, { radius: 4, color: '#fff', fillColor: '#38bdf8', fillOpacity: 1 }).addTo(map); all.push(p); });
       });
       map.fitBounds(L.latLngBounds(all), { padding: [24, 24] });
+      const path = []; segs.forEach((s) => { path.push(s[0], s[1]); });
+      const segList = []; let total = 0;
+      for (let i = 1; i < path.length; i++) { const a = path[i-1], b = path[i]; const len = Math.hypot(b[0]-a[0], b[1]-a[1]); segList.push({ a, b, len, cum: total }); total += len; }
+      if (total > 0) {
+        const icon = L.divIcon({ className: '', iconSize: [20,20], iconAnchor: [10,10], html: '<div class="qplane" style="width:20px;height:20px;will-change:transform"><svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L14 10 L22 13 L22 15 L14 13 L13 20 L16 22 L16 23 L12 22 L8 23 L8 22 L11 20 L10 13 L2 15 L2 13 L10 10 Z" fill="#e2e8f0" stroke="#0b1018" stroke-width="0.8"/></svg></div>' });
+        const plane = L.marker(path[0], { icon, interactive: false, zIndexOffset: 1000 }).addTo(map);
+        const DUR = 6000; let start;
+        const step = (ts) => {
+          if (start === undefined) start = ts;
+          const dist = (((ts - start) % DUR) / DUR) * total;
+          let seg = segList[segList.length - 1];
+          for (const s of segList) { if (dist <= s.cum + s.len) { seg = s; break; } }
+          const k = seg.len > 0 ? (dist - seg.cum) / seg.len : 0;
+          plane.setLatLng([seg.a[0] + (seg.b[0]-seg.a[0])*k, seg.a[1] + (seg.b[1]-seg.a[1])*k]);
+          const deg = Math.atan2(seg.b[1]-seg.a[1], seg.b[0]-seg.a[0]) * 180 / Math.PI;
+          const el = plane.getElement(); const rot = el && el.querySelector('.qplane');
+          if (rot) rot.style.transform = 'rotate(' + deg + 'deg)';
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
       window.__mapReady = false;
       map.whenReady(() => setTimeout(() => { window.__mapReady = true; }, 600));
     } else { window.__mapReady = true; document.getElementById('map').innerHTML = '<div class="nomap">Route map unavailable</div>'; }
   `;
 }
 
-export function renderQuoteHtml(vm, { print = false } = {}) {
+export function renderQuoteHtml(vm, { print = false, web = false } = {}) {
   const photos = aircraftPhotos(vm.tail);
   const photoImg = (src, alt) => src ? `<img src="${src}" alt="${alt}" class="acimg">` : '';
   return `<!doctype html><html><head><meta charset="utf-8">
@@ -83,10 +104,13 @@ export function renderQuoteHtml(vm, { print = false } = {}) {
   .terms .body { padding:2px 16px 16px; border-top:1px solid #1a2638; font-size:10px; line-height:1.6; color:#aeb9c9; }
   .terms .t-h { color:#e8edf4; font-weight:600; margin:12px 0 3px; }
   .sign { display:flex; gap:24px; padding:18px 30px 10px; } .sign div { flex:1; } .sign .ln { height:1px; background:#33425c; } .sign .lbl { font-size:10px; color:#8a98ad; margin-top:5px; }
+  .webbar { display:flex; justify-content:flex-end; padding:10px 30px 0; }
+  .webbtn { font-size:12px; padding:8px 14px; border-radius:8px; background:#1a2436; border:1px solid #8893a5; color:#e8edf4; text-decoration:none; }
   .cta { margin:8px 30px 26px; padding:14px; text-align:center; border-radius:9px; background:linear-gradient(90deg,#cfd6e0,#aab4c2); color:#0b1018; font-weight:700; letter-spacing:3px; font-size:13px; text-decoration:none; display:block; }
   ${print ? '.terms{break-before:page;} .terms summary span:last-child{display:none;}' : ''}
 </style></head>
 <body><div class="page">
+  ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}">Download PDF</a></div>` : ''}
   <div class="hdr">
     <div>${LOGO_DATA_URI ? `<img class="logo" src="${LOGO_DATA_URI}" alt="Exjet">` : '<div class="tail">EXJET</div>'}
       <div class="addr">4250 Execuair Street, Suite G · Orlando, FL 32827<br>+1 (407) 677-7792</div></div>
