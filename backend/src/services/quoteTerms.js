@@ -1,0 +1,27 @@
+// Exjet's standard charter T&C (boilerplate; same for every quote). Verbatim from
+// the design spec Appendix A. Rendered collapsed on screen, expanded in the PDF.
+export const QUOTE_TERMS_HTML = `
+<p class="t-h">Late Passenger Policy</p>
+<p>If client / passenger(s) fail to arrive within 60 minutes of departure time, the itinerary will be subject to cancellation by Exjet Aviation, and will be subject to the cancellation policies outlined below.</p>
+
+<p class="t-h">Cancellation Policy</p>
+<p>One-way reservations, including multi-leg / multi-day one-ways, are subject to 100% of the estimated trip charges effective once confirmed.</p>
+<p>Domestic round-trip reservations cancelled within:</p>
+<ul>
+<li>72 hours of scheduled departure time are charged two flight hours at the current retail rate plus any set-up fees and aircraft positioning expenses.</li>
+<li>48 hours of scheduled departure time are charged 50% of the estimated trip charges.</li>
+<li>24 hours of scheduled departure time are charged 100% of the estimated trip charges.</li>
+</ul>
+<p>International round-trip reservations cancelled within:</p>
+<ul>
+<li>96 hours of scheduled departure time are charged 50% of the estimated trip charges.</li>
+<li>48 hours of scheduled departure time are charged 100% of the estimated trip charges.</li>
+</ul>
+
+<p>For all domestic flights, passengers are required to present a valid, current government issued photo ID prior to departure. For all international flights, passengers are required to obtain and present all applicable documentation and identification prior to flight. For more information on required documentation for international travel, please visit the Transportation Security Administration at http://www.tsa.gov. Client will be liable for any and all penalties, fines or additional costs associated with improperly documented passengers. If we are not able to complete this trip because the passengers do not meet the US and/or Foreign travel/admission requirements, you are subject to 100% of the contracted price. The Transportation Security Administration of the U.S. Department of Homeland Security requires us to collect information from you for purposes of Watch List screening, under the authority of 49 U.S.C. section 114, and the Intelligence Reform and Terrorism Prevention Act of 2004. Providing this information is voluntary; however, if it is not provided, you may be subject to additional screening or denied transport or authorization to enter a sterile area. TSA may share information you provide with law enforcement or intelligence agencies or others under its published system of records notice. For more on TSA Privacy policies, or to view the system of records notice and the privacy impact assessment, please see TSA's Web site at www.tsa.gov.</p>
+
+<p>Any peripheral costs that Exjet Aviation incurs in an attempt to meet the specific requirements of a particular trip will be added to the quoted price including but not limited to FBO special event fees, increased parking/ramp fees, aircraft de-icing, hangar to prevent de-icing, international handling, aircraft cleaning, catering/ground transportation or other requested services. Requested services such as catering and ground transportation are subject to a 15% handling fee. Any unforeseen additional flight time due to, but not limited to, weather events or air traffic control delays and/or routings could be billed at completion of flight. International/Satellite-based WIFI will be charged at cost. Ask your Charter Sales representative if this aircraft is equipped with satellite-based WIFI and what the cost is for this aircraft. The itinerary shown on this contract includes all flight legs agreed upon. There is no implied or expressed ownership by the undersigned of any flight legs not shown on this contract, regardless of the price paid. Exjet Aviation reserves the right to cancel due to circumstances beyond our control. Such circumstances would include inclement weather, unscheduled maintenance or safety concerns.</p>
+
+<p class="t-h">Signature above acknowledges the following</p>
+<p>I am signing as an authorized representative for the quoted trip above and the arrangements made for the trip are satisfactory and the QUOTE is acceptable. I have read and agree to abide by Exjet Aviation's scheduling & cancellation policy. I understand that payment is due upon receipt of invoice. I understand the invoice will be subject to late charges of 1.5% per month on unpaid balances of undisputed charges 30 days or more past due. I will pay all costs of collection, including attorney's fees. As the acting indirect air carrier, I certify that I will disclose all necessary information with the charterer in compliance with Federal Aviation Regulations Part 295 and hold Exjet Aviation harmless if those disclosures are not made. Should legal action become necessary, I agree to abide by the laws of the State of Florida. Client agrees that payment in full will be made by wire transfer prior to the end of the previous business day. Client acknowledges that credit card information is required and authorization obtained on the credit card below is valid until paid in full. If any additional charges are incurred, Exjet Aviation may charge the credit card given by the client. Any hold of funds or charges made on the credit card will have a 4% processing fee added to the total amount.</p>
+`;

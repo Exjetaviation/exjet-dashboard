@@ -2,6 +2,11 @@ import express from 'express';
 import { supabase } from '../services/supabase.js';
 import { getUnreadQuoteEmails, sendEmail, getAuthUrl, getTokensFromCode } from '../services/gmail.js';
 import { processEmail } from '../services/quoteEngine.js';
+import { getDispatchList } from '../services/levelflight.js';
+import { mapDispatchToQuote } from '../services/quoteMap.js';
+import { renderQuoteHtml } from '../services/quoteHtml.js';
+import { renderQuotePdf } from '../services/quotePdf.js';
+import { resolveLegCoords } from '../services/airports.js';
 
 const router = express.Router();
 
@@ -114,6 +119,53 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+const ACCEPT_BASE = 'https://api.levelflight.com/client';
+
+async function buildViewModel(dispatchId) {
+  const data = await getDispatchList(1);
+  const dispatch = (data?.dispatches || []).find((d) => (d?._id?.$oid || d?._id) === dispatchId);
+  if (!dispatch) return null;
+  const vm = mapDispatchToQuote(dispatch);
+  vm.legs = resolveLegCoords(vm.legs);
+  vm.acceptUrl = vm.acceptId ? `${ACCEPT_BASE}/${vm.acceptId}/accept` : null;
+  vm.preparedOn = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  vm.amenities = vm.amenities || ['Flight Attendant', 'WIFI'];
+  return vm;
+}
+
+// GET /api/quotes/list — all LevelFlight quotes as summary rows.
+router.get('/list', async (req, res) => {
+  try {
+    const data = await getDispatchList(1);
+    const rows = (data?.dispatches || []).map((d) => {
+      const q = mapDispatchToQuote(d);
+      const first = q.legs[0] || {}; const last = q.legs[q.legs.length - 1] || {};
+      return { dispatchId: q.dispatchId, tail: q.tail, from: first.from, to: last.to,
+        depTime: first.depTime, legs: q.legs.length, total: q.total };
+    });
+    res.json({ quotes: rows });
+  } catch (e) { res.status(502).json({ error: e.message, quotes: [] }); }
+});
+
+// GET /api/quotes/dispatch/:id/preview — HTML for the dashboard iframe.
+router.get('/dispatch/:id/preview', async (req, res) => {
+  try {
+    const vm = await buildViewModel(req.params.id);
+    if (!vm) return res.status(404).send('Quote not found');
+    res.type('html').send(renderQuoteHtml(vm, { print: req.query.print === '1' }));
+  } catch (e) { res.status(500).send(`Error: ${e.message}`); }
+});
+
+// GET /api/quotes/dispatch/:id/pdf — the branded PDF.
+router.get('/dispatch/:id/pdf', async (req, res) => {
+  try {
+    const vm = await buildViewModel(req.params.id);
+    if (!vm) return res.status(404).json({ error: 'Quote not found' });
+    const pdf = await renderQuotePdf(renderQuoteHtml(vm, { print: true }));
+    res.type('application/pdf').set('Content-Disposition', `inline; filename="exjet-quote-${req.params.id}.pdf"`).send(pdf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 export default router;
