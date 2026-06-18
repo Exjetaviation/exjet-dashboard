@@ -93,7 +93,7 @@ export default function TripPathMap({ legs = [] }) {
 
   return (
     <div style={{ position: 'relative', marginBottom: 20 }}>
-      <div ref={elRef} style={{ height: 340, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} />
+      <div ref={elRef} style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} />
       {!segs.length && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 14, pointerEvents: 'none' }}>
           Route map unavailable for this trip.
