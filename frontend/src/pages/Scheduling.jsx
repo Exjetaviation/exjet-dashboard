@@ -97,7 +97,7 @@ function TripsView() {
       <FlightsFilterBar legs={legs} onChange={setVisible} />
       {view === 'legs'
         ? <FlightsList legs={shown} loading={loading} />
-        : <TripsList legs={shown} loading={loading} />}
+        : <TripsList legs={shown} loading={loading} basePath="/scheduling/trips" />}
     </div>
   );
 }
