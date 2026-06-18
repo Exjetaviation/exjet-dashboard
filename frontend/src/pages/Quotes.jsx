@@ -13,6 +13,7 @@ export default function Quotes() {
   const [html, setHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let on = true;
@@ -45,10 +46,13 @@ export default function Quotes() {
   // The flights filter bar filters by `departure.time`; shape rows to match so we
   // reuse the same date-range/limit UX as the flights page. Memoized so it's a
   // STABLE reference (a fresh array each render makes the bar re-emit in a loop).
-  const legsForFilter = useMemo(
-    () => rows.map((r) => ({ ...r, departure: { time: r.depTime } })),
-    [rows],
-  );
+  const legsForFilter = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q
+      ? rows.filter((r) => [r.from, r.to, r.tail, r.quoteNumber].some((v) => String(v || '').toLowerCase().includes(q)))
+      : rows;
+    return base.map((r) => ({ ...r, departure: { time: r.depTime } }));
+  }, [rows, query]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
@@ -57,6 +61,13 @@ export default function Quotes() {
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '2px 0 10px' }}>
           {loading ? 'Loading…' : `${visible.length} shown · ${rows.length} total from LevelFlight`}
         </p>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search route, quote #, or tail…"
+          style={{ width: '100%', maxWidth: 360, padding: '8px 12px', marginBottom: 10, fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', boxSizing: 'border-box' }}
+        />
         <FlightsFilterBar legs={legsForFilter} onChange={setVisible} />
       </div>
 
