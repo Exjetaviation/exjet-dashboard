@@ -35,7 +35,7 @@ export default function Scheduling() {
       </div>
 
       {section === 'schedule'
-        ? <Calendar legsEndpoint="/api/scheduling/legs" />
+        ? <Calendar legsEndpoint="/api/scheduling/legs" tripBasePath="/scheduling/trips" />
         : <TripsView />}
     </div>
   );
@@ -96,8 +96,8 @@ function TripsView() {
       </p>
       <FlightsFilterBar legs={legs} onChange={setVisible} />
       {view === 'legs'
-        ? <FlightsList legs={shown} loading={loading} />
-        : <TripsList legs={shown} loading={loading} basePath="/scheduling/trips" />}
+        ? <FlightsList legs={shown} loading={loading} tripBasePath="/scheduling/trips" />
+        : <TripsList legs={shown} loading={loading} basePath="/scheduling/trips" tripBasePath="/scheduling/trips" />}
     </div>
   );
 }

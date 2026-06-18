@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import TopNav from './components/TopNav';
 import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
@@ -23,8 +24,8 @@ import AssistantPage from './pages/AssistantPage';
 import CrewCalendar from './pages/CrewCalendar';
 import Scheduling from './pages/Scheduling';
 import SchedulingTripDetail from './pages/SchedulingTripDetail';
-import { supabase } from './lib/supabase';
 
+// The existing dashboard: left sidebar + pages, with the global TopNav on top.
 function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -46,21 +47,7 @@ function Dashboard() {
           transition: 'left 0.2s ease', padding: 0,
         }}
       >
-        {sidebarOpen ? '\u2039' : '\u203a'}
-      </button>
-
-      <button
-        onClick={() => supabase.auth.signOut()}
-        title="Sign out"
-        style={{
-          position: 'fixed', bottom: '20px', left: sidebarOpen ? '20px' : '12px',
-          zIndex: 200, padding: '7px 14px', fontSize: '12px',
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer',
-          transition: 'left 0.2s ease',
-        }}
-      >
-        Sign out
+        {sidebarOpen ? '‹' : '›'}
       </button>
 
       <main style={{
@@ -70,13 +57,12 @@ function Dashboard() {
         boxSizing: 'border-box',
         transition: 'margin-left 0.2s ease, max-width 0.2s ease',
       }}>
+        <TopNav />
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/map" element={<Map />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/flights" element={<Flights />} />
-          <Route path="/scheduling" element={<Scheduling />} />
-          <Route path="/scheduling/trips/:id" element={<SchedulingTripDetail />} />
           <Route path="/flights/:id" element={<FlightDetail />} />
           <Route path="/trips/:id" element={<TripDetail />} />
           <Route path="/crew" element={<Crew />} />
@@ -97,11 +83,28 @@ function Dashboard() {
   );
 }
 
+// The Scheduling system as its OWN page — no dashboard sidebar, full width,
+// with the global TopNav on top.
+function SchedulingApp() {
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      <main style={{ padding: '32px', minHeight: '100vh', boxSizing: 'border-box', overflowX: 'hidden' }}>
+        <TopNav />
+        <Routes>
+          <Route index element={<Scheduling />} />
+          <Route path="trips/:id" element={<SchedulingTripDetail />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/scheduling/*" element={<RequireAuth><SchedulingApp /></RequireAuth>} />
         <Route path="/*" element={<RequireAuth><Dashboard /></RequireAuth>} />
       </Routes>
     </BrowserRouter>

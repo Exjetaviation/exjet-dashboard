@@ -52,7 +52,7 @@ const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{timeZone:ET,month:'shor
 const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
 const fmtLocal = (ms,tz)=>{ if(!ms||!tz) return null; try { return new Date(ms).toLocaleString('en-US',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return null; } };
 
-export default function Calendar({ legsEndpoint = '/api/levelflight/legs' } = {}) {
+export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripBasePath = null } = {}) {
   const {data,loading}  = useApi(legsEndpoint);
   const {data:dutyData} = useApi('/api/levelflight/duty');
   const {data:maintData} = useApi('/api/maintenance');
@@ -599,7 +599,7 @@ useEffect(() => {
                     return(
                       <div key={leg._id?.$oid||li}
                         onPointerDown={e=>e.stopPropagation()}
-                        onClick={e=>{e.stopPropagation();navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});}}
+                        onClick={e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});}}
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
                         onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                         onMouseLeave={()=>setHovered(null)}

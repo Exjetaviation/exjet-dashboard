@@ -51,7 +51,7 @@ const COLUMNS = [
   { key: 'status',     label: 'Status',      sortFn: (a, b) => (a.status || 0) - (b.status || 0) },
 ];
 
-export default function FlightsList({ legs = [], loading = false, hideColumns }) {
+export default function FlightsList({ legs = [], loading = false, hideColumns, tripBasePath }) {
   const navigate = useNavigate();
   const [sortKey, setSortKey] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
@@ -146,7 +146,9 @@ export default function FlightsList({ legs = [], loading = false, hideColumns })
             ) : sorted.map((leg, i) => (
               <tr key={leg._id?.$oid || i}
                 style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.1s' }}
-                onClick={() => navigate(`/flights/${leg._id?.$oid}`, { state: { leg } })}
+                onClick={() => (tripBasePath
+                  ? navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`)
+                  : navigate(`/flights/${leg._id?.$oid}`, { state: { leg } }))}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(79,142,247,0.06)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
