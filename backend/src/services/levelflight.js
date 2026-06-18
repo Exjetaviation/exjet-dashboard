@@ -76,6 +76,11 @@ export const getTripLog = async (dispatchOid) => {
   const res = await client.get(`/api/dispatch/${dispatchOid}/flightLog`);
   return res.data;
 };
+export const getDispatchRelease = async (dispatchOid) => {
+  const client = await lf();
+  const res = await client.get(`/api/dispatch/${dispatchOid}/release`, { responseType: 'text' });
+  return res.data; // self-contained HTML string (full Flight Release / Trip Sheet)
+};
 export const getAircraftCalendar = async (aircraftOid, startMs, endMs) => {
   const client = await lf();
   const res = await client.post('/api/widgets/aircraftCalendar', {

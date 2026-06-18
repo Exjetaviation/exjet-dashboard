@@ -48,6 +48,10 @@ export default function FlightDetail() {
   const dispatchId = leg?.dispatch?._id?.$oid || leg?.dispatch?._id || null;
   const itineraryUrl = dispatchId ? `${API_BASE}/itinerary/${dispatchId}` : null;
 
+  const [tsHtml, setTsHtml] = useState(null);     // release HTML for the modal (null = closed)
+  const [tsBusy, setTsBusy] = useState(false);
+  const [tsErr, setTsErr] = useState('');
+
   const [ffBriefing, setFfBriefing] = useState(null);
   const [ffNavlog, setFfNavlog] = useState(null);
   const [ffWb, setFfWb] = useState(null);
@@ -120,6 +124,32 @@ export default function FlightDetail() {
 
   const checklist = leg.checklist?.trip || {};
 
+  const viewTripSheet = async () => {
+    if (!dispatchId) return;
+    setTsBusy(true); setTsErr('');
+    try {
+      const r = await apiFetch(`/api/tripsheet/${dispatchId}`);
+      if (!r.ok) { setTsErr(r.status === 404 ? 'Trip sheet not available for this trip yet.' : `Failed (HTTP ${r.status})`); return; }
+      setTsHtml(await r.text());
+    } catch { setTsErr('Trip sheet unavailable (network error).'); }
+    finally { setTsBusy(false); }
+  };
+
+  const downloadTripSheetPdf = async () => {
+    if (!dispatchId) return;
+    setTsBusy(true); setTsErr('');
+    try {
+      const r = await apiFetch(`/api/tripsheet/${dispatchId}/pdf`);
+      if (!r.ok) { setTsErr(r.status === 404 ? 'Trip sheet not available for this trip yet.' : `Failed (HTTP ${r.status})`); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `Trip Sheet ${leg?.dispatch?.tripId || dispatchId}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch { setTsErr('Trip sheet PDF failed (network error).'); }
+    finally { setTsBusy(false); }
+  };
+
   // Rich tooltip labels for the map's departure/arrival pins: code · name + time.
   const pinLabel = (code, name, verb, time) => {
     const head = name ? `<strong>${code}</strong> · ${name}` : `<strong>${code}</strong>`;
@@ -139,6 +169,23 @@ export default function FlightDetail() {
   return (
     <div>
       {aiOpen && <AgentReviewPanel flight={aiFlight} onClose={() => setAiOpen(false)} />}
+
+      {tsHtml !== null && (
+        <div onClick={() => setTsHtml(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '24px' }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: '10px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxWidth: '900px', width: '100%', margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #ddd', background: '#f5f5f5' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: '#222' }}>Trip Sheet — Trip #{leg?.dispatch?.tripId}</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={downloadTripSheetPdf} disabled={tsBusy} style={{ padding: '6px 12px', background: '#1a2436', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>Download PDF</button>
+                <button onClick={() => setTsHtml(null)} style={{ padding: '6px 12px', background: '#fff', color: '#222', border: '1px solid #ccc', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}>Close</button>
+              </div>
+            </div>
+            <iframe title="trip-sheet" srcDoc={tsHtml} style={{ flex: 1, border: 0, background: '#fff' }} />
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
         <button onClick={() => navigate('/flights')} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>
@@ -165,6 +212,16 @@ export default function FlightDetail() {
                 style={{ padding: '6px 12px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>
                 {itinCopied ? 'Copied ✓' : 'Copy link'}
               </button>
+              <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--border)', margin: '0 2px' }} />
+              <button onClick={viewTripSheet} disabled={tsBusy}
+                style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                {tsBusy ? 'Loading…' : 'View trip sheet'}
+              </button>
+              <button onClick={downloadTripSheetPdf} disabled={tsBusy}
+                style={{ padding: '6px 12px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                Trip sheet PDF
+              </button>
+              {tsErr && <span style={{ fontSize: '12px', color: 'var(--danger, #e5484d)' }}>{tsErr}</span>}
             </div>
           )}
         </div>
