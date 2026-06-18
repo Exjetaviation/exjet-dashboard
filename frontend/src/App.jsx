@@ -8,6 +8,7 @@ import Map from './pages/Map';
 import Calendar from './pages/Calendar';
 import Flights from './pages/Flights';
 import FlightDetail from './pages/FlightDetail';
+import TripDetail from './pages/TripDetail';
 import Crew from './pages/Crew';
 import CrewDetail from './pages/CrewDetail';
 import Aircraft from './pages/Aircraft';
@@ -73,6 +74,7 @@ function Dashboard() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/flights" element={<Flights />} />
           <Route path="/flights/:id" element={<FlightDetail />} />
+          <Route path="/trips/:id" element={<TripDetail />} />
           <Route path="/crew" element={<Crew />} />
           <Route path="/crew/:id" element={<CrewDetail />} />
           <Route path="/aircraft" element={<Aircraft />} />
