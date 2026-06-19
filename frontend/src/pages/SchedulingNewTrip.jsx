@@ -4,7 +4,7 @@ import { apiFetch } from '../lib/api';
 
 // Known fleet for the aircraft picker (adjust as the fleet changes).
 const FLEET = ['N408JS', 'N69FP'];
-const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', arr_time: '' });
+const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', arr_time: '', pax: '', positioning: false });
 
 const labelStyle = { fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
 const inputStyle = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' };
@@ -75,6 +75,8 @@ export default function SchedulingNewTrip() {
             <div style={{ flex: '1 1 90px' }}><label style={labelStyle}>To</label><input value={l.arr_icao} onChange={(e) => updateLeg(i, 'arr_icao', e.target.value)} placeholder="KTEB" style={inputStyle} /></div>
             <div style={{ flex: '1 1 180px' }}><label style={labelStyle}>Departure</label><input type="datetime-local" value={l.dep_time} onChange={(e) => updateLeg(i, 'dep_time', e.target.value)} style={inputStyle} /></div>
             <div style={{ flex: '1 1 180px' }}><label style={labelStyle}>Arrival</label><input type="datetime-local" value={l.arr_time} onChange={(e) => updateLeg(i, 'arr_time', e.target.value)} style={inputStyle} /></div>
+            <div style={{ flex: '0 1 70px' }}><label style={labelStyle}>Pax</label><input type="number" min="0" value={l.pax} onChange={(e) => updateLeg(i, 'pax', e.target.value)} placeholder="0" style={inputStyle} /></div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', paddingBottom: 8 }}><input type="checkbox" checked={l.positioning} onChange={(e) => updateLeg(i, 'positioning', e.target.checked)} /> Ferry</label>
             <button onClick={() => removeLeg(i)} disabled={legs.length === 1} title="Remove leg"
               style={{ padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: legs.length === 1 ? 'default' : 'pointer' }}>✕</button>
           </div>

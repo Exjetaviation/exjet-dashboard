@@ -52,7 +52,7 @@ router.get('/legs', async (req, res) => {
 router.get('/quotes', async (req, res) => {
   try {
     const { data: trips, error } = await supabase
-      .from('scheduling_trips').select('id, lf_oid, trip_number, status, origin').eq('status', 'quote');
+      .from('scheduling_trips').select('id, lf_oid, trip_number, status, origin, pricing').eq('status', 'quote');
     if (error) throw error;
     if (!trips?.length) return res.json({ quotes: [] });
     const ids = trips.map((t) => t.id);
@@ -65,7 +65,7 @@ router.get('/quotes', async (req, res) => {
       byTrip.get(lr.trip_id).push(lr.lf_synced_snapshot);
     }
     const quotes = trips.map((t) => ({
-      id: t.id, lf_oid: t.lf_oid, trip_number: t.trip_number, ...quoteSummary(byTrip.get(t.id) || []),
+      id: t.id, lf_oid: t.lf_oid, trip_number: t.trip_number, total: t.pricing && !t.pricing.error ? t.pricing.total : null, ...quoteSummary(byTrip.get(t.id) || []),
     }));
     res.json({ quotes });
   } catch (e) {

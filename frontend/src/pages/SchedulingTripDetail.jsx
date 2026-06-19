@@ -8,6 +8,7 @@ import TripSheetActions from '../components/TripSheetActions';
 // current stage: Quote→Book→Release, with Cancel until closed). "Release" also makes
 // the Crew Trip Sheet available; a released trip auto-closes once the flight is done.
 const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
+const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
 const HIDE = new Set(['aircraft']);
 
 export default function SchedulingTripDetail() {
@@ -46,6 +47,16 @@ export default function SchedulingTripDetail() {
     try {
       const r = await apiFetch(`/api/scheduling/trips/${id}/revert`, { method: 'POST' });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Revert failed (${r.status})`); }
+      await load();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+
+  const reprice = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/price`, { method: 'POST', body: JSON.stringify({}) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Pricing failed (${r.status})`); }
       await load();
     } catch (e) { setError(e.message); }
     setBusy(false);
@@ -117,6 +128,32 @@ export default function SchedulingTripDetail() {
           )}
         </div>
       </div>
+
+      {meta?.pricing && (meta.pricing.error ? (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{meta.pricing.error}</span>
+          <button onClick={reprice} disabled={busy} style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>↻ Re-price</button>
+        </div>
+      ) : (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(meta.pricing.total)}</span>
+            <button onClick={reprice} disabled={busy} style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>↻ Re-price</button>
+          </div>
+          <table style={{ width: '100%', fontSize: 13, color: 'var(--text-secondary)', borderCollapse: 'collapse' }}>
+            <tbody>
+              {meta.pricing.perLeg?.map((l, i) => (
+                <tr key={i}><td style={{ padding: '3px 0' }}>{l.from} → {l.to} · {l.hrs}h{l.source === 'estimate' ? ' (est)' : l.source === 'unknown-airport' ? ' (no coords)' : ''}</td><td style={{ textAlign: 'right' }}>{usd(l.cost)}</td></tr>
+              ))}
+              <tr><td style={{ padding: '3px 0' }}>Flight cost</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.flightCost)}</td></tr>
+              {meta.pricing.overnightCost > 0 && <tr><td>Overnights ({meta.pricing.billableNights})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.overnightCost)}</td></tr>}
+              {meta.pricing.segmentFee > 0 && <tr><td>Segment fees</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.segmentFee)}</td></tr>}
+              <tr><td>FET ({Math.round((meta.pricing.fetRate || 0) * 1000) / 10}%)</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.fetAmount)}</td></tr>
+              <tr><td style={{ paddingTop: 6, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={{ paddingTop: 6, textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{usd(meta.pricing.total)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      ))}
 
       {legsForView.length ? <FlightsList legs={legsForView} hideColumns={HIDE} /> : (
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No legs found for this trip.</p>
