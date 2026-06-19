@@ -88,7 +88,7 @@ export default function SchedulingTripDetail() {
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 20, padding: '4px 12px' }}>
             {meta?.status_label || '—'}
           </span>
-          {meta?.locally_modified && (
+          {meta?.locally_modified && meta?.origin === 'levelflight' && (
             <>
               <span style={{ fontSize: 12, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 20, padding: '3px 10px' }}>
                 Edited locally · LevelFlight: {meta.original_status_label}

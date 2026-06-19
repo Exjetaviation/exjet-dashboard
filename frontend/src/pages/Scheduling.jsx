@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import FlightsFilterBar from '../components/FlightsFilterBar';
 import FlightsList from '../components/FlightsList';
@@ -12,6 +12,7 @@ import Calendar from './Calendar';
 // this section from the live Flights page.
 export default function Scheduling() {
   const [section, setSection] = useState('schedule');
+  const navigate = useNavigate();
 
   const SectionTab = ({ id, label }) => (
     <button onClick={() => setSection(id)}
@@ -24,9 +25,13 @@ export default function Scheduling() {
 
   return (
     <div>
-      <div style={{ marginBottom: '16px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)' }}>Scheduling</h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>Synced from LevelFlight</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)' }}>Scheduling</h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>Synced from LevelFlight</p>
+        </div>
+        <button onClick={() => navigate('/scheduling/new')}
+          style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New Trip</button>
       </div>
 
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
