@@ -11,7 +11,7 @@ const UNKNOWN_AIRPORT_MIN = 150; // fallback flight time when an airport has no 
 async function loadHistoryAvg() {
   const { data, error } = await supabase
     .from('pricing_history').select('aircraft_type, origin, destination, flight_mins').gt('flight_mins', 0);
-  if (error) throw error;
+  if (error) return {}; // degrade to estimate-only if history is unavailable
   const sums = new Map();
   const bump = (k, v) => { const e = sums.get(k) || [0, 0]; e[0] += v; e[1] += 1; sums.set(k, e); };
   for (const r of data || []) {

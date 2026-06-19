@@ -26,4 +26,12 @@ test('buildNativeLegSnapshot is null-safe and defaults status to quote', () => {
   assert.equal(snap.departure.time, null);
   assert.equal(snap.dispatch.aircraft.tailNumber, null);
   assert.equal(snap.status, 'quote');
+  assert.equal(snap.passengerCount, 0);
+  assert.equal(snap.isPositioning, false);
+});
+
+test('buildNativeLegSnapshot carries pax and positioning for re-pricing', () => {
+  const snap = buildNativeLegSnapshot({ dep_icao: 'KFXE', arr_icao: 'KMIA', seq: 0, pax: 3, positioning: true }, { id: 't', status: 'quote' });
+  assert.equal(snap.passengerCount, 3);
+  assert.equal(snap.isPositioning, true);
 });
