@@ -75,6 +75,7 @@ function QuotesView() {
     setBusyId(null);
   };
 
+  const usd = (n) => '$' + Number(n).toLocaleString();
   const fmt = (ms) => (ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
 
   return (
@@ -101,7 +102,7 @@ function QuotesView() {
                   <span style={{ background: 'rgba(79,142,247,0.12)', color: 'var(--accent)', border: '1px solid rgba(79,142,247,0.3)', borderRadius: 20, padding: '2px 9px', fontSize: 11 }}>Quote</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
-                  {fmt(q.start)}{q.end && q.end !== q.start ? ` – ${fmt(q.end)}` : ''} · {q.tail || '—'} · {q.legCount} leg{q.legCount === 1 ? '' : 's'}{q.customer ? ` · ${q.customer}` : ''}
+                  {fmt(q.start)}{q.end && q.end !== q.start ? ` – ${fmt(q.end)}` : ''} · {q.tail || '—'} · {q.legCount} leg{q.legCount === 1 ? '' : 's'}{q.customer ? ` · ${q.customer}` : ''}{q.total != null ? ` · ${usd(q.total)}` : ''}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
