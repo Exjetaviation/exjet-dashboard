@@ -10,6 +10,7 @@ import { buildNativeLegSnapshot } from '../scheduling/buildNativeLeg.js';
 import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '../scheduling/workflow.js';
 import { quoteSummary } from '../scheduling/quoteSummary.js';
 import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
+import { priceQuoteLegs } from '../scheduling/priceQuote.js';
 
 const router = express.Router();
 
@@ -73,7 +74,7 @@ router.get('/quotes', async (req, res) => {
   }
 });
 
-const TRIP_COLS = 'lf_oid, trip_number, status, locally_modified, upstream_changed, lf_synced_snapshot, origin';
+const TRIP_COLS = 'lf_oid, trip_number, status, locally_modified, upstream_changed, lf_synced_snapshot, origin, pricing';
 
 // PostgREST returns code PGRST116 from .single() when no row matched.
 function isNotFound(error) {
@@ -94,6 +95,7 @@ function shapeTrip(row) {
     id: row.id,
     lf_oid: row.lf_oid,
     origin: row.origin,
+    pricing: row.pricing,
     trip_number: row.trip_number,
     status: row.status,
     status_label: statusLabel(row.status),
@@ -138,6 +140,17 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     });
     const { error: e2 } = await supabase.from('scheduling_legs').insert(legRows);
     if (e2) throw e2;
+
+    // Price the new quote (best-effort — never fail creation). Pax/positioning come
+    // from the submitted legs when present (default 0/false).
+    try {
+      const pricing = await priceQuoteLegs({
+        tail: aircraft_tail, aircraftType: null,
+        legs: legRows.map((r, i) => ({ dep_icao: r.dep_icao, arr_icao: r.arr_icao, pax: Number(inputLegs[i]?.pax) || 0, isPositioning: !!inputLegs[i]?.positioning })),
+        nights: 0,
+      });
+      await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', trip.id);
+    } catch (pe) { console.warn('[scheduling price-on-create] failed:', pe?.message || pe); }
 
     res.status(201).json({ id: trip.id, trip: shapeTrip(trip) });
   } catch (e) {
@@ -212,6 +225,32 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid:', e.message);
     res.status(500).json({ error: 'Failed to update trip' });
+  }
+});
+
+// POST /api/scheduling/trips/:lfOid/price — recompute + store the quote breakdown.
+router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, lf_oid, status').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const { data: legs, error: le } = await supabase
+      .from('scheduling_legs').select('dep_icao, arr_icao, lf_synced_snapshot').eq('trip_id', trip.id).order('seq');
+    if (le) throw le;
+    const tail = legs[0]?.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber || null;
+    const aircraftType = legs[0]?.lf_synced_snapshot?.dispatch?.aircraft?.type?.name || null;
+    const nights = Number(req.body?.nights) || 0;
+    const pax = Number(req.body?.pax) || 0;
+    const pricing = await priceQuoteLegs({
+      tail, aircraftType,
+      legs: legs.map((l) => ({ dep_icao: l.dep_icao, arr_icao: l.arr_icao, pax })), nights,
+    });
+    await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', trip.id);
+    res.json({ pricing });
+  } catch (e) {
+    console.error('POST /api/scheduling/trips/:lfOid/price:', e.message);
+    res.status(500).json({ error: 'Failed to price trip' });
   }
 });
 
