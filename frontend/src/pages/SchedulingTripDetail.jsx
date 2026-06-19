@@ -4,14 +4,10 @@ import { apiFetch } from '../lib/api';
 import FlightsList from '../components/FlightsList';
 import TripSheetActions from '../components/TripSheetActions';
 
-// Workflow action buttons — each advances the trip's status. "Release" also makes
-// the Crew Trip Sheet available (LevelFlight's Release-Legs behavior).
-const ACTIONS = [
-  { label: 'Book', status: 'booked', color: '#a855f7' },
-  { label: 'Release', status: 'released', color: '#3b82f6' },
-  { label: 'Close', status: 'closed', color: '#22c55e' },
-  { label: 'Cancel', status: 'cancelled', color: '#ef4444' },
-];
+// Action buttons come from the backend (the valid next actions for the trip's
+// current stage: Quote→Book→Release, with Cancel until closed). "Release" also makes
+// the Crew Trip Sheet available; a released trip auto-closes once the flight is done.
+const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
 const HIDE = new Set(['aircraft']);
 
 export default function SchedulingTripDetail() {
@@ -100,23 +96,24 @@ export default function SchedulingTripDetail() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {ACTIONS.map((a) => {
-            const active = meta?.status === a.status;
-            return (
-              <button key={a.status} onClick={() => setStatus(a.status)} disabled={busy || !meta}
-                style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: busy ? 'default' : 'pointer',
-                  background: active ? a.color : 'var(--bg-secondary)',
-                  color: active ? '#fff' : 'var(--text-primary)',
-                  border: `1px solid ${active ? a.color : 'var(--border)'}`, borderRadius: 8, opacity: busy ? 0.6 : 1 }}>
-                {a.label}
-              </button>
-            );
-          })}
+          {(meta?.actions || []).map((a) => (
+            <button key={a.action} onClick={() => setStatus(a.status)} disabled={busy || !meta}
+              style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: busy ? 'default' : 'pointer',
+                background: ACTION_COLOR[a.action] || 'var(--accent)', color: '#fff',
+                border: 'none', borderRadius: 8, opacity: busy ? 0.6 : 1 }}>
+              {a.label}
+            </button>
+          ))}
+          {meta?.stage === 'closed' && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>This trip is closed.</span>}
+          {meta?.stage === 'cancelled' && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>This trip is cancelled.</span>}
           {released && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 6, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Crew Trip Sheet:</span>
-              <TripSheetActions dispatchId={id} tripId={meta?.trip_number} compact />
-            </div>
+            <>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>· Closes automatically once the flight is complete.</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 6, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Crew Trip Sheet:</span>
+                <TripSheetActions dispatchId={id} tripId={meta?.trip_number} compact />
+              </div>
+            </>
           )}
         </div>
       </div>

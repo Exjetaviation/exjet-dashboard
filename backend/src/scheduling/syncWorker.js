@@ -7,6 +7,7 @@ import { runScheduledLegsSync } from './runScheduledLegsSync.js';
 import { computeMonthStarts } from './syncWindow.js';
 import { syncLf } from './syncLf.js';
 import { syncDb } from './syncDb.js';
+import { autoCloseCompletedTrips } from './autoClose.js';
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 let started = false;
@@ -14,7 +15,10 @@ let started = false;
 export async function syncNow() {
   const now = new Date().toISOString();
   const monthStarts = computeMonthStarts(Date.now());
-  return runScheduledLegsSync({ lf: syncLf, db: syncDb, now, monthStarts });
+  const counts = await runScheduledLegsSync({ lf: syncLf, db: syncDb, now, monthStarts });
+  // Close out released trips whose flight has completed (best-effort; never fails the sync).
+  await autoCloseCompletedTrips(now).catch((e) => console.warn('[scheduling auto-close] failed:', e?.message || e));
+  return counts;
 }
 
 export function startSyncWorker() {
