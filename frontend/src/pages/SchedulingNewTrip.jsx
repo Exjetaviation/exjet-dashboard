@@ -43,7 +43,7 @@ export default function SchedulingNewTrip() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
         <button onClick={() => navigate('/scheduling')}
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>← Scheduling</button>
-        <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>New Trip</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>New Quote</h1>
       </div>
 
       {error && (
@@ -85,7 +85,7 @@ export default function SchedulingNewTrip() {
 
       <button onClick={save} disabled={busy}
         style={{ padding: '10px 24px', fontSize: 14, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
-        {busy ? 'Creating…' : 'Create Trip'}
+        {busy ? 'Creating…' : 'Create Quote'}
       </button>
     </div>
   );

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
+import { apiFetch } from '../lib/api';
 import FlightsFilterBar from '../components/FlightsFilterBar';
 import FlightsList from '../components/FlightsList';
 import TripsList from '../components/TripsList';
@@ -31,17 +32,90 @@ export default function Scheduling() {
           <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>Synced from LevelFlight</p>
         </div>
         <button onClick={() => navigate('/scheduling/new')}
-          style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New Trip</button>
+          style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New Quote</button>
       </div>
 
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
         <SectionTab id="schedule" label="Schedule" />
+        <SectionTab id="quotes" label="Quotes" />
         <SectionTab id="trips" label="Trips" />
       </div>
 
-      {section === 'schedule'
-        ? <Calendar legsEndpoint="/api/scheduling/legs" tripBasePath="/scheduling/trips" />
-        : <TripsView />}
+      {section === 'schedule' && <Calendar legsEndpoint="/api/scheduling/legs" tripBasePath="/scheduling/trips" />}
+      {section === 'quotes' && <QuotesView />}
+      {section === 'trips' && <TripsView />}
+    </div>
+  );
+}
+
+// The Quotes view — trips at the working 'quote' stage. Create a quote (+ New Quote)
+// then Book it, which advances it to Booked and moves it out of this list.
+function QuotesView() {
+  const navigate = useNavigate();
+  const [quotes, setQuotes] = useState(null);
+  const [error, setError] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await apiFetch('/api/scheduling/quotes');
+      const j = await r.json();
+      if (j.quotes) setQuotes(j.quotes); else setError(j.error || 'Failed to load quotes');
+    } catch (e) { setError(e.message); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const book = async (id) => {
+    setBusyId(id); setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'booked' }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Book failed (${r.status})`); }
+      await load();
+    } catch (e) { setError(e.message); }
+    setBusyId(null);
+  };
+
+  const fmt = (ms) => (ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
+
+  return (
+    <div>
+      {error && (
+        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '12px 16px', color: 'var(--danger)', marginBottom: 16 }}>{error}</div>
+      )}
+      {quotes === null ? (
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading quotes…</p>
+      ) : quotes.length === 0 ? (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 40, textAlign: 'center' }}>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 14 }}>No open quotes yet.</p>
+          <button onClick={() => navigate('/scheduling/new')}
+            style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New Quote</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {quotes.map((q) => (
+            <div key={q.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{q.route || '—'}</span>
+                  {q.trip_number && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>#{q.trip_number}</span>}
+                  <span style={{ background: 'rgba(79,142,247,0.12)', color: 'var(--accent)', border: '1px solid rgba(79,142,247,0.3)', borderRadius: 20, padding: '2px 9px', fontSize: 11 }}>Quote</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
+                  {fmt(q.start)}{q.end && q.end !== q.start ? ` – ${fmt(q.end)}` : ''} · {q.tail || '—'} · {q.legCount} leg{q.legCount === 1 ? '' : 's'}{q.customer ? ` · ${q.customer}` : ''}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => book(q.id)} disabled={busyId === q.id}
+                  style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, background: '#a855f7', color: '#fff', border: 'none', borderRadius: 8, cursor: busyId === q.id ? 'default' : 'pointer', opacity: busyId === q.id ? 0.6 : 1 }}>
+                  {busyId === q.id ? 'Booking…' : 'Book'}
+                </button>
+                <button onClick={() => navigate(`/scheduling/trips/${q.id}`)}
+                  style={{ padding: '7px 12px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>View</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
