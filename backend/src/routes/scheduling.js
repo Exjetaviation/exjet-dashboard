@@ -7,6 +7,7 @@ import { statusLabel, isSettableStatus } from '../scheduling/dispatchStatus.js';
 import { tripColumnsFromSnapshot } from '../scheduling/tripFromSnapshot.js';
 import { canEditScheduling } from '../scheduling/canEdit.js';
 import { buildNativeLegSnapshot } from '../scheduling/buildNativeLeg.js';
+import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '../scheduling/workflow.js';
 
 const router = express.Router();
 
@@ -67,6 +68,8 @@ function shapeTrip(row) {
     trip_number: row.trip_number,
     status: row.status,
     status_label: statusLabel(row.status),
+    stage: workflowStage(row.status),
+    actions: nextActions(row.status),
     original_status: orig,
     original_status_label: statusLabel(orig),
     locally_modified: row.locally_modified,
@@ -131,7 +134,19 @@ router.get('/trips/:lfOid', async (req, res) => {
       .eq('trip_id', row.id)
       .order('seq');
     if (legErr) throw legErr;
-    res.json({ trip: shapeTrip(row), legs: mirrorLegsFromRows(legRows) });
+    const legs = mirrorLegsFromRows(legRows);
+
+    // A released trip whose every leg has already arrived auto-closes on read.
+    let trip = row;
+    const arrMs = legs.map((l) => l.arrival?.time ?? null);
+    if (shouldAutoClose(row.status, arrMs, new Date().toISOString())) {
+      const { data: closed } = await supabase
+        .from('scheduling_trips')
+        .update({ status: 'closed', modified_at: new Date().toISOString() })
+        .eq('id', row.id).select('id, ' + TRIP_COLS).single();
+      if (closed) trip = closed;
+    }
+    res.json({ trip: shapeTrip(trip), legs });
   } catch (e) {
     console.error('GET /api/scheduling/trips/:lfOid:', e.message);
     res.status(500).json({ error: 'Failed to load trip' });
@@ -143,10 +158,20 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   try {
     const status = req.body?.status;
     if (!isSettableStatus(status)) return res.status(400).json({ error: 'invalid status' });
+    const col = tripColumn(req.params.lfOid);
+    const { data: cur, error: e0 } = await supabase
+      .from('scheduling_trips').select('status, origin').eq(col, req.params.lfOid).single();
+    if (e0) {
+      if (isNotFound(e0)) return res.status(404).json({ error: 'Trip not found' });
+      throw e0;
+    }
+    if (!isValidTransition(cur.status, status)) {
+      return res.status(409).json({ error: `Cannot move to ${statusLabel(status)} from ${statusLabel(cur.status)}.` });
+    }
     const { data, error } = await supabase
       .from('scheduling_trips')
-      .update({ status, locally_modified: true, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
-      .eq(tripColumn(req.params.lfOid), req.params.lfOid)
+      .update({ status, locally_modified: cur.origin === 'levelflight', modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
+      .eq(col, req.params.lfOid)
       .select('id, ' + TRIP_COLS).single();
     if (error) {
       if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
