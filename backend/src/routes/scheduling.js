@@ -3,7 +3,7 @@ import express from 'express';
 import { supabase } from '../services/supabase.js';
 import { formatSyncStatus } from '../scheduling/formatSyncStatus.js';
 import { mirrorLegsFromRows } from '../scheduling/mirrorLegs.js';
-import { dispatchStatusLabel, isEditableStatus } from '../scheduling/dispatchStatus.js';
+import { statusLabel, isSettableStatus } from '../scheduling/dispatchStatus.js';
 import { tripColumnsFromSnapshot } from '../scheduling/tripFromSnapshot.js';
 import { canEditScheduling } from '../scheduling/canEdit.js';
 
@@ -56,9 +56,9 @@ function shapeTrip(row) {
     lf_oid: row.lf_oid,
     trip_number: row.trip_number,
     status: row.status,
-    status_label: dispatchStatusLabel(row.status),
+    status_label: statusLabel(row.status),
     original_status: orig,
-    original_status_label: dispatchStatusLabel(orig),
+    original_status_label: statusLabel(orig),
     locally_modified: row.locally_modified,
     upstream_changed: row.upstream_changed,
   };
@@ -92,7 +92,7 @@ router.get('/trips/:lfOid', async (req, res) => {
 router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   try {
     const status = req.body?.status;
-    if (!isEditableStatus(status)) return res.status(400).json({ error: 'invalid status' });
+    if (!isSettableStatus(status)) return res.status(400).json({ error: 'invalid status' });
     const { data, error } = await supabase
       .from('scheduling_trips')
       .update({ status, locally_modified: true, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
