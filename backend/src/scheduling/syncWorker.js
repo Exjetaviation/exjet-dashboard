@@ -8,6 +8,7 @@ import { computeMonthStarts } from './syncWindow.js';
 import { syncLf } from './syncLf.js';
 import { syncDb } from './syncDb.js';
 import { autoCloseCompletedTrips } from './autoClose.js';
+import { calibratePerfProfiles } from './perfCalibrate.js';
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 let started = false;
@@ -18,6 +19,8 @@ export async function syncNow() {
   const counts = await runScheduledLegsSync({ lf: syncLf, db: syncDb, now, monthStarts });
   // Close out released trips whose flight has completed (best-effort; never fails the sync).
   await autoCloseCompletedTrips(now).catch((e) => console.warn('[scheduling auto-close] failed:', e?.message || e));
+  // Refresh the per-aircraft-type flight-time profile from history (best-effort).
+  await calibratePerfProfiles().catch((e) => console.warn('[scheduling calibrate] failed:', e?.message || e));
   return counts;
 }
 
