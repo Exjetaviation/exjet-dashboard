@@ -136,7 +136,10 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
         dep_time: l.dep_time || null,
         arr_time: l.arr_time || null,
       };
-      return { trip_id: trip.id, origin: 'native', ...leg, lf_synced_snapshot: buildNativeLegSnapshot(leg, ctx) };
+      // pax/positioning live only in the snapshot (no such leg columns), so re-price
+      // can read them back faithfully.
+      const snap = buildNativeLegSnapshot({ ...leg, pax: Number(l.pax) || 0, positioning: !!l.positioning }, ctx);
+      return { trip_id: trip.id, origin: 'native', ...leg, lf_synced_snapshot: snap };
     });
     const { error: e2 } = await supabase.from('scheduling_legs').insert(legRows);
     if (e2) throw e2;
@@ -241,10 +244,14 @@ router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => 
     const tail = legs[0]?.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber || null;
     const aircraftType = legs[0]?.lf_synced_snapshot?.dispatch?.aircraft?.type?.name || null;
     const nights = Number(req.body?.nights) || 0;
-    const pax = Number(req.body?.pax) || 0;
     const pricing = await priceQuoteLegs({
       tail, aircraftType,
-      legs: legs.map((l) => ({ dep_icao: l.dep_icao, arr_icao: l.arr_icao, pax })), nights,
+      legs: legs.map((l) => ({
+        dep_icao: l.dep_icao, arr_icao: l.arr_icao,
+        pax: l.lf_synced_snapshot?.passengerCount || 0,
+        isPositioning: !!l.lf_synced_snapshot?.isPositioning,
+      })),
+      nights,
     });
     await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', trip.id);
     res.json({ pricing });

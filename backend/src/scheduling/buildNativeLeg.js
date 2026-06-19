@@ -27,7 +27,8 @@ export function buildNativeLegSnapshot(leg = {}, trip = {}) {
     },
     pilots: [],
     attendants: [],
-    passengerCount: 0,
+    passengerCount: leg.pax || 0,
+    isPositioning: !!leg.positioning,
     status,
   };
 }
