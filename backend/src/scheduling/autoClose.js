@@ -6,6 +6,7 @@
 // and mirrored legs.
 import { supabase } from '../services/supabase.js';
 import { shouldAutoClose } from './workflow.js';
+import { syncNativeLegStatus } from './nativeLegStatus.js';
 
 export async function autoCloseCompletedTrips(now) {
   const { data: trips, error } = await supabase
@@ -22,6 +23,7 @@ export async function autoCloseCompletedTrips(now) {
       const { error: ue } = await supabase
         .from('scheduling_trips').update({ status: 'closed', modified_at: now }).eq('id', t.id);
       if (ue) throw ue;
+      await syncNativeLegStatus(t.id, 'closed');
       closed += 1;
     }
   }

@@ -8,6 +8,8 @@ import { tripColumnsFromSnapshot } from '../scheduling/tripFromSnapshot.js';
 import { canEditScheduling } from '../scheduling/canEdit.js';
 import { buildNativeLegSnapshot } from '../scheduling/buildNativeLeg.js';
 import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '../scheduling/workflow.js';
+import { quoteSummary } from '../scheduling/quoteSummary.js';
+import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 
 const router = express.Router();
 
@@ -41,6 +43,33 @@ router.get('/legs', async (req, res) => {
     res.json({ legs: mirrorLegsFromRows(data) });
   } catch (e) {
     res.status(502).json({ error: e.message, legs: [] });
+  }
+});
+
+// GET /api/scheduling/quotes — trips at the working 'quote' stage, summarized for
+// the Quotes list. Booking a quote (PATCH status='booked') moves it out of here.
+router.get('/quotes', async (req, res) => {
+  try {
+    const { data: trips, error } = await supabase
+      .from('scheduling_trips').select('id, lf_oid, trip_number, status, origin').eq('status', 'quote');
+    if (error) throw error;
+    if (!trips?.length) return res.json({ quotes: [] });
+    const ids = trips.map((t) => t.id);
+    const { data: legRows, error: le } = await supabase
+      .from('scheduling_legs').select('trip_id, seq, lf_synced_snapshot').in('trip_id', ids).order('seq');
+    if (le) throw le;
+    const byTrip = new Map();
+    for (const lr of legRows || []) {
+      if (!byTrip.has(lr.trip_id)) byTrip.set(lr.trip_id, []);
+      byTrip.get(lr.trip_id).push(lr.lf_synced_snapshot);
+    }
+    const quotes = trips.map((t) => ({
+      id: t.id, lf_oid: t.lf_oid, trip_number: t.trip_number, ...quoteSummary(byTrip.get(t.id) || []),
+    }));
+    res.json({ quotes });
+  } catch (e) {
+    console.error('GET /api/scheduling/quotes:', e.message);
+    res.status(502).json({ error: e.message, quotes: [] });
   }
 });
 
@@ -145,6 +174,7 @@ router.get('/trips/:lfOid', async (req, res) => {
         .update({ status: 'closed', modified_at: new Date().toISOString() })
         .eq('id', row.id).select('id, ' + TRIP_COLS).single();
       if (closed) trip = closed;
+      await syncNativeLegStatus(row.id, 'closed');
     }
     res.json({ trip: shapeTrip(trip), legs });
   } catch (e) {
@@ -177,6 +207,7 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
       if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
       throw error;
     }
+    await syncNativeLegStatus(data.id, status); // keep native legs' list/board status in sync
     res.json({ trip: shapeTrip(data) });
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid:', e.message);
