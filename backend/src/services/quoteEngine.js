@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { supabase } from './supabase.js';
 import * as lf from './levelflight.js';
+import { calcLeg } from '../scheduling/pricing.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -55,16 +56,6 @@ const getFlightTime = async (origin, destination) => {
   } catch (e) { console.error('getFlightTime error:', e.message); }
   console.log(`No history for ${origin}->${destination}, using 150min default`);
   return 150;
-};
-
-const calcLeg = (mins, rateCard) => {
-  const hrs = mins / 60;
-  const applyMin = rateCard.min_hours > 0 ? Math.max(hrs, rateCard.min_hours) : hrs;
-  let cost = applyMin * rateCard.hourly_rate;
-  if (rateCard.short_leg_time > 0 && hrs < rateCard.short_leg_time) {
-    cost = Math.max(cost, rateCard.short_leg_amount || 0);
-  }
-  return { hrs: Math.round(hrs * 100) / 100, mins, cost: Math.round(cost) };
 };
 
 const calculateTripQuote = async (parsed, rateCard, pax) => {
