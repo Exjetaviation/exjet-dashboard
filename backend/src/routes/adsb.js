@@ -47,7 +47,7 @@ router.get('/previous-flights', async (req, res) => {
       const dep = l.departure?.time, arr = l.arrival?.time;
       if (!dep || !arr) continue;
       if (eqTail(l, tail) && arr <= now && arr >= windowStart) {
-        legs.push({ id, from: l.departure.airport, to: l.arrival.airport, depTime: dep, arrTime: arr });
+        legs.push({ id, from: l.departure.airport, to: l.arrival.airport, depTime: dep, arrTime: arr, tripId: l.dispatch?.tripId ?? null });
       }
     }
 
@@ -58,7 +58,7 @@ router.get('/previous-flights', async (req, res) => {
     const flights = legs
       .sort((a, b) => b.depTime - a.depTime)
       .map((leg) => ({
-        legId: leg.id, from: leg.from, to: leg.to, depTime: leg.depTime, arrTime: leg.arrTime,
+        legId: leg.id, from: leg.from, to: leg.to, depTime: leg.depTime, arrTime: leg.arrTime, tripId: leg.tripId,
         track: clipTrackToLeg(positions, leg, PREV_PAD_MS),
       }));
 
