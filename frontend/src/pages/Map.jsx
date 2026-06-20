@@ -157,7 +157,9 @@ const bearing = (a, b) => {
   return (toD(Math.atan2(y, x)) + 360) % 360;
 };
 
-export default function Map() {
+// NOTE: named FleetMap (not Map) so `new Map()` inside the body resolves to the
+// JS global Map, not this component — otherwise it recurses and breaks the hooks.
+export default function FleetMap() {
   const { data, loading } = useApi('/api/levelflight/legs');
   const [showTrail, setShowTrail] = useState(false);
   const { positions: live, trails, updatedAt } = useAdsb(20000, showTrail);
