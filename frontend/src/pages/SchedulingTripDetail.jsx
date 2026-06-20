@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
+import { apiFetch, API_BASE } from '../lib/api';
 import FlightsList from '../components/FlightsList';
 import TripSheetActions from '../components/TripSheetActions';
+import { distinctCrew } from '../lib/schedulingAggregate';
 
 // Action buttons come from the backend (the valid next actions for the trip's
 // current stage: Quote→Book→Release, with Cancel until closed). "Release" also makes
@@ -10,6 +11,20 @@ import TripSheetActions from '../components/TripSheetActions';
 const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
 const HIDE = new Set(['aircraft']);
+const ROLE_COLOR = { PIC: '#f59e0b', SIC: '#4f8ef7', Cabin: '#22c55e' };
+
+// A titled card section (LevelFlight-style trip-detail blocks).
+function Section({ title, right, children }) {
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export default function SchedulingTripDetail() {
   const { id } = useParams();
@@ -73,6 +88,8 @@ export default function SchedulingTripDetail() {
   const title = routeSummary || (meta?.trip_number ? `Trip #${meta.trip_number}` : 'Trip');
   const subtitle = [meta?.trip_number ? `Trip #${meta.trip_number}` : null, tail, client].filter(Boolean).join(' · ');
   const released = meta?.status === 'released';
+  const crew = distinctCrew(legsForView);
+  const pax = legsForView.reduce((m, l) => Math.max(m, l.passengerCount || 0), 0);
 
   return (
     <div>
@@ -155,9 +172,61 @@ export default function SchedulingTripDetail() {
         </div>
       ))}
 
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '4px 2px 10px' }}>Legs</div>
       {legsForView.length ? <FlightsList legs={legsForView} hideColumns={HIDE} /> : (
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No legs found for this trip.</p>
       )}
+
+      <div style={{ height: 16 }} />
+
+      <Section title="Crew">
+        {crew.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {crew.map((c, i) => {
+              const color = ROLE_COLOR[c.role] || '#888';
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: `${color}22`, color, border: `1px solid ${color}44` }}>{c.role}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
+                  {c.title && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.title}</span>}
+                </div>
+              );
+            })}
+          </div>
+        ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No crew assigned.</p>}
+      </Section>
+
+      <Section title="Passengers">
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{pax > 0 ? `${pax} passenger${pax === 1 ? '' : 's'} (max across legs)` : 'No passengers on the manifest.'}</p>
+      </Section>
+
+      <Section title="Trip Checklist">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {['Contract', 'Payment received', 'Processed'].map((item) => (
+            <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-primary)' }}>
+              <span style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid var(--border)', display: 'inline-block', flexShrink: 0 }} />
+              {item}
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10 }}>Display-only — wired to the live trip checklist later.</p>
+      </Section>
+
+      <Section title="Documents">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <a href={`${API_BASE}/itinerary/${id}`} target="_blank" rel="noopener noreferrer"
+            style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Passenger Itinerary ↗</a>
+          <TripSheetActions dispatchId={id} tripId={meta?.trip_number} compact />
+        </div>
+      </Section>
+
+      <Section title="History">
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          Source: {meta?.origin === 'native' ? 'Created here' : 'LevelFlight (mirrored)'}
+          {meta?.locally_modified ? ' · Edited locally' : ''}
+          {meta?.upstream_changed ? ' · LevelFlight changed upstream' : ''}
+        </p>
+      </Section>
     </div>
   );
 }
