@@ -6,13 +6,18 @@ import FlightsFilterBar from '../components/FlightsFilterBar';
 import FlightsList from '../components/FlightsList';
 import TripsList from '../components/TripsList';
 import Calendar from './Calendar';
+import SchedulingOverview from './scheduling/Overview';
+import SchedulingRequests from './scheduling/Requests';
+import SchedulingCrew from './scheduling/Crew';
+import SchedulingAircraft from './scheduling/Aircraft';
+import SchedulingClients from './scheduling/Clients';
 
 // The new Scheduling section — sourced from the MIRROR (scheduling_legs) rather
 // than a live LevelFlight call. "Schedule" is the board (mirror-backed Calendar);
 // "Trips" reuses the existing list components. The board is what distinguishes
 // this section from the live Flights page.
 export default function Scheduling() {
-  const [section, setSection] = useState('schedule');
+  const [section, setSection] = useState('overview');
   const navigate = useNavigate();
 
   const SectionTab = ({ id, label }) => (
@@ -35,15 +40,25 @@ export default function Scheduling() {
           style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New Quote</button>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16, flexWrap: 'wrap' }}>
+        <SectionTab id="overview" label="Overview" />
         <SectionTab id="schedule" label="Schedule" />
         <SectionTab id="quotes" label="Quotes" />
         <SectionTab id="trips" label="Trips" />
+        <SectionTab id="requests" label="Requests" />
+        <SectionTab id="crew" label="Crew" />
+        <SectionTab id="aircraft" label="Aircraft" />
+        <SectionTab id="clients" label="Clients" />
       </div>
 
+      {section === 'overview' && <SchedulingOverview onJump={setSection} />}
       {section === 'schedule' && <Calendar legsEndpoint="/api/scheduling/legs" tripBasePath="/scheduling/trips" />}
       {section === 'quotes' && <QuotesView />}
       {section === 'trips' && <TripsView />}
+      {section === 'requests' && <SchedulingRequests />}
+      {section === 'crew' && <SchedulingCrew />}
+      {section === 'aircraft' && <SchedulingAircraft />}
+      {section === 'clients' && <SchedulingClients />}
     </div>
   );
 }
