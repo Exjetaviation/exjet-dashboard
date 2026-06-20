@@ -27,9 +27,9 @@ export default class ErrorBoundary extends Component {
           <pre style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', margin: 0 }}>
             {String(this.state.error?.message || this.state.error)}
           </pre>
-          <button onClick={() => this.setState({ error: null })}
+          <button onClick={() => window.location.reload()}
             style={{ marginTop: 12, padding: '6px 14px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
-            Try again
+            Reload page
           </button>
         </div>
       );
