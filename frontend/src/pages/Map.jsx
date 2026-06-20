@@ -154,7 +154,7 @@ export default function Map() {
   const [nativeFs, setNativeFs] = useState(false);
   const [selected, setSelected] = useState(null);
   const [selectedTail, setSelectedTail] = useState(null);
-  const [prevDays, setPrevDays] = useState(3);
+  const [prevDays, setPrevDays] = useState(30);
   const [prevFlights, setPrevFlights] = useState([]);
   const [leftTab, setLeftTab] = useState('fleet');        // 'fleet' | 'history'
   const [replayFlight, setReplayFlight] = useState(null); // the previous flight being replayed
@@ -491,7 +491,7 @@ export default function Map() {
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{selectedTail}</span>
                 <select value={prevDays} onChange={e => setPrevDays(Number(e.target.value))}
                   style={{ fontSize: 11, padding: '3px 5px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
-                  <option value={1}>1d</option><option value={3}>3d</option><option value={7}>7d</option><option value={14}>14d</option>
+                  <option value={7}>7d</option><option value={30}>30d</option><option value={90}>90d</option><option value={365}>1yr</option>
                 </select>
               </div>
               {(() => {

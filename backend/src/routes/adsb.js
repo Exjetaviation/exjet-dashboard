@@ -4,7 +4,7 @@ import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
 import { queryTrack } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
-import { getFlightTrack } from '../services/flightTrackStore.js';
+import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
 
 const router = express.Router();
 
@@ -31,7 +31,7 @@ const PREV_PAD_MS = 10 * 60 * 1000; // 10-minute pad around each leg window
 // (persisted positions clipped to the leg window). Soft: returns [] on any miss.
 router.get('/previous-flights', async (req, res) => {
   const tail = normReg(typeof req.query.tail === 'string' ? req.query.tail : '');
-  const days = Math.max(1, Math.min(14, parseInt(req.query.days || '3', 10) || 3));
+  const days = Math.max(1, Math.min(365, parseInt(req.query.days || '30', 10) || 30));
   if (!tail) return res.status(400).json({ error: 'tail is required', flights: [] });
 
   const now = Date.now();
@@ -51,16 +51,20 @@ router.get('/previous-flights', async (req, res) => {
       }
     }
 
-    const startIso = new Date(windowStart - PREV_PAD_MS).toISOString();
+    // Permanent snapshots (any age) back the long-range history; the raw firehose
+    // (pruned at 14 days) is only a fallback for very recent legs not yet snapshotted.
+    const permanent = await getFlightTracksByLegIds(legs.map((l) => l.id));
+    const rawStart = new Date(Math.max(windowStart, now - 14 * 86400000) - PREV_PAD_MS).toISOString();
     const endIso = new Date(now + PREV_PAD_MS).toISOString();
-    const positions = await queryTrack(tail, startIso, endIso);
+    const positions = await queryTrack(tail, rawStart, endIso);
 
     const flights = legs
       .sort((a, b) => b.depTime - a.depTime)
-      .map((leg) => ({
-        legId: leg.id, from: leg.from, to: leg.to, depTime: leg.depTime, arrTime: leg.arrTime, tripId: leg.tripId,
-        track: clipTrackToLeg(positions, leg, PREV_PAD_MS),
-      }));
+      .map((leg) => {
+        const snap = permanent.get(leg.id);
+        const track = snap?.track && snap.track.length >= 2 ? snap.track : clipTrackToLeg(positions, leg, PREV_PAD_MS);
+        return { legId: leg.id, from: leg.from, to: leg.to, depTime: leg.depTime, arrTime: leg.arrTime, tripId: leg.tripId, track };
+      });
 
     res.json({ tail, days, flights });
   } catch (e) {
