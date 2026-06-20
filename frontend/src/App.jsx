@@ -6,6 +6,7 @@ import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Map from './pages/Map';
+import ErrorBoundary from './components/ErrorBoundary';
 import Calendar from './pages/Calendar';
 import Flights from './pages/Flights';
 import FlightDetail from './pages/FlightDetail';
@@ -61,7 +62,7 @@ function Dashboard() {
         <TopNav />
         <Routes>
           <Route path="/" element={<Overview />} />
-          <Route path="/map" element={<Map />} />
+          <Route path="/map" element={<ErrorBoundary label="Fleet Map"><Map /></ErrorBoundary>} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/flights" element={<Flights />} />
           <Route path="/flights/:id" element={<FlightDetail />} />
