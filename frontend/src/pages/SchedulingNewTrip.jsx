@@ -4,7 +4,7 @@ import { apiFetch } from '../lib/api';
 
 // Known fleet for the aircraft picker (adjust as the fleet changes).
 const FLEET = ['N408JS', 'N69FP'];
-const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', arr_time: '', pax: '', positioning: false });
+const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', pax: '', positioning: false });
 
 const labelStyle = { fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
 const inputStyle = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' };
@@ -73,8 +73,7 @@ export default function SchedulingNewTrip() {
           <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 90px' }}><label style={labelStyle}>From</label><input value={l.dep_icao} onChange={(e) => updateLeg(i, 'dep_icao', e.target.value)} placeholder="KFXE" style={inputStyle} /></div>
             <div style={{ flex: '1 1 90px' }}><label style={labelStyle}>To</label><input value={l.arr_icao} onChange={(e) => updateLeg(i, 'arr_icao', e.target.value)} placeholder="KTEB" style={inputStyle} /></div>
-            <div style={{ flex: '1 1 180px' }}><label style={labelStyle}>Departure</label><input type="datetime-local" value={l.dep_time} onChange={(e) => updateLeg(i, 'dep_time', e.target.value)} style={inputStyle} /></div>
-            <div style={{ flex: '1 1 180px' }}><label style={labelStyle}>Arrival</label><input type="datetime-local" value={l.arr_time} onChange={(e) => updateLeg(i, 'arr_time', e.target.value)} style={inputStyle} /></div>
+            <div style={{ flex: '1 1 200px' }}><label style={labelStyle}>Departure</label><input type="datetime-local" value={l.dep_time} onChange={(e) => updateLeg(i, 'dep_time', e.target.value)} style={inputStyle} /></div>
             <div style={{ flex: '0 1 70px' }}><label style={labelStyle}>Pax</label><input type="number" min="0" value={l.pax} onChange={(e) => updateLeg(i, 'pax', e.target.value)} placeholder="0" style={inputStyle} /></div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', paddingBottom: 8 }}><input type="checkbox" checked={l.positioning} onChange={(e) => updateLeg(i, 'positioning', e.target.checked)} /> Ferry</label>
             <button onClick={() => removeLeg(i)} disabled={legs.length === 1} title="Remove leg"
@@ -83,6 +82,7 @@ export default function SchedulingNewTrip() {
         ))}
         <button onClick={addLeg}
           style={{ marginTop: 4, padding: '6px 14px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add leg</button>
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10 }}>Arrival times are computed automatically by the flight-time engine (departure + flight time).</p>
       </div>
 
       <button onClick={save} disabled={busy}

@@ -14,6 +14,12 @@ const STATUS_MAP = {
   1: { label: 'Active', color: '#f59e0b' },
   2: { label: 'Booked', color: '#a855f7' },
   3: { label: 'Completed', color: '#22c55e' },
+  // Our native workflow statuses (string), so created/booked trips read correctly.
+  quote: { label: 'Quote', color: '#4f8ef7' },
+  booked: { label: 'Booked', color: '#a855f7' },
+  released: { label: 'Released', color: '#3b82f6' },
+  closed: { label: 'Closed', color: '#22c55e' },
+  cancelled: { label: 'Cancelled', color: '#ef4444' },
 };
 const fmtDate = (ms) => (ms && Number.isFinite(ms) ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
 const range = (a, b) => (fmtDate(a) === fmtDate(b) ? fmtDate(a) : `${fmtDate(a)} – ${fmtDate(b)}`);
