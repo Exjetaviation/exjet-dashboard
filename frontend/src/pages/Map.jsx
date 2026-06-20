@@ -364,6 +364,10 @@ export default function Map() {
     const group = L.layerGroup().addTo(map);
     prevLayerRef.current = group;
     L.polyline(track, { color: '#38bdf8', weight: 1.5, opacity: 0.28 }).addTo(group);
+    // Airport stops along a multi-leg trip.
+    for (const wp of (replayFlight.waypoints || [])) {
+      if (wp) L.circleMarker(wp, { radius: 3.5, color: '#94a3b8', weight: 1.5, fillColor: '#0b0f17', fillOpacity: 1, interactive: false }).addTo(group);
+    }
     const trail = L.polyline([track[0]], { color: '#38bdf8', weight: 3, opacity: 0.9 }).addTo(group);
     const plane = L.marker(track[0], { icon: createAircraftIcon('#f59e0b', true, bearing(track[0], track[1])), interactive: false, zIndexOffset: 1000 }).addTo(group);
     map.fitBounds(L.latLngBounds(track), { padding: [70, 70], maxZoom: 9 });
@@ -526,20 +530,39 @@ export default function Map() {
                 const flights = prevFlights.filter(f => f.track && f.track.length >= 2);
                 if (!flights.length) return <p style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '4px 2px' }}>{prevFlights.length ? 'No recorded tracks in range.' : 'Loading flights…'}</p>;
                 const fmt = (ms) => (ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
-                return flights.map((f, idx) => {
-                  const active = replayFlight?.legId === f.legId;
+                // Group legs into trips by tripId (each leg its own "trip" if untagged),
+                // ordered by departure; concatenate leg tracks into one continuous replay.
+                const byTrip = new Map();
+                for (const f of flights) {
+                  const key = f.tripId != null ? `t${f.tripId}` : `l${f.legId}`;
+                  if (!byTrip.has(key)) byTrip.set(key, { key, tripId: f.tripId, legs: [] });
+                  byTrip.get(key).legs.push(f);
+                }
+                const trips = [...byTrip.values()].map(t => {
+                  const legs = t.legs.sort((a, b) => (a.depTime || 0) - (b.depTime || 0));
+                  const airports = [legs[0].from, ...legs.map(l => l.to)].filter(Boolean);
+                  return {
+                    ...t, legs,
+                    route: airports.join(' → '),
+                    depTime: legs[0].depTime,
+                    track: legs.flatMap(l => l.track),
+                  };
+                }).sort((a, b) => (b.depTime || 0) - (a.depTime || 0));
+
+                return trips.map((t, idx) => {
+                  const active = replayFlight?.legId === t.key;
                   return (
-                    <div key={f.legId || idx} onClick={() => { setReplayFlight(f); setReplayNonce(n => n + 1); }}
+                    <div key={t.key || idx} onClick={() => { setReplayFlight({ legId: t.key, track: t.track, waypoints: [t.legs[0].track[0], ...t.legs.map(l => l.track[l.track.length - 1])] }); setReplayNonce(n => n + 1); }}
                       style={{ background: active ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '9px 11px', cursor: 'pointer' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{f.from} → {f.to}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{fmt(f.depTime)}{f.tripId ? ` · #${f.tripId}` : ''}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t.route}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{fmt(t.depTime)}{t.tripId != null ? ` · #${t.tripId}` : ''} · {t.legs.length} leg{t.legs.length === 1 ? '' : 's'}</div>
                       {active && (
                         <div style={{ marginTop: 7 }}>
                           <div style={{ height: 4, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
                             <div style={{ width: `${replayPct}%`, height: '100%', background: '#f59e0b' }} />
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{replayDone ? '● Landed' : `Replaying… ${replayPct}%`}</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{replayDone ? '● Trip complete' : `Replaying trip… ${replayPct}%`}</span>
                             <button onClick={(e) => { e.stopPropagation(); setReplayNonce(n => n + 1); }}
                               style={{ padding: '3px 9px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>↺ Replay</button>
                           </div>
