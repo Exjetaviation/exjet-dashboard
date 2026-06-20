@@ -129,6 +129,42 @@ function shapeTrip(row) {
   };
 }
 
+// Build leg rows for a native trip from the submitted legs: compute each arrival
+// from departure + the flight-time engine, and embed aircraft/customer/pax/ferry
+// in a LevelFlight-shaped snapshot. Shared by create and edit.
+async function buildNativeLegRows(tripId, ctx, inputLegs) {
+  const cleaned = inputLegs.map((l) => ({
+    dep_icao: (l.dep_icao || '').trim().toUpperCase() || null,
+    arr_icao: (l.arr_icao || '').trim().toUpperCase() || null,
+  }));
+  const times = await legMinutes(null, cleaned);
+  return inputLegs.map((l, i) => {
+    const depMs = l.dep_time ? Date.parse(l.dep_time) : null;
+    const arrMs = depMs != null && Number.isFinite(depMs) ? depMs + times[i].minutes * 60000 : null;
+    const leg = {
+      seq: i,
+      dep_icao: cleaned[i].dep_icao,
+      arr_icao: cleaned[i].arr_icao,
+      dep_time: l.dep_time || null,
+      arr_time: arrMs != null ? new Date(arrMs).toISOString() : null,
+    };
+    const snap = buildNativeLegSnapshot({ ...leg, pax: Number(l.pax) || 0, positioning: !!l.positioning }, ctx);
+    return { trip_id: tripId, origin: 'native', ...leg, lf_synced_snapshot: snap };
+  });
+}
+
+// Price a native trip from its input legs (best-effort) and persist the breakdown.
+async function priceAndStore(tripId, aircraft_tail, inputLegs) {
+  try {
+    const pricing = await priceQuoteLegs({
+      tail: aircraft_tail, aircraftType: null,
+      legs: inputLegs.map((l) => ({ dep_icao: (l.dep_icao || '').trim().toUpperCase(), arr_icao: (l.arr_icao || '').trim().toUpperCase(), pax: Number(l.pax) || 0, isPositioning: !!l.positioning })),
+      nights: 0,
+    });
+    await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', tripId);
+  } catch (pe) { console.warn('[scheduling price] failed:', pe?.message || pe); }
+}
+
 // POST /api/scheduling/trips — create a NATIVE (created-here) trip + its legs.
 // Each leg stores a LevelFlight-shaped snapshot so it renders in the same
 // list/board/detail components as mirrored legs (no schema change needed).
@@ -149,46 +185,50 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     if (e1) throw e1;
 
     const ctx = { id: trip.id, trip_number, status, aircraft_tail, customer_name };
-    const cleaned = inputLegs.map((l) => ({
-      dep_icao: (l.dep_icao || '').trim().toUpperCase() || null,
-      arr_icao: (l.arr_icao || '').trim().toUpperCase() || null,
-    }));
-    // Arrival is COMPUTED by the flight-time engine (departure + flight minutes),
-    // not entered by the user — same as LevelFlight.
-    const times = await legMinutes(null, cleaned);
-    const legRows = inputLegs.map((l, i) => {
-      const depMs = l.dep_time ? Date.parse(l.dep_time) : null;
-      const arrMs = depMs != null && Number.isFinite(depMs) ? depMs + times[i].minutes * 60000 : null;
-      const leg = {
-        seq: i,
-        dep_icao: cleaned[i].dep_icao,
-        arr_icao: cleaned[i].arr_icao,
-        dep_time: l.dep_time || null,
-        arr_time: arrMs != null ? new Date(arrMs).toISOString() : null,
-      };
-      // pax/positioning live only in the snapshot (no such leg columns), so re-price
-      // can read them back faithfully.
-      const snap = buildNativeLegSnapshot({ ...leg, pax: Number(l.pax) || 0, positioning: !!l.positioning }, ctx);
-      return { trip_id: trip.id, origin: 'native', ...leg, lf_synced_snapshot: snap };
-    });
+    const legRows = await buildNativeLegRows(trip.id, ctx, inputLegs);
     const { error: e2 } = await supabase.from('scheduling_legs').insert(legRows);
     if (e2) throw e2;
 
-    // Price the new quote (best-effort — never fail creation). Pax/positioning come
-    // from the submitted legs when present (default 0/false).
-    try {
-      const pricing = await priceQuoteLegs({
-        tail: aircraft_tail, aircraftType: null,
-        legs: legRows.map((r, i) => ({ dep_icao: r.dep_icao, arr_icao: r.arr_icao, pax: Number(inputLegs[i]?.pax) || 0, isPositioning: !!inputLegs[i]?.positioning })),
-        nights: 0,
-      });
-      await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', trip.id);
-    } catch (pe) { console.warn('[scheduling price-on-create] failed:', pe?.message || pe); }
+    await priceAndStore(trip.id, aircraft_tail, inputLegs);
 
     res.status(201).json({ id: trip.id, trip: shapeTrip(trip) });
   } catch (e) {
     console.error('POST /api/scheduling/trips:', e.message);
     res.status(500).json({ error: 'Failed to create trip' });
+  }
+});
+
+// PATCH /api/scheduling/trips/:lfOid/details — edit a native trip's aircraft,
+// customer, and legs (add/remove/reorder). Replaces the leg set and re-prices.
+// Native trips only (created-here quotes); mirrored trips are managed by LevelFlight.
+router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, origin, trip_number, status').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    if (trip.origin !== 'native') return res.status(400).json({ error: 'Only trips created here can have their details edited.' });
+
+    const body = req.body || {};
+    const aircraft_tail = (body.aircraft_tail || '').trim() || null;
+    const customer_name = (body.customer_name || '').trim() || null;
+    const inputLegs = Array.isArray(body.legs) ? body.legs : [];
+    if (!inputLegs.length) return res.status(400).json({ error: 'A trip needs at least one leg.' });
+
+    const ctx = { id: trip.id, trip_number: trip.trip_number, status: trip.status, aircraft_tail, customer_name };
+    const legRows = await buildNativeLegRows(trip.id, ctx, inputLegs);
+    // Replace the leg set: delete existing, insert the new ones.
+    const { error: de } = await supabase.from('scheduling_legs').delete().eq('trip_id', trip.id);
+    if (de) throw de;
+    const { error: ie } = await supabase.from('scheduling_legs').insert(legRows);
+    if (ie) throw ie;
+
+    await supabase.from('scheduling_trips').update({ modified_at: new Date().toISOString(), modified_by: req.user?.email || null }).eq('id', trip.id);
+    await priceAndStore(trip.id, aircraft_tail, inputLegs);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('PATCH /api/scheduling/trips/:lfOid/details:', e.message);
+    res.status(500).json({ error: 'Failed to update trip details' });
   }
 });
 

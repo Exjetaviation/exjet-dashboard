@@ -3,8 +3,13 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch, API_BASE } from '../lib/api';
 import FlightsList from '../components/FlightsList';
 import TripSheetActions from '../components/TripSheetActions';
-import { distinctCrew } from '../lib/schedulingAggregate';
+import { distinctCrew, distinctClients } from '../lib/schedulingAggregate';
 import { useApi } from '../hooks/useApi';
+
+const FLEET = ['N408JS', 'N69FP'];
+const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', pax: '', positioning: false });
+const toLocalInput = (ms) => { if (!ms) return ''; const d = new Date(ms); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
+const inp = { padding: '7px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' };
 
 // Action buttons come from the backend (the valid next actions for the trip's
 // current stage: Quote→Book→Release, with Cancel until closed). "Release" also makes
@@ -54,6 +59,7 @@ export default function SchedulingTripDetail() {
   const [error, setError] = useState(null);
   const [priceEdit, setPriceEdit] = useState(null); // draft line amounts when editing the breakdown
   const [crewEdit, setCrewEdit] = useState(null);   // draft crew assignment when editing
+  const [detailsEdit, setDetailsEdit] = useState(null); // draft aircraft/customer/legs when editing
 
   const load = useCallback(async () => {
     try {
@@ -145,6 +151,38 @@ export default function SchedulingTripDetail() {
   };
   const fullName = (u) => (u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '');
 
+  // Trip details editor (aircraft / customer / legs) — native trips only.
+  const { data: allLegsData } = useApi('/api/scheduling/legs');
+  const clientOptions = distinctClients(allLegsData?.legs || []);
+  const isNative = meta?.origin === 'native';
+  const startDetailsEdit = () => setDetailsEdit({
+    aircraft_tail: tail || FLEET[0],
+    customer_name: client || '',
+    legs: (legsForView.length ? legsForView : [{}]).map((l) => ({
+      dep_icao: l.departure?.airport || '', arr_icao: l.arrival?.airport || '',
+      dep_time: toLocalInput(l.departure?.time), pax: l.passengerCount || '', positioning: !!l.isPositioning,
+    })),
+  });
+  const updateEditLeg = (i, field, v) => setDetailsEdit((d) => ({ ...d, legs: d.legs.map((l, idx) => (idx === i ? { ...l, [field]: v } : l)) }));
+  const addEditLeg = () => setDetailsEdit((d) => ({ ...d, legs: [...d.legs, blankLeg()] }));
+  const removeEditLeg = (i) => setDetailsEdit((d) => ({ ...d, legs: d.legs.length > 1 ? d.legs.filter((_, idx) => idx !== i) : d.legs }));
+  const saveDetails = async () => {
+    setError(null);
+    const legs = detailsEdit.legs.filter((l) => l.dep_icao.trim() && l.arr_icao.trim());
+    if (!legs.length) { setError('Add at least one leg with a From and To.'); return; }
+    setBusy(true);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/details`, {
+        method: 'PATCH',
+        body: JSON.stringify({ aircraft_tail: detailsEdit.aircraft_tail, customer_name: detailsEdit.customer_name, legs }),
+      });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
+      setDetailsEdit(null);
+      await load();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+
   const startCrewEdit = () => setCrewEdit({ pic: curCrew.pic?.email || '', sic: curCrew.sic?.email || '', fa: fullName(curCrew.fa) });
   const saveCrew = async () => {
     setBusy(true); setError(null);
@@ -173,6 +211,10 @@ export default function SchedulingTripDetail() {
           <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{subtitle}</p>
         </div>
+        {isNative && detailsEdit == null && (
+          <button onClick={startDetailsEdit} disabled={busy}
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}>✎ Edit trip</button>
+        )}
       </div>
 
       {error && (
@@ -287,9 +329,49 @@ export default function SchedulingTripDetail() {
         );
       })())}
 
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '4px 2px 10px' }}>Legs</div>
-      {legsForView.length ? <FlightsList legs={legsForView} hideColumns={HIDE} /> : (
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No legs found for this trip.</p>
+      {detailsEdit != null ? (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--accent)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Edit trip</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveDetails} disabled={busy} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Save</button>
+              <button onClick={() => setDetailsEdit(null)} disabled={busy} style={{ padding: '6px 14px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div style={{ flex: '1 1 150px' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Aircraft</label>
+              <select value={detailsEdit.aircraft_tail} onChange={(e) => setDetailsEdit((d) => ({ ...d, aircraft_tail: e.target.value }))} style={{ ...inp, width: '100%' }}>
+                {FLEET.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: '2 1 220px' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Customer</label>
+              <input list="trip-clients" value={detailsEdit.customer_name} onChange={(e) => setDetailsEdit((d) => ({ ...d, customer_name: e.target.value }))} placeholder="Company or client" style={{ ...inp, width: '100%' }} />
+              <datalist id="trip-clients">{clientOptions.map((c) => <option key={c.name} value={c.name} />)}</datalist>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Legs</div>
+          {detailsEdit.legs.map((l, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 8, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 80px' }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>From</label><input value={l.dep_icao} onChange={(e) => updateEditLeg(i, 'dep_icao', e.target.value)} placeholder="KFXE" style={{ ...inp, width: '100%' }} /></div>
+              <div style={{ flex: '1 1 80px' }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>To</label><input value={l.arr_icao} onChange={(e) => updateEditLeg(i, 'arr_icao', e.target.value)} placeholder="KTEB" style={{ ...inp, width: '100%' }} /></div>
+              <div style={{ flex: '1 1 180px' }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Departure</label><input type="datetime-local" value={l.dep_time} onChange={(e) => updateEditLeg(i, 'dep_time', e.target.value)} style={{ ...inp, width: '100%' }} /></div>
+              <div style={{ flex: '0 1 64px' }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Pax</label><input type="number" min="0" value={l.pax} onChange={(e) => updateEditLeg(i, 'pax', e.target.value)} placeholder="0" style={{ ...inp, width: '100%' }} /></div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-secondary)', paddingBottom: 8 }}><input type="checkbox" checked={l.positioning} onChange={(e) => updateEditLeg(i, 'positioning', e.target.checked)} /> Ferry</label>
+              <button onClick={() => removeEditLeg(i)} disabled={detailsEdit.legs.length === 1} title="Remove leg" style={{ padding: '7px 9px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: detailsEdit.legs.length === 1 ? 'default' : 'pointer' }}>✕</button>
+            </div>
+          ))}
+          <button onClick={addEditLeg} style={{ marginTop: 2, padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add leg</button>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10 }}>Arrivals are recomputed by the flight-time engine; the quote re-prices on save.</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '4px 2px 10px' }}>Legs</div>
+          {legsForView.length ? <FlightsList legs={legsForView} hideColumns={HIDE} /> : (
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No legs found for this trip.</p>
+          )}
+        </>
       )}
 
       <div style={{ height: 16 }} />
