@@ -393,7 +393,8 @@ export default function Map() {
     }
     const trail = L.polyline([track[0]], { color: trailColor, weight: 3, opacity: 0.9, dashArray: planned ? '5 7' : null }).addTo(group);
     const plane = L.marker(track[0], { icon: createAircraftIcon(planeColor, true, bearing(track[0], track[1])), interactive: false, zIndexOffset: 1000 }).addTo(group);
-    map.fitBounds(L.latLngBounds(track), { padding: [70, 70], maxZoom: 9 });
+    const finite = track.filter(pt => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+    if (finite.length >= 2) map.fitBounds(L.latLngBounds(finite), { padding: [70, 70], maxZoom: 9 });
 
     // Arc-length parameterization: animate by DISTANCE travelled, not point index,
     // so the plane moves at a constant visual speed even though ADS-B logs points
