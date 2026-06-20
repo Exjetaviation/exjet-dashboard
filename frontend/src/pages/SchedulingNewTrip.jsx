@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import { useApi } from '../hooks/useApi';
+import { distinctClients } from '../lib/schedulingAggregate';
 
 // Known fleet for the aircraft picker (adjust as the fleet changes).
 const FLEET = ['N408JS', 'N69FP'];
@@ -17,6 +19,10 @@ export default function SchedulingNewTrip() {
   const [legs, setLegs] = useState([blankLeg()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [addingClient, setAddingClient] = useState(false);
+  // Clients we've worked with, derived from the mirror (companies on synced trips).
+  const { data: legsData } = useApi('/api/scheduling/legs');
+  const clients = distinctClients(legsData?.legs || []);
 
   const updateLeg = (i, field, value) => setLegs((ls) => ls.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
   const addLeg = () => setLegs((ls) => [...ls, blankLeg()]);
@@ -57,9 +63,23 @@ export default function SchedulingNewTrip() {
             {FLEET.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-        <div style={{ flex: '2 1 220px' }}>
+        <div style={{ flex: '2 1 240px' }}>
           <label style={labelStyle}>Customer</label>
-          <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Company or client name" style={inputStyle} />
+          {addingClient ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="New client name" autoFocus style={inputStyle} />
+              <button type="button" onClick={() => { setAddingClient(false); setCustomer(''); }} title="Choose an existing client"
+                style={{ flexShrink: 0, padding: '0 10px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>↩</button>
+            </div>
+          ) : (
+            <select value={customer}
+              onChange={(e) => { if (e.target.value === '__new__') { setAddingClient(true); setCustomer(''); } else setCustomer(e.target.value); }}
+              style={inputStyle}>
+              <option value="">Select a client…</option>
+              {clients.map((c) => <option key={c.name} value={c.name}>{c.name}{c.wholesale ? ' · wholesale' : ''}</option>)}
+              <option value="__new__">+ Add new client…</option>
+            </select>
+          )}
         </div>
         <div style={{ flex: '1 1 140px' }}>
           <label style={labelStyle}>Trip # (optional)</label>

@@ -10,6 +10,15 @@ import { distinctCrew } from '../lib/schedulingAggregate';
 // the Crew Trip Sheet available; a released trip auto-closes once the flight is done.
 const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
+
+// Editable quote line items (LevelFlight-style: every charge adjustable per quote).
+const PRICE_LINES = [['flightCost', 'Flight cost'], ['surcharge', 'Fuel surcharge'], ['landingCost', 'Landings'], ['faCost', 'FA'], ['crewCost', 'Crew'], ['overnightCost', 'Overnights'], ['segmentFee', 'Segment fees']];
+const recomputePrice = (lines, fetRate) => {
+  const n = (v) => Number(v) || 0;
+  const fetBase = n(lines.flightCost) + n(lines.surcharge) + n(lines.landingCost) + n(lines.faCost) + n(lines.crewCost) + n(lines.overnightCost);
+  const fetAmount = Math.round(fetBase * (Number(fetRate) || 0));
+  return { fetBase: Math.round(fetBase), fetAmount, total: Math.round(fetBase + n(lines.segmentFee) + fetAmount) };
+};
 const HIDE = new Set(['aircraft']);
 const ROLE_COLOR = { PIC: '#f59e0b', SIC: '#4f8ef7', Cabin: '#22c55e' };
 
@@ -35,6 +44,7 @@ export default function SchedulingTripDetail() {
   const [legs, setLegs] = useState([]);     // legs from the mirror (survives refresh)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [priceEdit, setPriceEdit] = useState(null); // draft line amounts when editing the breakdown
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +82,21 @@ export default function SchedulingTripDetail() {
     try {
       const r = await apiFetch(`/api/scheduling/trips/${id}/price`, { method: 'POST', body: JSON.stringify({}) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Pricing failed (${r.status})`); }
+      await load();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+
+  const startPriceEdit = () => {
+    const p = meta?.pricing || {};
+    setPriceEdit({ flightCost: p.flightCost || 0, surcharge: p.surcharge || 0, landingCost: p.landingCost || 0, faCost: p.faCost || 0, crewCost: p.crewCost || 0, overnightCost: p.overnightCost || 0, segmentFee: p.segmentFee || 0 });
+  };
+  const savePrice = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/price-lines`, { method: 'PATCH', body: JSON.stringify(priceEdit) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
+      setPriceEdit(null);
       await load();
     } catch (e) { setError(e.message); }
     setBusy(false);
@@ -151,30 +176,59 @@ export default function SchedulingTripDetail() {
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{meta.pricing.error}</span>
           <button onClick={reprice} disabled={busy} style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>↻ Re-price</button>
         </div>
-      ) : (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(meta.pricing.total)}</span>
-            <button onClick={reprice} disabled={busy} style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>↻ Re-price</button>
+      ) : (() => {
+        const p = meta.pricing;
+        const editing = priceEdit != null;
+        const fetRate = p.fetRate || 0;
+        const live = editing ? recomputePrice(priceEdit, fetRate) : { fetAmount: p.fetAmount, total: p.total };
+        const btn = { padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+        return (
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(live.total)}{p.manual && !editing ? ' · adjusted' : ''}</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {editing ? (
+                  <>
+                    <button onClick={savePrice} disabled={busy} style={{ ...btn, background: 'var(--accent)', color: '#fff', border: 'none', fontWeight: 600 }}>Save</button>
+                    <button onClick={() => setPriceEdit(null)} disabled={busy} style={btn}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={startPriceEdit} style={btn}>✎ Edit</button>
+                    <button onClick={reprice} disabled={busy} style={btn}>↻ Re-price</button>
+                  </>
+                )}
+              </div>
+            </div>
+            <table style={{ width: '100%', fontSize: 13, color: 'var(--text-secondary)', borderCollapse: 'collapse' }}>
+              <tbody>
+                {!editing && p.perLeg?.map((l, i) => (
+                  <tr key={i}><td style={{ padding: '3px 0' }}>{l.from} → {l.to} · {l.hrs}h{l.source === 'estimate' ? ' (est)' : l.source === 'unknown-airport' ? ' (no coords)' : ''}</td><td style={{ textAlign: 'right' }}>{usd(l.cost)}</td></tr>
+                ))}
+                {editing ? PRICE_LINES.map(([key, label]) => (
+                  <tr key={key}><td style={{ padding: '4px 0' }}>{label}</td><td style={{ textAlign: 'right' }}>
+                    <input type="number" value={priceEdit[key]} onChange={(e) => setPriceEdit((d) => ({ ...d, [key]: e.target.value }))}
+                      style={{ width: 120, textAlign: 'right', padding: '3px 6px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6 }} />
+                  </td></tr>
+                )) : (
+                  <>
+                    <tr><td style={{ padding: '3px 0' }}>Flight cost</td><td style={{ textAlign: 'right' }}>{usd(p.flightCost)}</td></tr>
+                    {p.surcharge > 0 && <tr><td>Fuel surcharge</td><td style={{ textAlign: 'right' }}>{usd(p.surcharge)}</td></tr>}
+                    {p.landingCost > 0 && <tr><td>Landings ({p.landings})</td><td style={{ textAlign: 'right' }}>{usd(p.landingCost)}</td></tr>}
+                    {p.faCost > 0 && <tr><td>FA ({p.faCount})</td><td style={{ textAlign: 'right' }}>{usd(p.faCost)}</td></tr>}
+                    {p.crewCost > 0 && <tr><td>Crew ({p.crewCount})</td><td style={{ textAlign: 'right' }}>{usd(p.crewCost)}</td></tr>}
+                    {p.overnightCost > 0 && <tr><td>Overnights ({p.billableNights})</td><td style={{ textAlign: 'right' }}>{usd(p.overnightCost)}</td></tr>}
+                    {p.segmentFee > 0 && <tr><td>Segment fees</td><td style={{ textAlign: 'right' }}>{usd(p.segmentFee)}</td></tr>}
+                  </>
+                )}
+                <tr><td>FET ({Math.round(fetRate * 1000) / 10}%)</td><td style={{ textAlign: 'right' }}>{usd(live.fetAmount)}</td></tr>
+                <tr><td style={{ paddingTop: 6, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={{ paddingTop: 6, textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{usd(live.total)}</td></tr>
+              </tbody>
+            </table>
+            {editing && <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>Adjust any charge — FET and total update automatically. "Re-price" reverts to the rate-card calculation.</p>}
           </div>
-          <table style={{ width: '100%', fontSize: 13, color: 'var(--text-secondary)', borderCollapse: 'collapse' }}>
-            <tbody>
-              {meta.pricing.perLeg?.map((l, i) => (
-                <tr key={i}><td style={{ padding: '3px 0' }}>{l.from} → {l.to} · {l.hrs}h{l.source === 'estimate' ? ' (est)' : l.source === 'unknown-airport' ? ' (no coords)' : ''}</td><td style={{ textAlign: 'right' }}>{usd(l.cost)}</td></tr>
-              ))}
-              <tr><td style={{ padding: '3px 0' }}>Flight cost</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.flightCost)}</td></tr>
-              {meta.pricing.surcharge > 0 && <tr><td>Surcharge ({Math.round((meta.pricing.surchargePct || 0) * 100)}%)</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.surcharge)}</td></tr>}
-              {meta.pricing.landingCost > 0 && <tr><td>Landings ({meta.pricing.landings})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.landingCost)}</td></tr>}
-              {meta.pricing.faCost > 0 && <tr><td>FA ({meta.pricing.faCount})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.faCost)}</td></tr>}
-              {meta.pricing.crewCost > 0 && <tr><td>Crew ({meta.pricing.crewCount})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.crewCost)}</td></tr>}
-              {meta.pricing.overnightCost > 0 && <tr><td>Overnights ({meta.pricing.billableNights})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.overnightCost)}</td></tr>}
-              {meta.pricing.segmentFee > 0 && <tr><td>Segment fees</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.segmentFee)}</td></tr>}
-              <tr><td>FET ({Math.round((meta.pricing.fetRate || 0) * 1000) / 10}%)</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.fetAmount)}</td></tr>
-              <tr><td style={{ paddingTop: 6, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={{ paddingTop: 6, textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{usd(meta.pricing.total)}</td></tr>
-            </tbody>
-          </table>
-        </div>
-      ))}
+        );
+      })())}
 
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: '4px 2px 10px' }}>Legs</div>
       {legsForView.length ? <FlightsList legs={legsForView} hideColumns={HIDE} /> : (
