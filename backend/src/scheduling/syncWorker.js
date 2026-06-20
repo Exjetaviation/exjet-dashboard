@@ -9,6 +9,7 @@ import { syncLf } from './syncLf.js';
 import { syncDb } from './syncDb.js';
 import { autoCloseCompletedTrips } from './autoClose.js';
 import { calibratePerfProfiles } from './perfCalibrate.js';
+import { getAllCustomers } from '../services/levelflight.js';
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 let started = false;
@@ -21,6 +22,8 @@ export async function syncNow() {
   await autoCloseCompletedTrips(now).catch((e) => console.warn('[scheduling auto-close] failed:', e?.message || e));
   // Refresh the per-aircraft-type flight-time profile from history (best-effort).
   await calibratePerfProfiles().catch((e) => console.warn('[scheduling calibrate] failed:', e?.message || e));
+  // Warm the LevelFlight passenger directory cache so the autocomplete is instant.
+  getAllCustomers().catch((e) => console.warn('[scheduling customers warm] failed:', e?.message || e));
   return counts;
 }
 

@@ -492,18 +492,29 @@ router.put('/trips/:lfOid/passengers', requireSchedulingEditor, async (req, res)
   }
 });
 
-// GET /api/scheduling/passengers/suggest — distinct previous passengers (for the
-// "add from previous passengers" autocomplete).
+// GET /api/scheduling/passengers/suggest — passenger directory for the autocomplete:
+// LevelFlight's full customer directory merged with passengers entered here (which
+// carry DOB/weight). Deduped by name.
 router.get('/passengers/suggest', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('scheduling_passengers').select('name, dob, weight_lbs').not('name', 'is', null);
-    if (error) throw error;
     const byName = new Map();
-    for (const p of data || []) {
-      const n = (p.name || '').trim(); if (!n) continue;
-      if (!byName.has(n)) byName.set(n, { name: n, dob: p.dob || null, weight_lbs: p.weight_lbs ?? null });
-    }
+    const put = (name, extra) => {
+      const n = (name || '').trim(); if (!n) return;
+      const cur = byName.get(n) || { name: n, dob: null, weight_lbs: null, company: null };
+      for (const [k, v] of Object.entries(extra)) if (v != null && cur[k] == null) cur[k] = v; // fill, don't clobber
+      byName.set(n, cur);
+    };
+
+    // LevelFlight customer directory (best-effort; cached in the service).
+    try {
+      const customers = await lf.getAllCustomers();
+      for (const c of customers) put(c.name, { company: c.company });
+    } catch (e) { console.warn('[passengers/suggest] LF customers failed:', e?.message || e); }
+
+    // Passengers entered here — fill in DOB/weight where we have them.
+    const { data } = await supabase.from('scheduling_passengers').select('name, dob, weight_lbs').not('name', 'is', null);
+    for (const p of data || []) put(p.name, { dob: p.dob || null, weight_lbs: p.weight_lbs ?? null });
+
     res.json({ passengers: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)) });
   } catch (e) {
     res.status(502).json({ error: e.message, passengers: [] });

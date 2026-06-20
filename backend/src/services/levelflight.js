@@ -52,6 +52,47 @@ export const getPilotsList = async () => (await (await lf()).get('/api/pilots/li
 export const getAttendants = async () => (await (await lf()).get('/api/attendants/list')).data;
 export const getUsers = async () => (await (await lf()).get('/api/users/list')).data;
 
+// Customer (= passenger) directory, paginated by first-letter category.
+// NOTE: real path is /api/customer/list/{letter}/{page} (slashes), not the hyphenated
+// form the swagger lists. 25 per page.
+export const getCustomersByLetter = async (letter, page = 1) =>
+  (await (await lf()).get(`/api/customer/list/${encodeURIComponent(letter)}/${page}`)).data;
+
+const CUSTOMER_PAGE = 25;
+const CUSTOMER_LETTERS = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+let _customerCache = null;
+let _customerCacheAt = 0;
+const CUSTOMER_TTL_MS = 60 * 60 * 1000; // 1h
+
+// Full passenger directory across all letters, normalized + cached.
+export const getAllCustomers = async () => {
+  if (_customerCache && Date.now() - _customerCacheAt < CUSTOMER_TTL_MS) return _customerCache;
+  const out = [];
+  const seen = new Set();
+  for (const letter of CUSTOMER_LETTERS) {
+    for (let page = 1; page <= 12; page++) {
+      let arr;
+      try {
+        const d = await getCustomersByLetter(letter, page);
+        arr = Array.isArray(d) ? d : (d?.results || d?.customers || d?.data || d?.list || []);
+      } catch { break; }
+      if (!arr.length) break;
+      for (const c of arr) {
+        const id = c._id?.$oid || c._id;
+        if (id && seen.has(id)) continue; if (id) seen.add(id);
+        const name = [c.firstName, c.middleName, c.lastName].map((s) => (s || '').trim()).filter(Boolean).join(' ');
+        if (!name) continue;
+        const company = Array.isArray(c.company) ? (c.company[0]?.name || null) : (c.company?.name || c.company || null);
+        out.push({ name, email: c.email || null, company });
+      }
+      if (arr.length < CUSTOMER_PAGE) break; // last page for this letter
+    }
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  _customerCache = out; _customerCacheAt = Date.now();
+  return out;
+};
+
 export const getScheduledLegs = async (startTimestamp) => {
   const client = await lf();
   const res = await client.post('/api/analytics/scheduledLegs', {
