@@ -5,8 +5,12 @@ import { apiFetch } from '../lib/api';
 const FIELDS = [
   { key: 'aircraft_tail',        label: 'Tail Number',                  type: 'text',   placeholder: 'N69FP' },
   { key: 'aircraft_type',        label: 'Aircraft Type',                type: 'text',   placeholder: 'Gulfstream GIV SP' },
-  { key: 'hourly_rate',          label: 'Hourly Rate ($)',               type: 'number', placeholder: '8000', note: 'Includes landing & flight attendant' },
-  { key: 'positioning_rate',     label: 'Positioning Rate ($/hr)',       type: 'number', placeholder: '4000' },
+  { key: 'hourly_rate',          label: 'Hourly Rate ($)',               type: 'number', placeholder: '9000', note: 'Flight-time rate; surcharge / FA / crew / landings are separate' },
+  { key: 'surcharge_pct',        label: 'Fuel Surcharge (decimal)',      type: 'number', placeholder: '0.20', note: '0.20 = 20% of flight cost' },
+  { key: 'positioning_rate',     label: 'Positioning Rate ($/hr)',       type: 'number', placeholder: '4500' },
+  { key: 'fa_fee',               label: 'Flight Attendant Fee ($ each)', type: 'number', placeholder: '700' },
+  { key: 'crew_fee',             label: 'Crew Fee ($ each)',             type: 'number', placeholder: '600' },
+  { key: 'landing_fee',          label: 'Landing Fee ($ each)',          type: 'number', placeholder: '0' },
   { key: 'min_hours',            label: 'Minimum Hours',                 type: 'number', placeholder: '0' },
   { key: 'overnight_fee',        label: 'Overnight Fee ($/night)',       type: 'number', placeholder: '1500' },
   { key: 'overnight_threshold',  label: 'Free Nights Before Fee Kicks In', type: 'number', placeholder: '3', note: 'e.g. 3 = fee starts on night 4' },
@@ -148,7 +152,11 @@ export default function RateCards() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0', padding: '4px 0' }}>
                 {[
                   ['Hourly Rate', fmt(card.hourly_rate)],
+                  ['Surcharge', card.surcharge_pct ? `${Math.round(card.surcharge_pct * 100)}%` : '—'],
                   ['Positioning', fmt(card.positioning_rate)],
+                  ['FA Fee', fmt(card.fa_fee)],
+                  ['Crew Fee', fmt(card.crew_fee)],
+                  ['Landing Fee', fmt(card.landing_fee)],
                   ['Min Hours', card.min_hours || '—'],
                   ['Overnight Fee', fmt(card.overnight_fee)],
                   ['Free Nights', `First ${card.overnight_threshold || 3} nights free`],
