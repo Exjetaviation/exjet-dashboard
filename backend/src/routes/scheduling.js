@@ -12,6 +12,7 @@ import { quoteSummary } from '../scheduling/quoteSummary.js';
 import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 import { recomputeFromInputs } from '../scheduling/pricing.js';
+import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 
 const router = express.Router();
 
@@ -314,6 +315,40 @@ router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, r
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid/price-lines:', e.message);
     res.status(500).json({ error: 'Failed to save pricing' });
+  }
+});
+
+// PATCH /api/scheduling/trips/:lfOid/crew — assign PIC / SIC / Flight Attendant to
+// the whole trip. Writes the crew into every leg's snapshot (seat 2/3/7) so it shows
+// in the Crew list, itinerary, and trip sheet. Mirrored trips are flagged
+// locally_modified so the edit is revertable.
+router.patch('/trips/:lfOid/crew', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, origin').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+
+    const { pilots, attendants } = buildCrewArrays(req.body || {});
+    const { data: legRows, error: le } = await supabase
+      .from('scheduling_legs').select('id, lf_synced_snapshot').eq('trip_id', trip.id);
+    if (le) throw le;
+    for (const lr of legRows || []) {
+      const snap = lr.lf_synced_snapshot || {};
+      snap.pilots = pilots;
+      snap.attendants = attendants;
+      const patch = { lf_synced_snapshot: snap };
+      if (trip.origin === 'levelflight') patch.locally_modified = true;
+      const { error: ue } = await supabase.from('scheduling_legs').update(patch).eq('id', lr.id);
+      if (ue) throw ue;
+    }
+    if (trip.origin === 'levelflight') {
+      await supabase.from('scheduling_trips').update({ locally_modified: true, modified_at: new Date().toISOString(), modified_by: req.user?.email || null }).eq('id', trip.id);
+    }
+    res.json({ ok: true, pilots, attendants });
+  } catch (e) {
+    console.error('PATCH /api/scheduling/trips/:lfOid/crew:', e.message);
+    res.status(500).json({ error: 'Failed to assign crew' });
   }
 });
 
