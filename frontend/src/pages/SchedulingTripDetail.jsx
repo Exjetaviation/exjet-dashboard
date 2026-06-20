@@ -93,7 +93,7 @@ export default function SchedulingTripDetail() {
 
   useEffect(() => { load(); loadPassengers(); loadDocuments(); }, [load, loadPassengers, loadDocuments]);
 
-  const uploadDoc = async (file) => {
+  const uploadDoc = async (file, passengerId = null) => {
     if (!file) return;
     setDocBusy(true); setError(null);
     try {
@@ -105,7 +105,7 @@ export default function SchedulingTripDetail() {
       });
       const r = await apiFetch(`/api/scheduling/trips/${id}/documents`, {
         method: 'POST',
-        body: JSON.stringify({ name: file.name, doc_type: docType, content_type: file.type, data_base64 }),
+        body: JSON.stringify({ name: file.name, doc_type: passengerId ? 'passenger_id' : docType, content_type: file.type, data_base64, passenger_id: passengerId }),
       });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Upload failed (${r.status})`); }
       await loadDocuments();
@@ -206,7 +206,7 @@ export default function SchedulingTripDetail() {
   const { data: paxSuggestData } = useApi('/api/scheduling/passengers/suggest');
   const paxSuggestions = paxSuggestData?.passengers || [];
   const blankPax = () => ({ name: '', weight_lbs: '', dob: '', note: '' });
-  const startPaxEdit = () => setPaxEdit(passengers.length ? passengers.map((p) => ({ name: p.name || '', weight_lbs: p.weight_lbs ?? '', dob: p.dob || '', note: p.note || '' })) : [blankPax()]);
+  const startPaxEdit = () => setPaxEdit(passengers.length ? passengers.map((p) => ({ id: p.id, name: p.name || '', weight_lbs: p.weight_lbs ?? '', dob: p.dob || '', note: p.note || '' })) : [blankPax()]);
   const updatePax = (i, field, v) => setPaxEdit((d) => d.map((p, idx) => (idx === i ? { ...p, [field]: v } : p)));
   const addPax = () => setPaxEdit((d) => [...d, blankPax()]);
   const removePax = (i) => setPaxEdit((d) => d.filter((_, idx) => idx !== i));
@@ -514,15 +514,34 @@ export default function SchedulingTripDetail() {
             <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Start typing a name to pick from previous passengers (fills DOB &amp; weight).</p>
           </div>
         ) : passengers.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {passengers.map((p) => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
-                {p.weight_lbs != null && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.weight_lbs} lbs</span>}
-                {p.dob && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>DOB {p.dob}</span>}
-                {p.note && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>· {p.note}</span>}
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {passengers.map((p) => {
+              const pDocs = documents.filter((d) => d.passenger_id === p.id);
+              return (
+                <div key={p.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
+                    {p.weight_lbs != null && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.weight_lbs} lbs</span>}
+                    {p.dob && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>DOB {p.dob}</span>}
+                    {p.note && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>· {p.note}</span>}
+                    <label style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--accent)', cursor: docBusy ? 'default' : 'pointer', opacity: docBusy ? 0.6 : 1 }}>
+                      ↑ Upload ID/doc
+                      <input type="file" disabled={docBusy} onChange={(e) => { uploadDoc(e.target.files?.[0], p.id); e.target.value = ''; }} style={{ display: 'none' }} />
+                    </label>
+                  </div>
+                  {pDocs.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 5, paddingLeft: 2 }}>
+                      {pDocs.map((d) => (
+                        <span key={d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 8px' }}>
+                          {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }}>{d.name}</a> : <span style={{ color: 'var(--text-primary)' }}>{d.name}</span>}
+                          <button onClick={() => deleteDoc(d.id)} disabled={docBusy} title="Delete" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 12, padding: 0 }}>✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{pax > 0 ? `${pax} passenger${pax === 1 ? '' : 's'} on the legs — add names to the manifest.` : 'No passengers on the manifest.'}</p>}
       </Section>
@@ -561,9 +580,9 @@ export default function SchedulingTripDetail() {
             </label>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Stored privately · max 25 MB</span>
           </div>
-          {documents.length ? (
+          {documents.filter((d) => !d.passenger_id).length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {documents.map((d) => (
+              {documents.filter((d) => !d.passenger_id).map((d) => (
                 <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)', background: 'rgba(79,142,247,0.12)', border: '1px solid rgba(79,142,247,0.3)', borderRadius: 20, padding: '1px 8px', textTransform: 'capitalize' }}>{(d.doc_type || 'other').replace('_', ' ')}</span>
                   {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{d.name}</a> : <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{d.name}</span>}
@@ -572,7 +591,7 @@ export default function SchedulingTripDetail() {
                 </div>
               ))}
             </div>
-          ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No documents uploaded yet.</p>}
+          ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No trip documents yet.</p>}
         </div>
       </Section>
 
