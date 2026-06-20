@@ -458,6 +458,80 @@ router.get('/passengers/suggest', async (req, res) => {
   }
 });
 
+const DOC_BUCKET = 'scheduling-docs';        // private Supabase Storage bucket
+const DOC_COLS = 'id, name, doc_type, storage_path, content_type, size_bytes, created_at';
+const safeName = (s) => String(s || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+
+// GET /api/scheduling/trips/:lfOid/documents — list a trip's documents with
+// short-lived signed download URLs.
+router.get('/trips/:lfOid/documents', async (req, res) => {
+  try {
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id').eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const { data: rows, error: de } = await supabase
+      .from('scheduling_documents').select(DOC_COLS).eq('trip_id', trip.id).order('created_at', { ascending: false });
+    if (de) throw de;
+    const docs = [];
+    for (const d of rows || []) {
+      const { data: signed } = await supabase.storage.from(DOC_BUCKET).createSignedUrl(d.storage_path, 3600);
+      docs.push({ ...d, url: signed?.signedUrl || null });
+    }
+    res.json({ documents: docs });
+  } catch (e) {
+    console.error('GET documents:', e.message);
+    res.status(500).json({ error: 'Failed to load documents' });
+  }
+});
+
+// POST /api/scheduling/trips/:lfOid/documents — upload a document (base64 JSON, no
+// multipart dependency). Body: { name, doc_type, content_type, data_base64 }.
+router.post('/trips/:lfOid/documents', requireSchedulingEditor, express.json({ limit: '25mb' }), async (req, res) => {
+  try {
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id').eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const b = req.body || {};
+    const name = safeName(b.name);
+    const base64 = (b.data_base64 || '').replace(/^data:[^;]+;base64,/, '');
+    if (!base64) return res.status(400).json({ error: 'No file data' });
+    const buffer = Buffer.from(base64, 'base64');
+    if (!buffer.length) return res.status(400).json({ error: 'Empty file' });
+    const storage_path = `${trip.id}/${Date.now()}-${name}`;
+    const { error: ue } = await supabase.storage.from(DOC_BUCKET)
+      .upload(storage_path, buffer, { contentType: b.content_type || 'application/octet-stream', upsert: false });
+    if (ue) {
+      if (/bucket/i.test(ue.message)) return res.status(500).json({ error: `Storage bucket "${DOC_BUCKET}" is missing — create it (private) in Supabase.` });
+      throw ue;
+    }
+    const { data: row, error: ie } = await supabase.from('scheduling_documents').insert({
+      trip_id: trip.id, name, doc_type: (b.doc_type || 'other').trim() || 'other',
+      storage_path, content_type: b.content_type || null, size_bytes: buffer.length, uploaded_by: req.user?.email || null,
+    }).select(DOC_COLS).single();
+    if (ie) throw ie;
+    res.status(201).json({ document: row });
+  } catch (e) {
+    console.error('POST documents:', e.message);
+    res.status(500).json({ error: 'Failed to upload document' });
+  }
+});
+
+// DELETE /api/scheduling/documents/:id — remove a document (storage + row).
+router.delete('/documents/:id', requireSchedulingEditor, async (req, res) => {
+  try {
+    const { data: doc, error } = await supabase
+      .from('scheduling_documents').select('id, storage_path').eq('id', req.params.id).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Document not found' }); throw error; }
+    await supabase.storage.from(DOC_BUCKET).remove([doc.storage_path]);
+    const { error: de } = await supabase.from('scheduling_documents').delete().eq('id', doc.id);
+    if (de) throw de;
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE document:', e.message);
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
 // POST /api/scheduling/trips/:lfOid/revert — restore the working copy from the LF snapshot.
 router.post('/trips/:lfOid/revert', requireSchedulingEditor, async (req, res) => {
   try {
