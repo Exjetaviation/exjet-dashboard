@@ -126,6 +126,27 @@ const destinationIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
+// Sample a great-circle path (slerp) between two {lat,lng} airports into N points —
+// the planned route for an upcoming flight (before a real ADS-B track exists).
+const gcPath = (a, b, n = 48) => {
+  const toR = (d) => (d * Math.PI) / 180, toD = (r) => (r * 180) / Math.PI;
+  const lat1 = toR(a.lat), lon1 = toR(a.lng), lat2 = toR(b.lat), lon2 = toR(b.lng);
+  const dLat = lat2 - lat1, dLon = lon2 - lon1;
+  const hav = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const dsig = 2 * Math.asin(Math.min(1, Math.sqrt(hav)));
+  if (!(dsig > 0)) return [[a.lat, a.lng], [b.lat, b.lng]];
+  const pts = [];
+  for (let k = 0; k <= n; k++) {
+    const f = k / n;
+    const A = Math.sin((1 - f) * dsig) / Math.sin(dsig), B = Math.sin(f * dsig) / Math.sin(dsig);
+    const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+    const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+    const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+    pts.push([toD(Math.atan2(z, Math.sqrt(x * x + y * y))), toD(Math.atan2(y, x))]);
+  }
+  return pts;
+};
+
 // Initial bearing (degrees) from a [lat,lng] to b, for orienting the replay icon.
 const bearing = (a, b) => {
   const toR = (d) => (d * Math.PI) / 180;
@@ -156,7 +177,6 @@ export default function Map() {
   const [selectedTail, setSelectedTail] = useState(null);
   const [prevDays, setPrevDays] = useState(30);
   const [prevFlights, setPrevFlights] = useState([]);
-  const [leftTab, setLeftTab] = useState('fleet');        // 'fleet' | 'history'
   const [replayFlight, setReplayFlight] = useState(null); // the previous flight being replayed
   const [replayNonce, setReplayNonce] = useState(0);      // bump to (re)start the replay
   const [replayPct, setReplayPct] = useState(0);
@@ -361,15 +381,18 @@ export default function Map() {
     const track = replayFlight?.track;
     if (!map || !track || track.length < 2) return;
 
+    const planned = !!replayFlight.planned;
+    const trailColor = planned ? '#a855f7' : '#38bdf8';   // planned = purple, flown = blue
+    const planeColor = planned ? '#a855f7' : '#f59e0b';
     const group = L.layerGroup().addTo(map);
     prevLayerRef.current = group;
-    L.polyline(track, { color: '#38bdf8', weight: 1.5, opacity: 0.28 }).addTo(group);
+    L.polyline(track, { color: trailColor, weight: 1.5, opacity: 0.28, dashArray: planned ? '5 7' : null }).addTo(group);
     // Airport stops along a multi-leg trip.
     for (const wp of (replayFlight.waypoints || [])) {
       if (wp) L.circleMarker(wp, { radius: 3.5, color: '#94a3b8', weight: 1.5, fillColor: '#0b0f17', fillOpacity: 1, interactive: false }).addTo(group);
     }
-    const trail = L.polyline([track[0]], { color: '#38bdf8', weight: 3, opacity: 0.9 }).addTo(group);
-    const plane = L.marker(track[0], { icon: createAircraftIcon('#f59e0b', true, bearing(track[0], track[1])), interactive: false, zIndexOffset: 1000 }).addTo(group);
+    const trail = L.polyline([track[0]], { color: trailColor, weight: 3, opacity: 0.9, dashArray: planned ? '5 7' : null }).addTo(group);
+    const plane = L.marker(track[0], { icon: createAircraftIcon(planeColor, true, bearing(track[0], track[1])), interactive: false, zIndexOffset: 1000 }).addTo(group);
     map.fitBounds(L.latLngBounds(track), { padding: [70, 70], maxZoom: 9 });
 
     // Arc-length parameterization: animate by DISTANCE travelled, not point index,
@@ -470,110 +493,104 @@ export default function Map() {
 
         {/* Left sidebar: Fleet roster / flight History */}
         <div style={{ width: '220px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)' }}>
-            {[['fleet', 'Fleet'], ['history', 'History']].map(([id, label]) => (
-              <button key={id} onClick={() => setLeftTab(id)}
-                style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none',
-                  color: leftTab === id ? 'var(--accent)' : 'var(--text-secondary)',
-                  borderBottom: leftTab === id ? '2px solid var(--accent)' : '2px solid transparent' }}>{label}</button>
-            ))}
+          {/* Aircraft picker (replaces the Fleet tab) */}
+          <select
+            value={selectedTail || ''}
+            onChange={(e) => { const t = e.target.value || null; const ac = aircraft.find(a => a.tail === t); if (ac) flyTo(ac); else { setSelectedTail(t); setSelected(null); } }}
+            style={{ fontSize: 13, fontWeight: 600, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+            <option value="">Select aircraft…</option>
+            {aircraft.map(ac => <option key={ac.tail} value={ac.tail}>{ac.tail} · {ac.statusLabel}</option>)}
+          </select>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>History</span>
+            <select value={prevDays} onChange={e => setPrevDays(Number(e.target.value))}
+              style={{ fontSize: 11, padding: '3px 5px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+              <option value={7}>7d</option><option value={30}>30d</option><option value={90}>90d</option><option value={365}>1yr</option>
+            </select>
           </div>
 
-          {leftTab === 'fleet' ? (
-            loading ? (
-              <div style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>Loading...</div>
-            ) : aircraft.length === 0 ? (
-              <div style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>No aircraft found</div>
-            ) : aircraft.map(ac => (
-            <div key={ac.tail}
-              onClick={() => flyTo(ac)}
-              style={{
-                background: selected?.tail === ac.tail ? 'rgba(79,142,247,0.1)' : 'var(--bg-card)',
-                border: `1px solid ${selected?.tail === ac.tail ? 'var(--accent)' : 'var(--border)'}`,
-                borderRadius: '10px', padding: '12px 14px',
-                cursor: 'pointer', transition: 'all .15s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent)' }}>{ac.tail}</span>
-                <span style={{
-                  fontSize: '10px', fontWeight: '600', padding: '2px 7px',
-                  borderRadius: '20px', background: `${ac.statusColor}22`,
-                  color: ac.statusColor, border: `1px solid ${ac.statusColor}44`,
-                }}>{ac.statusLabel}</span>
-              </div>
-              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0 }}>{ac.type?.replace('Gulfstream ', 'G') || '—'}</p>
-              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px' }}>{ac.airport || '—'}</p>
-              <span style={{
-                display: 'inline-block', marginTop: '6px', fontSize: '9px', fontWeight: '600',
-                letterSpacing: '0.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: '20px',
-                background: ac.source === 'adsb' ? 'rgba(34,197,94,0.12)' : 'rgba(136,136,160,0.12)',
-                color: ac.source === 'adsb' ? '#22c55e' : 'var(--text-secondary)',
-                border: `1px solid ${ac.source === 'adsb' ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
-              }}>{ac.source === 'adsb' ? 'Live · ADS-B' : 'Scheduled'}</span>
-            </div>
-          ))
-          ) : !selectedTail ? (
+          {!selectedTail ? (
             <div style={{ padding: '14px 10px', color: 'var(--text-secondary)', fontSize: '12px', lineHeight: 1.5 }}>
-              Select an aircraft in the <strong style={{ color: 'var(--text-primary)' }}>Fleet</strong> tab to replay its previous flights.
+              Pick an aircraft above to see its flown and upcoming trips.
             </div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{selectedTail}</span>
-                <select value={prevDays} onChange={e => setPrevDays(Number(e.target.value))}
-                  style={{ fontSize: 11, padding: '3px 5px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
-                  <option value={7}>7d</option><option value={30}>30d</option><option value={90}>90d</option><option value={365}>1yr</option>
-                </select>
-              </div>
-              {(() => {
-                const flights = prevFlights.filter(f => f.track && f.track.length >= 2);
-                if (!flights.length) return <p style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '4px 2px' }}>{prevFlights.length ? 'No recorded tracks in range.' : 'Loading flights…'}</p>;
-                const fmt = (ms) => (ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
-                // Group legs into trips by tripId (each leg its own "trip" if untagged),
-                // ordered by departure; concatenate leg tracks into one continuous replay.
-                const byTrip = new Map();
-                for (const f of flights) {
-                  const key = f.tripId != null ? `t${f.tripId}` : `l${f.legId}`;
-                  if (!byTrip.has(key)) byTrip.set(key, { key, tripId: f.tripId, legs: [] });
-                  byTrip.get(key).legs.push(f);
-                }
-                const trips = [...byTrip.values()].map(t => {
-                  const legs = t.legs.sort((a, b) => (a.depTime || 0) - (b.depTime || 0));
-                  const airports = [legs[0].from, ...legs.map(l => l.to)].filter(Boolean);
-                  return {
-                    ...t, legs,
-                    route: airports.join(' → '),
-                    depTime: legs[0].depTime,
-                    track: legs.flatMap(l => l.track),
-                  };
-                }).sort((a, b) => (b.depTime || 0) - (a.depTime || 0));
+          ) : (() => {
+            const now = Date.now();
+            const fmt = (ms) => (ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
-                return trips.map((t, idx) => {
-                  const active = replayFlight?.legId === t.key;
-                  return (
-                    <div key={t.key || idx} onClick={() => { setReplayFlight({ legId: t.key, track: t.track, waypoints: [t.legs[0].track[0], ...t.legs.map(l => l.track[l.track.length - 1])] }); setReplayNonce(n => n + 1); }}
-                      style={{ background: active ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '9px 11px', cursor: 'pointer' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t.route}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{fmt(t.depTime)}{t.tripId != null ? ` · #${t.tripId}` : ''} · {t.legs.length} leg{t.legs.length === 1 ? '' : 's'}</div>
-                      {active && (
-                        <div style={{ marginTop: 7 }}>
-                          <div style={{ height: 4, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
-                            <div style={{ width: `${replayPct}%`, height: '100%', background: '#f59e0b' }} />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{replayDone ? '● Trip complete' : `Replaying trip… ${replayPct}%`}</span>
-                            <button onClick={(e) => { e.stopPropagation(); setReplayNonce(n => n + 1); }}
-                              style={{ padding: '3px 9px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>↺ Replay</button>
-                          </div>
-                        </div>
-                      )}
+            // Flown trips: past flights with real ADS-B tracks, grouped by trip.
+            const flownByTrip = new Map();
+            for (const f of prevFlights.filter(f => f.track && f.track.length >= 2)) {
+              const key = f.tripId != null ? `t${f.tripId}` : `l${f.legId}`;
+              if (!flownByTrip.has(key)) flownByTrip.set(key, { key, tripId: f.tripId, legs: [] });
+              flownByTrip.get(key).legs.push(f);
+            }
+            const flown = [...flownByTrip.values()].map(t => {
+              const ls = t.legs.sort((a, b) => (a.depTime || 0) - (b.depTime || 0));
+              return { key: t.key, tripId: t.tripId, planned: false, legs: ls,
+                route: [ls[0].from, ...ls.map(l => l.to)].filter(Boolean).join(' → '),
+                depTime: ls[0].depTime, track: ls.flatMap(l => l.track),
+                waypoints: [ls[0].track[0], ...ls.map(l => l.track[l.track.length - 1])] };
+            }).sort((a, b) => (b.depTime || 0) - (a.depTime || 0));
+            const flownTripIds = new Set(flown.map(t => t.tripId).filter(v => v != null));
+
+            // Upcoming trips: future scheduled legs for this tail, drawn as planned
+            // great-circle paths. They convert to the real flown track automatically
+            // once flown (the leg leaves this future set and appears in `flown`).
+            const futByTrip = new Map();
+            for (const l of legs.filter(l => l.dispatch?.aircraft?.tailNumber === selectedTail && (l.departure?.time || 0) > now && l._calc?.from?.location && l._calc?.to?.location)) {
+              const tid = l.dispatch?.tripId;
+              if (tid != null && flownTripIds.has(tid)) continue;
+              const key = tid != null ? `t${tid}` : `l${l._id?.$oid}`;
+              if (!futByTrip.has(key)) futByTrip.set(key, { key, tripId: tid, legs: [] });
+              futByTrip.get(key).legs.push(l);
+            }
+            const upcoming = [...futByTrip.values()].map(t => {
+              const ls = t.legs.sort((a, b) => (a.departure?.time || 0) - (b.departure?.time || 0));
+              const segs = ls.map(l => gcPath(l._calc.from.location, l._calc.to.location));
+              return { key: t.key, tripId: t.tripId, planned: true, legs: ls,
+                route: [ls[0].departure?.airport, ...ls.map(l => l.arrival?.airport)].filter(Boolean).join(' → '),
+                depTime: ls[0].departure?.time, track: segs.flat(),
+                waypoints: [segs[0][0], ...segs.map(s => s[s.length - 1])] };
+            }).sort((a, b) => (a.depTime || 0) - (b.depTime || 0));
+
+            const card = (t) => {
+              const active = replayFlight?.legId === t.key;
+              const accent = t.planned ? '#a855f7' : '#f59e0b';
+              return (
+                <div key={t.key} onClick={() => { setReplayFlight({ legId: t.key, track: t.track, waypoints: t.waypoints, planned: t.planned }); setReplayNonce(n => n + 1); }}
+                  style={{ background: active ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '9px 11px', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t.route}</span>
+                    {t.planned && <span style={{ fontSize: 9, fontWeight: 600, color: '#a855f7', background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.35)', borderRadius: 20, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Planned</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{fmt(t.depTime)}{t.tripId != null ? ` · #${t.tripId}` : ''} · {t.legs.length} leg{t.legs.length === 1 ? '' : 's'}</div>
+                  {active && (
+                    <div style={{ marginTop: 7 }}>
+                      <div style={{ height: 4, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                        <div style={{ width: `${replayPct}%`, height: '100%', background: accent }} />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{replayDone ? (t.planned ? '● Route preview' : '● Trip complete') : `${t.planned ? 'Previewing' : 'Replaying'}… ${replayPct}%`}</span>
+                        <button onClick={(e) => { e.stopPropagation(); setReplayNonce(n => n + 1); }}
+                          style={{ padding: '3px 9px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>↺ Replay</button>
+                      </div>
                     </div>
-                  );
-                });
-              })()}
-            </>
-          )}
+                  )}
+                </div>
+              );
+            };
+
+            const sub = (label) => <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '6px 2px 0' }}>{label}</div>;
+            if (!upcoming.length && !flown.length) return <p style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '4px 2px' }}>{prevFlights.length ? 'No flown or upcoming trips in range.' : 'Loading…'}</p>;
+            return (
+              <>
+                {upcoming.length > 0 && sub('Upcoming')}
+                {upcoming.map(card)}
+                {flown.length > 0 && sub('Flown')}
+                {flown.map(card)}
+              </>
+            );
+          })()}
         </div>
 
         {/* Map */}
