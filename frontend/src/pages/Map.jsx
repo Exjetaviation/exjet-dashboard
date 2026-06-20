@@ -368,9 +368,17 @@ export default function Map() {
     const plane = L.marker(track[0], { icon: createAircraftIcon('#f59e0b', true, bearing(track[0], track[1])), interactive: false, zIndexOffset: 1000 }).addTo(group);
     map.fitBounds(L.latLngBounds(track), { padding: [70, 70], maxZoom: 9 });
 
+    // Arc-length parameterization: animate by DISTANCE travelled, not point index,
+    // so the plane moves at a constant visual speed even though ADS-B logs points
+    // densely in taxi/climb and sparsely in cruise (the cause of slow-then-fast).
+    const segDist = (a, b) => { const dLat = b[0] - a[0]; const dLng = (b[1] - a[1]) * Math.cos((a[0] + b[0]) * Math.PI / 360); return Math.sqrt(dLat * dLat + dLng * dLng); };
+    const cum = [0];
+    for (let k = 1; k < track.length; k++) cum[k] = cum[k - 1] + segDist(track[k - 1], track[k]);
+    const totalLen = cum[track.length - 1] || 1;
+
     const DURATION = 8000;
     const LOOK = 3;            // points to look ahead when computing heading (smooths noisy fixes)
-    let start = null, lastPct = -1, hdg = bearing(track[0], track[Math.min(LOOK, track.length - 1)]);
+    let start = null, lastPct = -1, seg = 0, hdg = bearing(track[0], track[Math.min(LOOK, track.length - 1)]);
     // Rotate the marker's existing element instead of rebuilding the icon each frame
     // (setIcon every frame is what made the plane flicker/glitch).
     const rotate = (deg) => {
@@ -382,9 +390,12 @@ export default function Map() {
     const tick = (ts) => {
       if (start == null) start = ts;
       const p = Math.min((ts - start) / DURATION, 1);
-      const f = p * (track.length - 1);
-      const i = Math.min(Math.floor(f), track.length - 2);
-      const frac = f - i;
+      const dist = p * totalLen;
+      // Advance the segment pointer to where cumulative distance reaches `dist`.
+      while (seg < track.length - 2 && cum[seg + 1] < dist) seg++;
+      const i = seg;
+      const segLen = cum[i + 1] - cum[i];
+      const frac = segLen > 0 ? Math.min((dist - cum[i]) / segLen, 1) : 0;
       const a = track[i], b = track[i + 1];
       const lat = a[0] + (b[0] - a[0]) * frac, lng = a[1] + (b[1] - a[1]) * frac;
       plane.setLatLng([lat, lng]);
