@@ -25,6 +25,17 @@ export function flightType(purpose) {
   return name ? { part: 91, label: `Part 91 · ${name}` } : { part: 135, label: '135 · Charter' };
 }
 
+// Resolve a leg's flight type. Owner/Part-91 trips often tag the legs with the
+// implicit charter purpose (7, not in the enum) while the OWNER classification
+// lives on the dispatch. So: use the leg purpose when it's a known Part-91 type,
+// otherwise inherit the dispatch purpose. This keeps owner flights from showing
+// as 135 Charter.
+export function legFlightType(r) {
+  const legP = r?.purpose;
+  const dispP = r?.dispatch?.purpose;
+  return flightType(PURPOSE_91[legP] ? legP : (dispP ?? legP));
+}
+
 function mapFbo(node) {
   const f = node?.fbo;
   if (!f) return null;
@@ -54,12 +65,17 @@ function crewMember(entry, empById) {
   return { name: fullName(entry.user), dob: detail.dob ?? null, phone: detail.phone ?? null };
 }
 
-export function mapReleaseLeg(r, empById = new Map()) {
+export function mapReleaseLeg(r, empById = new Map(), paxById = new Map()) {
   const pilots = r?.pilots || [];
+  // Per-leg passenger manifest: the leg lists who's aboard (by user id); join to the
+  // trip-level pax details. null when the leg carries no explicit per-leg list.
+  const legManifest = Array.isArray(r?.passengers)
+    ? r.passengers.map((pp) => paxById.get(oid(pp?.user?._id)) || (pp?.user ? { name: fullName(pp.user) } : null)).filter(Boolean)
+    : null;
   const ca = (r?.attendants || []).map((a) => crewMember(a, empById)).filter(Boolean);
   return {
     callSign: r?.callSign || null,
-    flightType: flightType(r?.purpose ?? r?.dispatch?.purpose),
+    flightType: legFlightType(r),
     from: r?.departure?.airport ?? null,
     to: r?.arrival?.airport ?? null,
     fromName: r?._calc?.from?.name ?? null,
@@ -83,6 +99,7 @@ export function mapReleaseLeg(r, empById = new Map()) {
     depFbo: mapFbo(r?.departure),
     arrFbo: mapFbo(r?.arrival),
     pax: r?.passengerCount ?? (r?.passengers || []).length ?? null,
+    manifest: legManifest,
     crew: {
       pic: crewMember(pilots.find((p) => p.seat === 2) || pilots[0], empById),
       sic: crewMember(pilots.find((p) => p.seat === 3) || pilots[1], empById),
@@ -94,18 +111,19 @@ export function mapReleaseLeg(r, empById = new Map()) {
   };
 }
 
+function paxRow(p) {
+  const doc = (p.documents || [])[0];
+  return {
+    name: p._fullName || fullName(p),
+    gender: p.gender || null,
+    weight: p.weight ?? null,
+    dob: p.birthday ?? null,
+    citizenship: p.citizenship || null,
+    passport: doc ? [doc.number, doc.country].filter(Boolean).join(' - ') : null,
+  };
+}
 export function mapManifest(pax = []) {
-  return pax.map((p) => {
-    const doc = (p.documents || [])[0];
-    return {
-      name: p._fullName || fullName(p),
-      gender: p.gender || null,
-      weight: p.weight ?? null,
-      dob: p.birthday ?? null,
-      citizenship: p.citizenship || null,
-      passport: doc ? [doc.number, doc.country].filter(Boolean).join(' - ') : null,
-    };
-  });
+  return pax.map(paxRow);
 }
 
 export function mapMaintenance(d) {
@@ -136,7 +154,9 @@ export async function buildCrewTripSheet(dispatchId, deps = {}) {
   if (!d || !Array.isArray(d.releases) || !d.releases.length) return null;
 
   const empById = indexEmployees(d.employees);
-  const legs = d.releases.map((r) => mapReleaseLeg(r, empById));
+  const paxById = new Map();
+  for (const p of d.pax || []) { const k = oid(p?._id); if (k) paxById.set(k, paxRow(p)); }
+  const legs = d.releases.map((r) => mapReleaseLeg(r, empById, paxById));
   const disp = d.releases[0]?.dispatch || {};
   const cust = disp.client?.customer;
   const totalDist = legs.reduce((s, l) => s + (l.distance || 0), 0);

@@ -1,13 +1,32 @@
 // backend/src/services/tripSheet.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { indexEmployees, mapReleaseLeg, mapManifest, mapMaintenance, flightType } from './tripSheet.js';
+import { indexEmployees, mapReleaseLeg, mapManifest, mapMaintenance, flightType, legFlightType } from './tripSheet.js';
 
 test('flightType maps charter vs part 91 purposes', () => {
   assert.deepEqual(flightType(8), { part: 91, label: 'Part 91 · Owner' });
   assert.deepEqual(flightType(4), { part: 91, label: 'Part 91 · Positioning' });
   assert.deepEqual(flightType(undefined), { part: 135, label: '135 · Charter' });
   assert.deepEqual(flightType(1), { part: 135, label: '135 · Charter' });
+});
+
+test('legFlightType inherits the dispatch purpose when the leg is charter-default', () => {
+  // Owner trip: leg tagged with the implicit charter purpose (7), owner on the dispatch.
+  assert.deepEqual(legFlightType({ purpose: 7, dispatch: { purpose: 11 } }), { part: 91, label: 'Part 91 · Owner Lease' });
+  // Leg explicitly Part 91 wins.
+  assert.deepEqual(legFlightType({ purpose: 8, dispatch: { purpose: 7 } }), { part: 91, label: 'Part 91 · Owner' });
+  // Genuine charter on both stays 135.
+  assert.deepEqual(legFlightType({ purpose: 7, dispatch: { purpose: 7 } }), { part: 135, label: '135 · Charter' });
+});
+
+test('mapReleaseLeg builds a per-leg manifest from the leg passengers', () => {
+  const paxById = new Map([['p1', { name: 'Ada Lovelace', weight: 130 }]]);
+  const leg = mapReleaseLeg({ passengers: [{ user: { _id: { $oid: 'p1' } } }, { user: { _id: { $oid: 'p2' }, firstName: 'Guest', lastName: 'X' } }] }, new Map(), paxById);
+  assert.equal(leg.manifest.length, 2);
+  assert.equal(leg.manifest[0].name, 'Ada Lovelace');
+  assert.equal(leg.manifest[1].name, 'Guest X');
+  // No per-leg passenger list -> null.
+  assert.equal(mapReleaseLeg({}).manifest, null);
 });
 
 const release = {
