@@ -9,9 +9,8 @@ export function mapScript(viewModel) {
     const segs = ${JSON.stringify(pts)};
     if (segs.length) {
       const map = L.map('map', { zoomControl: false, attributionControl: false });
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
-      // Tint the basemap so water reads as blue (dark land stays dark).
-      (function(){ const s = document.createElement('style'); s.textContent = '.leaflet-tile-pane{filter:saturate(3) brightness(1.15) hue-rotate(-6deg)}'; document.head.appendChild(s); })();
+      // Voyager basemap — clean cartography with blue water.
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
       const all = [];
       segs.forEach((s) => {
         L.polyline(s, { color: '#38bdf8', weight: 2, opacity: 0.85 }).addTo(map);
