@@ -369,7 +369,16 @@ export default function Map() {
     map.fitBounds(L.latLngBounds(track), { padding: [70, 70], maxZoom: 9 });
 
     const DURATION = 8000;
-    let start = null, lastPct = -1;
+    const LOOK = 3;            // points to look ahead when computing heading (smooths noisy fixes)
+    let start = null, lastPct = -1, hdg = bearing(track[0], track[Math.min(LOOK, track.length - 1)]);
+    // Rotate the marker's existing element instead of rebuilding the icon each frame
+    // (setIcon every frame is what made the plane flicker/glitch).
+    const rotate = (deg) => {
+      const el = plane.getElement();
+      const inner = el && el.firstElementChild;
+      if (inner) inner.style.transform = `rotate(${deg}deg)`;
+    };
+    rotate(hdg);
     const tick = (ts) => {
       if (start == null) start = ts;
       const p = Math.min((ts - start) / DURATION, 1);
@@ -379,7 +388,15 @@ export default function Map() {
       const a = track[i], b = track[i + 1];
       const lat = a[0] + (b[0] - a[0]) * frac, lng = a[1] + (b[1] - a[1]) * frac;
       plane.setLatLng([lat, lng]);
-      plane.setIcon(createAircraftIcon('#f59e0b', true, bearing(a, b)));
+      // Heading: aim a few points ahead from the live position, then ease toward it
+      // (shortest angular path) so jittery ADS-B samples don't snap the nose around.
+      const tgt = track[Math.min(i + LOOK, track.length - 1)];
+      if (tgt[0] !== lat || tgt[1] !== lng) {
+        const want = bearing([lat, lng], tgt);
+        const d = ((want - hdg + 540) % 360) - 180;
+        hdg = (hdg + d * 0.25 + 360) % 360;
+        rotate(hdg);
+      }
       trail.setLatLngs([...track.slice(0, i + 1), [lat, lng]]);
       const pct = Math.round(p * 100);
       if (pct !== lastPct) { lastPct = pct; setReplayPct(pct); }
