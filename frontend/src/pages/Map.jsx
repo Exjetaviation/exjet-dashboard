@@ -145,6 +145,7 @@ export default function Map() {
   const [selectedTail, setSelectedTail] = useState(null);
   const [prevDays, setPrevDays] = useState(3);
   const [prevFlights, setPrevFlights] = useState([]);
+  const [prevIndex, setPrevIndex] = useState(0);   // which previous flight the stepper shows
 
   const legs = data?.legs || [];
   const scheduled = getAircraftPositions(legs);
@@ -286,6 +287,14 @@ export default function Map() {
         L.marker([destLoc.lat, destLoc.lng], { icon: destinationIcon, interactive: false }).addTo(overlay);
       }
 
+      // For parked aircraft, label the airport so the icon clearly reads as "on the
+      // ground at <ICAO>" rather than floating.
+      if (overlay && !ac.isFlying && ac.airport) {
+        L.marker([ac.position.lat, ac.position.lng], { icon: L.divIcon({ className: '', iconSize: [0, 0] }), interactive: false })
+          .addTo(overlay)
+          .bindTooltip(ac.airport, { permanent: true, direction: 'top', offset: [0, -12], className: 'exjet-tooltip' });
+      }
+
       const liveLine = ac.live
         ? `<br/>${ac.live.altitudeFt != null ? `${ac.live.altitudeFt.toLocaleString()} ft` : '—'} · ${ac.live.groundSpeedKt != null ? `${Math.round(ac.live.groundSpeedKt)} kt` : '—'}${ac.live.callsign ? ` · ${ac.live.callsign}` : ''}`
         : '';
@@ -303,54 +312,45 @@ export default function Map() {
     // fight the user's pan/zoom every 20s.
     if (!didFitRef.current && aircraft.length > 0) {
       const bounds = L.latLngBounds(aircraft.map(ac => [ac.position.lat, ac.position.lng]));
-      map.fitBounds(bounds, { padding: [80, 80] });
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 8 });
       didFitRef.current = true;
     }
   }, [aircraft.length, loading, updatedAt]);
 
-  // When an aircraft is selected (or the day range changes), fetch + draw its
-  // previous flight tracks into a dedicated layer group. Clearing the old layer
-  // is not state, so it's safe in the effect body; all setState happens inside
-  // the async resolution (guarded by `alive`) to satisfy set-state-in-effect.
+  // Fetch the aircraft's previous flights when selected (or the day range changes).
+  // Drawing is handled separately so the user can step through them one at a time.
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    // Remove any previously drawn historical tracks.
-    if (prevLayerRef.current) {
-      prevLayerRef.current.remove();
-      prevLayerRef.current = null;
-    }
-    if (!selectedTail || !map) return;
-
+    if (!selectedTail) { setPrevFlights([]); setPrevIndex(0); return; }
     let alive = true;
     (async () => {
       try {
         const res = await fetchPreviousFlights(selectedTail, prevDays);
         if (!alive) return;
-        const flights = res?.flights || [];
-        const group = L.layerGroup();
-        flights.forEach(f => {
-          if (!f.track || f.track.length < 2) return;
-          L.polyline(f.track, { color: '#38bdf8', weight: 2, opacity: 0.45 })
-            .bindTooltip(`${f.from} → ${f.to}`, { className: 'exjet-tooltip', sticky: true })
-            .addTo(group);
-        });
-        if (!alive) return;
-        group.addTo(map);
-        prevLayerRef.current = group;
-        setPrevFlights(flights);
+        setPrevFlights(res?.flights || []);
+        setPrevIndex(0);
       } catch {
-        if (alive) setPrevFlights([]);
+        if (alive) { setPrevFlights([]); setPrevIndex(0); }
       }
     })();
-
-    return () => {
-      alive = false;
-      if (prevLayerRef.current) {
-        prevLayerRef.current.remove();
-        prevLayerRef.current = null;
-      }
-    };
+    return () => { alive = false; };
   }, [selectedTail, prevDays]);
+
+  // Draw ONLY the stepper's current previous flight into its own layer (so past
+  // flights no longer dump onto the map all at once, and clearing is one toggle).
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (prevLayerRef.current) { prevLayerRef.current.remove(); prevLayerRef.current = null; }
+    if (!map) return;
+    const drawable = prevFlights.filter(f => f.track && f.track.length >= 2);
+    const f = drawable[Math.min(prevIndex, drawable.length - 1)];
+    if (!f) return;
+    const group = L.layerGroup();
+    L.polyline(f.track, { color: '#38bdf8', weight: 2.5, opacity: 0.85 })
+      .bindTooltip(`${f.from} → ${f.to}`, { className: 'exjet-tooltip', sticky: true })
+      .addTo(group);
+    group.addTo(map);
+    prevLayerRef.current = group;
+  }, [prevFlights, prevIndex]);
 
   const flyTo = (ac) => {
     setSelected(ac);
@@ -461,26 +461,40 @@ export default function Map() {
                 <button
                   onClick={() => setSelectedTail(null)}
                   style={{ padding: '3px 9px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
-                >Clear</button>
+                >✕ Done</button>
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Previous flights</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <select
-                  value={prevDays}
-                  onChange={e => setPrevDays(Number(e.target.value))}
-                  style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-                >
-                  <option value={1}>1 day</option>
-                  <option value={3}>3 days</option>
-                  <option value={7}>7 days</option>
-                </select>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {prevFlights.filter(f => f.track && f.track.length >= 2).length} drawn
-                </span>
-              </div>
-              {prevFlights.length > 0 && prevFlights.every(f => !f.track || f.track.length < 2) && (
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 0' }}>No recorded tracks in range.</p>
-              )}
+              <select
+                value={prevDays}
+                onChange={e => setPrevDays(Number(e.target.value))}
+                style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', width: '100%' }}
+              >
+                <option value={1}>Last 1 day</option>
+                <option value={3}>Last 3 days</option>
+                <option value={7}>Last 7 days</option>
+              </select>
+              {(() => {
+                const drawable = prevFlights.filter(f => f.track && f.track.length >= 2);
+                if (!drawable.length) {
+                  return <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 0' }}>{prevFlights.length ? 'No recorded tracks in range.' : 'Loading…'}</p>;
+                }
+                const i = Math.min(prevIndex, drawable.length - 1);
+                const f = drawable[i];
+                const fmt = (ms) => (ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+                const step = (d) => setPrevIndex((p) => (Math.min(p, drawable.length - 1) + d + drawable.length) % drawable.length);
+                const stepBtn = { padding: '4px 11px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, cursor: drawable.length < 2 ? 'default' : 'pointer', opacity: drawable.length < 2 ? 0.5 : 1 };
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <button onClick={() => step(-1)} disabled={drawable.length < 2} style={stepBtn}>◀</button>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Flight {i + 1} / {drawable.length}</span>
+                      <button onClick={() => step(1)} disabled={drawable.length < 2} style={stepBtn}>▶</button>
+                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--text-primary)', margin: '8px 0 0', textAlign: 'center', fontWeight: 600 }}>{f.from} → {f.to}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0', textAlign: 'center' }}>{fmt(f.depTime)}</p>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
