@@ -62,6 +62,9 @@ export default function SchedulingTripDetail() {
   const [detailsEdit, setDetailsEdit] = useState(null); // draft aircraft/customer/legs when editing
   const [passengers, setPassengers] = useState([]);     // saved manifest
   const [paxEdit, setPaxEdit] = useState(null);         // draft manifest when editing
+  const [documents, setDocuments] = useState([]);       // uploaded trip documents
+  const [docType, setDocType] = useState('contract');
+  const [docBusy, setDocBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -80,7 +83,44 @@ export default function SchedulingTripDetail() {
     } catch { /* soft */ }
   }, [id]);
 
-  useEffect(() => { load(); loadPassengers(); }, [load, loadPassengers]);
+  const loadDocuments = useCallback(async () => {
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/documents`);
+      const j = await r.json();
+      if (j.documents) setDocuments(j.documents);
+    } catch { /* soft */ }
+  }, [id]);
+
+  useEffect(() => { load(); loadPassengers(); loadDocuments(); }, [load, loadPassengers, loadDocuments]);
+
+  const uploadDoc = async (file) => {
+    if (!file) return;
+    setDocBusy(true); setError(null);
+    try {
+      const data_base64 = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result).split(',')[1]);
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      const r = await apiFetch(`/api/scheduling/trips/${id}/documents`, {
+        method: 'POST',
+        body: JSON.stringify({ name: file.name, doc_type: docType, content_type: file.type, data_base64 }),
+      });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Upload failed (${r.status})`); }
+      await loadDocuments();
+    } catch (e) { setError(e.message); }
+    setDocBusy(false);
+  };
+  const deleteDoc = async (docId) => {
+    setDocBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/documents/${docId}`, { method: 'DELETE' });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Delete failed (${r.status})`); }
+      await loadDocuments();
+    } catch (e) { setError(e.message); }
+    setDocBusy(false);
+  };
 
   const setStatus = async (status) => {
     setBusy(true); setError(null);
@@ -509,10 +549,39 @@ export default function SchedulingTripDetail() {
       </Section>
 
       <Section title="Documents">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           <a href={`${API_BASE}/itinerary/${id}`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Passenger Itinerary ↗</a>
           <TripSheetActions dispatchId={id} tripId={meta?.trip_number} compact />
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <select value={docType} onChange={(e) => setDocType(e.target.value)} style={{ ...inp }}>
+              <option value="contract">Contract</option>
+              <option value="quote">Signed quote</option>
+              <option value="passenger_id">Passenger ID</option>
+              <option value="handling">Handling</option>
+              <option value="other">Other</option>
+            </select>
+            <label style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', borderRadius: 8, cursor: docBusy ? 'default' : 'pointer', opacity: docBusy ? 0.6 : 1 }}>
+              {docBusy ? 'Uploading…' : '↑ Upload document'}
+              <input type="file" disabled={docBusy} onChange={(e) => { uploadDoc(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+            </label>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Stored privately · max 25 MB</span>
+          </div>
+          {documents.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {documents.map((d) => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)', background: 'rgba(79,142,247,0.12)', border: '1px solid rgba(79,142,247,0.3)', borderRadius: 20, padding: '1px 8px', textTransform: 'capitalize' }}>{(d.doc_type || 'other').replace('_', ' ')}</span>
+                  {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{d.name}</a> : <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{d.name}</span>}
+                  {d.size_bytes != null && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{Math.max(1, Math.round(d.size_bytes / 1024))} KB</span>}
+                  <button onClick={() => deleteDoc(d.id)} disabled={docBusy} title="Delete" style={{ marginLeft: 'auto', padding: '3px 9px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--danger)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>Delete</button>
+                </div>
+              ))}
+            </div>
+          ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No documents uploaded yet.</p>}
         </div>
       </Section>
 
