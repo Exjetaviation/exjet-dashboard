@@ -10,7 +10,7 @@ import { buildNativeLegSnapshot } from '../scheduling/buildNativeLeg.js';
 import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '../scheduling/workflow.js';
 import { quoteSummary } from '../scheduling/quoteSummary.js';
 import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
-import { priceQuoteLegs } from '../scheduling/priceQuote.js';
+import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 
 const router = express.Router();
 
@@ -128,13 +128,22 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     if (e1) throw e1;
 
     const ctx = { id: trip.id, trip_number, status, aircraft_tail, customer_name };
+    const cleaned = inputLegs.map((l) => ({
+      dep_icao: (l.dep_icao || '').trim().toUpperCase() || null,
+      arr_icao: (l.arr_icao || '').trim().toUpperCase() || null,
+    }));
+    // Arrival is COMPUTED by the flight-time engine (departure + flight minutes),
+    // not entered by the user — same as LevelFlight.
+    const times = await legMinutes(null, cleaned);
     const legRows = inputLegs.map((l, i) => {
+      const depMs = l.dep_time ? Date.parse(l.dep_time) : null;
+      const arrMs = depMs != null && Number.isFinite(depMs) ? depMs + times[i].minutes * 60000 : null;
       const leg = {
         seq: i,
-        dep_icao: (l.dep_icao || '').trim().toUpperCase() || null,
-        arr_icao: (l.arr_icao || '').trim().toUpperCase() || null,
+        dep_icao: cleaned[i].dep_icao,
+        arr_icao: cleaned[i].arr_icao,
         dep_time: l.dep_time || null,
-        arr_time: l.arr_time || null,
+        arr_time: arrMs != null ? new Date(arrMs).toISOString() : null,
       };
       // pax/positioning live only in the snapshot (no such leg columns), so re-price
       // can read them back faithfully.

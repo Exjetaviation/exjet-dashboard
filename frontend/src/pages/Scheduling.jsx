@@ -85,7 +85,8 @@ function QuotesView() {
     try {
       const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'booked' }) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Book failed (${r.status})`); }
-      await load();
+      navigate(`/scheduling/trips/${id}`); // it's a booked trip now — show where it went
+      return;
     } catch (e) { setError(e.message); }
     setBusyId(null);
   };

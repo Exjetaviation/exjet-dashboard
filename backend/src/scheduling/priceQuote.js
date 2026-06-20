@@ -25,6 +25,18 @@ async function loadHistoryAvg() {
 
 // legs: [{ dep_icao, arr_icao, pax, isPositioning }]; returns the priceTrip breakdown,
 // or { error } when no rate card exists for the tail.
+// Per-leg flight time (minutes) from the engine — history override else estimate,
+// flat fallback for unknown airports. Used to derive arrival times on create.
+export async function legMinutes(aircraftType, legs) {
+  const [profile, historyAvg] = await Promise.all([getPerfProfile(aircraftType), loadHistoryAvg()]);
+  return (legs || []).map((l) => {
+    const distanceNm = greatCircleNm(airportCoord(l.dep_icao), airportCoord(l.arr_icao));
+    const ft = flightTimeForLeg({ depIcao: l.dep_icao, arrIcao: l.arr_icao, aircraftType, distanceNm }, { profile, historyAvg });
+    const minutes = ft.minutes != null ? ft.minutes : UNKNOWN_AIRPORT_MIN;
+    return { minutes, distanceNm, source: ft.minutes != null ? ft.source : 'unknown-airport' };
+  });
+}
+
 export async function priceQuoteLegs({ tail, aircraftType, legs, nights = 0 }) {
   const { data: rateCard } = await supabase
     .from('rate_cards').select('*').eq('aircraft_tail', tail).maybeSingle();
