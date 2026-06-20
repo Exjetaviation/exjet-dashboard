@@ -45,6 +45,10 @@ export async function runReconcile({ days = RECONCILE_LOOKBACK_DAYS } = {}) {
       const positions = await queryTrack(tail, new Date(lo).toISOString(), new Date(hi).toISOString());
       for (const leg of legs) {
         const track = clipTrackToLeg(positions, leg, PAD_MS);
+        // Don't store an empty snapshot — it would be marked "stored" and never
+        // retried, locking the flight out even if positions land later. Skipping
+        // leaves it to be re-attempted on the next pass within its window.
+        if (track.length < 2) { skipped++; continue; }
         const ok = await upsertFlightTrack({
           leg_id: leg.id,
           registration: tail,

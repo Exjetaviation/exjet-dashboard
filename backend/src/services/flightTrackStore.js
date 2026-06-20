@@ -48,6 +48,24 @@ export async function getStoredLegIds(legIds) {
   } catch (e) { console.warn('[flightTrackStore] getStoredLegIds error (soft):', e?.message || e); return new Set(); }
 }
 
+// Permanent snapshots for the given leg ids, as a Map(leg_id -> row). One query;
+// works for snapshots of ANY age (the raw firehose is pruned at 14 days, these are
+// kept forever), so it backs the long-range previous-flights history.
+export async function getFlightTracksByLegIds(legIds) {
+  const ids = (legIds || []).filter(Boolean);
+  if (!ids.length) return new Map();
+  const client = getClient();
+  if (!client) return new Map();
+  try {
+    const { data, error } = await client
+      .from('flight_tracks')
+      .select('leg_id, from_airport, to_airport, dep_time, arr_time, track')
+      .in('leg_id', ids);
+    if (error) { console.warn('[flightTrackStore] getByLegIds failed (soft):', error.message); return new Map(); }
+    return new Map((data || []).map((r) => [r.leg_id, r]));
+  } catch (e) { console.warn('[flightTrackStore] getByLegIds error (soft):', e?.message || e); return new Map(); }
+}
+
 // Upsert one snapshot by leg_id. Returns true on success, false/null on soft-fail.
 export async function upsertFlightTrack(row) {
   const client = getClient();
