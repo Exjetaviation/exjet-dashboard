@@ -88,14 +88,18 @@ router.get('/crew-roster', async (req, res) => {
       else { if (!existing.title && m.title) existing.title = m.title; if (role === 'Cabin') existing.role = 'Cabin'; }
     };
 
-    // 1) Pilot roster from LevelFlight (best-effort).
-    try {
-      const p = await lf.getPilots(1);
-      const pilots = Array.isArray(p) ? p : (p?.pilots || p?.users || p?.data || []);
-      for (const u of pilots) add(u, 'Pilot');
-    } catch (e) { console.warn('[crew-roster] pilots fetch failed:', e?.message || e); }
+    const unwrap = (d) => (Array.isArray(d) ? d : (d?.pilots || d?.attendants || d?.users || d?.data || d?.list || []));
 
-    // 2) Everyone who appears as crew in mirrored leg snapshots (captures FAs).
+    // 1) Full pilot roster from LevelFlight's directory (everyone, even never-flown).
+    //    getPilots (admin) carries titles; pilots/list is the directory list.
+    try { for (const u of unwrap(await lf.getPilots(1))) add(u, 'Pilot'); } catch (e) { console.warn('[crew-roster] pilots failed:', e?.message || e); }
+    try { for (const u of unwrap(await lf.getPilotsList())) add(u, 'Pilot'); } catch (e) { console.warn('[crew-roster] pilots/list failed:', e?.message || e); }
+
+    // 2) Full flight-attendant roster from LevelFlight's directory.
+    try { for (const u of unwrap(await lf.getAttendants())) add(u, 'Cabin'); } catch (e) { console.warn('[crew-roster] attendants failed:', e?.message || e); }
+
+    // 3) Anyone who appears as crew in mirrored leg snapshots — backfills titles
+    //    (Chief Pilot, etc.) the directory lists omit, and catches anyone missed.
     const { data: legs } = await supabase.from('scheduling_legs').select('lf_synced_snapshot').eq('origin', 'levelflight');
     for (const r of legs || []) {
       const s = r.lf_synced_snapshot || {};

@@ -47,6 +47,11 @@ export const getPilots = async (page = 1) => {
   return res.data;
 };
 
+// Full directory rosters (include crew who have never flown a mirrored trip).
+export const getPilotsList = async () => (await (await lf()).get('/api/pilots/list')).data;
+export const getAttendants = async () => (await (await lf()).get('/api/attendants/list')).data;
+export const getUsers = async () => (await (await lf()).get('/api/users/list')).data;
+
 export const getScheduledLegs = async (startTimestamp) => {
   const client = await lf();
   const res = await client.post('/api/analytics/scheduledLegs', {
