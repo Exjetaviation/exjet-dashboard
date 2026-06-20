@@ -163,6 +163,10 @@ export default function SchedulingTripDetail() {
                 <tr key={i}><td style={{ padding: '3px 0' }}>{l.from} → {l.to} · {l.hrs}h{l.source === 'estimate' ? ' (est)' : l.source === 'unknown-airport' ? ' (no coords)' : ''}</td><td style={{ textAlign: 'right' }}>{usd(l.cost)}</td></tr>
               ))}
               <tr><td style={{ padding: '3px 0' }}>Flight cost</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.flightCost)}</td></tr>
+              {meta.pricing.surcharge > 0 && <tr><td>Surcharge ({Math.round((meta.pricing.surchargePct || 0) * 100)}%)</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.surcharge)}</td></tr>}
+              {meta.pricing.landingCost > 0 && <tr><td>Landings ({meta.pricing.landings})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.landingCost)}</td></tr>}
+              {meta.pricing.faCost > 0 && <tr><td>FA ({meta.pricing.faCount})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.faCost)}</td></tr>}
+              {meta.pricing.crewCost > 0 && <tr><td>Crew ({meta.pricing.crewCount})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.crewCost)}</td></tr>}
               {meta.pricing.overnightCost > 0 && <tr><td>Overnights ({meta.pricing.billableNights})</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.overnightCost)}</td></tr>}
               {meta.pricing.segmentFee > 0 && <tr><td>Segment fees</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.segmentFee)}</td></tr>}
               <tr><td>FET ({Math.round((meta.pricing.fetRate || 0) * 1000) / 10}%)</td><td style={{ textAlign: 'right' }}>{usd(meta.pricing.fetAmount)}</td></tr>

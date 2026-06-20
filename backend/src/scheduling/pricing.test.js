@@ -15,7 +15,7 @@ test('calcLeg applies min hours, short-leg floor, and positioning rate', () => {
   assert.equal(calcLeg(120, rc, { isPositioning: true }).cost, 9000);  // 2h * 4500
 });
 
-test('priceTrip sums legs, fees, and FET like quoteEngine', () => {
+test('priceTrip sums legs + fees; segment is outside the FET base', () => {
   const q = priceTrip({
     legs: [{ from: 'KFXE', to: 'KTEB', mins: 120, pax: 4 }, { from: 'KTEB', to: 'KFXE', mins: 120, pax: 4 }],
     rateCard: rc, nights: 4,
@@ -24,8 +24,26 @@ test('priceTrip sums legs, fees, and FET like quoteEngine', () => {
   assert.equal(q.billableNights, 1);
   assert.equal(q.overnightCost, 1500);
   assert.equal(q.segmentFee, 400);              // 50 * (4+4)
-  assert.equal(q.subtotal, 37900);
-  assert.equal(q.fetAmount, 2843);              // round(37900 * 0.075)
-  assert.equal(q.total, 40743);
+  assert.equal(q.fetBase, 37500);               // flight + overnight (no surcharge/fa/crew here); segment excluded
+  assert.equal(q.fetAmount, 2813);              // round(37500 * 0.075)
+  assert.equal(q.total, 40713);                 // 37500 + 400 + 2813
   assert.equal(q.tail, 'N69FP');
+});
+
+test('priceTrip reproduces the LevelFlight itemized quote', () => {
+  const lf = {
+    aircraft_tail: 'N69FP', hourly_rate: 9000, min_hours: 0,
+    surcharge_pct: 0.20, fa_fee: 700, crew_fee: 600, landing_fee: 0,
+    segment_fee_per_pax: 5.30, fet_rate: 0.075, overnight_threshold: 3,
+  };
+  const q = priceTrip({ legs: [{ from: 'A', to: 'B', mins: 133, pax: 8 }], rateCard: lf, faCount: 1, crewCount: 1 });
+  assert.equal(q.flightCost, 19950);   // 2:13 (133 min) * 9000/hr
+  assert.equal(q.surcharge, 3990);     // 20% fuel surcharge
+  assert.equal(q.faCost, 700);
+  assert.equal(q.crewCost, 600);
+  assert.equal(q.landingCost, 0);
+  assert.equal(q.fetBase, 25240);
+  assert.equal(q.fetAmount, 1893);     // 7.5% of 25,240
+  assert.equal(q.segmentFee, 42);      // round(5.30 * 8), outside FET
+  assert.equal(q.total, 27175);        // 25,240 + 42 + 1,893  (LevelFlight shows 27,175.40)
 });

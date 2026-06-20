@@ -17,6 +17,8 @@ async function loadHistoryAvg() {
   for (const r of data || []) {
     bump(`${r.aircraft_type}|${r.origin}|${r.destination}`, r.flight_mins);
     bump(`${r.aircraft_type}|${r.destination}|${r.origin}`, r.flight_mins);
+    bump(`${r.origin}|${r.destination}`, r.flight_mins);   // route-only (type-agnostic) for native quotes
+    bump(`${r.destination}|${r.origin}`, r.flight_mins);
   }
   const out = {};
   for (const [k, [sum, n]] of sums) out[k] = Math.round(sum / n);

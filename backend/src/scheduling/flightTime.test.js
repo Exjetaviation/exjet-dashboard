@@ -23,3 +23,12 @@ test('flightTimeForLeg prefers history when present, else estimates', () => {
   assert.equal(e.source, 'estimate');
   assert.equal(Math.round(e.minutes), 74);
 });
+
+test('flightTimeForLeg uses a route-only history match when aircraft type is unknown (native quotes)', () => {
+  const histAvg = { 'KFXE|KTEB': 130 }; // route-only key, no type
+  const h = flightTimeForLeg(
+    { depIcao: 'KFXE', arrIcao: 'KTEB', aircraftType: null, distanceNm: 925 },
+    { profile, historyAvg: histAvg });
+  assert.equal(h.source, 'history');
+  assert.equal(h.minutes, 130);
+});
