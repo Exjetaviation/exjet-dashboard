@@ -6,7 +6,7 @@ const FIELDS = [
   { key: 'aircraft_tail',        label: 'Tail Number',                  type: 'text',   placeholder: 'N69FP' },
   { key: 'aircraft_type',        label: 'Aircraft Type',                type: 'text',   placeholder: 'Gulfstream GIV SP' },
   { key: 'hourly_rate',          label: 'Hourly Rate ($)',               type: 'number', placeholder: '9000', note: 'Flight-time rate; surcharge / FA / crew / landings are separate' },
-  { key: 'surcharge_pct',        label: 'Fuel Surcharge (decimal)',      type: 'number', placeholder: '0.20', note: '0.20 = 20% of flight cost' },
+  { key: 'surcharge_per_hr',     label: 'Fuel Surcharge ($/flight hr)',  type: 'number', placeholder: '1800', note: 'Charged per flight hour (LevelFlight model)' },
   { key: 'positioning_rate',     label: 'Positioning Rate ($/hr)',       type: 'number', placeholder: '4500' },
   { key: 'fa_fee',               label: 'Flight Attendant Fee ($ each)', type: 'number', placeholder: '700' },
   { key: 'crew_fee',             label: 'Crew Fee ($ each)',             type: 'number', placeholder: '600' },
@@ -152,7 +152,7 @@ export default function RateCards() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0', padding: '4px 0' }}>
                 {[
                   ['Hourly Rate', fmt(card.hourly_rate)],
-                  ['Surcharge', card.surcharge_pct ? `${Math.round(card.surcharge_pct * 100)}%` : '—'],
+                  ['Surcharge', card.surcharge_per_hr ? `$${card.surcharge_per_hr}/hr` : '—'],
                   ['Positioning', fmt(card.positioning_rate)],
                   ['FA Fee', fmt(card.fa_fee)],
                   ['Crew Fee', fmt(card.crew_fee)],

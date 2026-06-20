@@ -11,6 +11,7 @@ import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '
 import { quoteSummary } from '../scheduling/quoteSummary.js';
 import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
+import { recomputeTotals } from '../scheduling/pricing.js';
 
 const router = express.Router();
 
@@ -267,6 +268,36 @@ router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => 
   } catch (e) {
     console.error('POST /api/scheduling/trips/:lfOid/price:', e.message);
     res.status(500).json({ error: 'Failed to price trip' });
+  }
+});
+
+// PATCH /api/scheduling/trips/:lfOid/price-lines — save a per-line adjusted breakdown
+// (LevelFlight-style: every charge editable on the quote). Recomputes FET + total.
+router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, pricing').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const base = trip.pricing && !trip.pricing.error ? trip.pricing : {};
+    const b = req.body || {};
+    const num = (v, d) => (v === undefined || v === null || v === '' ? (Number(d) || 0) : Number(v) || 0);
+    const lines = {
+      flightCost: num(b.flightCost, base.flightCost),
+      surcharge: num(b.surcharge, base.surcharge),
+      landingCost: num(b.landingCost, base.landingCost),
+      faCost: num(b.faCost, base.faCost),
+      crewCost: num(b.crewCost, base.crewCost),
+      overnightCost: num(b.overnightCost, base.overnightCost),
+      segmentFee: num(b.segmentFee, base.segmentFee),
+    };
+    const fetRate = base.fetRate || 0;
+    const pricing = { ...base, ...lines, ...recomputeTotals(lines, fetRate), fetRate, manual: true };
+    await supabase.from('scheduling_trips').update({ pricing }).eq('id', trip.id);
+    res.json({ pricing });
+  } catch (e) {
+    console.error('PATCH /api/scheduling/trips/:lfOid/price-lines:', e.message);
+    res.status(500).json({ error: 'Failed to save pricing' });
   }
 });
 

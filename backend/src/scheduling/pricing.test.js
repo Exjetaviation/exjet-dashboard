@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcLeg, priceTrip } from './pricing.js';
+import { calcLeg, priceTrip, recomputeTotals } from './pricing.js';
 
 const rc = {
   aircraft_tail: 'N69FP', rate_name: 'GIV', hourly_rate: 9000, positioning_rate: 4500,
@@ -33,7 +33,7 @@ test('priceTrip sums legs + fees; segment is outside the FET base', () => {
 test('priceTrip reproduces the LevelFlight itemized quote', () => {
   const lf = {
     aircraft_tail: 'N69FP', hourly_rate: 9000, min_hours: 0,
-    surcharge_pct: 0.20, fa_fee: 700, crew_fee: 600, landing_fee: 0,
+    surcharge_per_hr: 1800, fa_fee: 700, crew_fee: 600, landing_fee: 0,
     segment_fee_per_pax: 5.30, fet_rate: 0.075, overnight_threshold: 3,
   };
   const q = priceTrip({ legs: [{ from: 'A', to: 'B', mins: 133, pax: 8 }], rateCard: lf, faCount: 1, crewCount: 1 });
@@ -46,4 +46,11 @@ test('priceTrip reproduces the LevelFlight itemized quote', () => {
   assert.equal(q.fetAmount, 1893);     // 7.5% of 25,240
   assert.equal(q.segmentFee, 42);      // round(5.30 * 8), outside FET
   assert.equal(q.total, 27175);        // 25,240 + 42 + 1,893  (LevelFlight shows 27,175.40)
+});
+
+test('recomputeTotals keeps FET + total consistent after per-line edits', () => {
+  const t = recomputeTotals({ flightCost: 19950, surcharge: 3990, landingCost: 0, faCost: 700, crewCost: 600, overnightCost: 0, segmentFee: 42 }, 0.075);
+  assert.equal(t.fetBase, 25240);
+  assert.equal(t.fetAmount, 1893);
+  assert.equal(t.total, 27175);
 });

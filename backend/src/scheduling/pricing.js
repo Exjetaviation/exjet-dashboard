@@ -12,6 +12,16 @@ export const calcLeg = (mins, rateCard, { isPositioning = false } = {}) => {
   return { hrs: Math.round(hrs * 100) / 100, mins, cost: Math.round(cost) };
 };
 
+// Recompute FET + total from (possibly hand-edited) line amounts — used when a
+// quote's pricing is adjusted per-line, so the tax + total stay consistent. The
+// federal segment fee stays outside the FET base (same rule as priceTrip).
+export const recomputeTotals = (lines, fetRate = 0) => {
+  const n = (v) => Number(v) || 0;
+  const fetBase = n(lines.flightCost) + n(lines.surcharge) + n(lines.landingCost) + n(lines.faCost) + n(lines.crewCost) + n(lines.overnightCost);
+  const fetAmount = Math.round(fetBase * (Number(fetRate) || 0));
+  return { fetBase: Math.round(fetBase), fetAmount, total: Math.round(fetBase + n(lines.segmentFee) + fetAmount) };
+};
+
 // legs: [{ from, to, mins, pax, isPositioning }]
 // Itemized like LevelFlight: flight cost, fuel surcharge, landings, FA, crew,
 // overnights, segment fee, FET. FET (the federal air-transportation excise) is
@@ -24,7 +34,8 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
   const flightCost = perLeg.reduce((s, l) => s + l.cost, 0);
   const totalHrs = Math.round(perLeg.reduce((s, l) => s + l.hrs, 0) * 100) / 100;
 
-  const surcharge = Math.round(flightCost * (rateCard.surcharge_pct || 0));   // fuel surcharge
+  const rawHrs = legs.reduce((s, l) => s + (l.mins || 0), 0) / 60;            // unrounded, for precise surcharge
+  const surcharge = Math.round(rawHrs * (rateCard.surcharge_per_hr || 0));     // fuel surcharge, $/flight hour (LevelFlight model)
   const landings = legs.length;
   const landingCost = Math.round(landings * (rateCard.landing_fee || 0));
   const faCost = Math.round((faCount || 0) * (rateCard.fa_fee || 0));
@@ -42,7 +53,7 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
   return {
     perLeg, legs: legs.length, totalHrs,
     flightCost: Math.round(flightCost),
-    surchargePct: rateCard.surcharge_pct || 0, surcharge,
+    surchargePerHr: rateCard.surcharge_per_hr || 0, surcharge,
     landings, landingCost,
     faCount, faCost, crewCount, crewCost,
     nights, billableNights, overnightCost,
