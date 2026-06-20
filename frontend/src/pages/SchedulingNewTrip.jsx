@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { useApi } from '../hooks/useApi';
@@ -10,6 +10,38 @@ const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', pax: '', pos
 
 const labelStyle = { fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
 const inputStyle = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' };
+
+// Live distance + flight time for a leg, computed as soon as both airports are in.
+function LegEstimate({ dep, arr, depTime }) {
+  const [est, setEst] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const a = (dep || '').trim(), b = (arr || '').trim();
+    if (a.length < 3 || b.length < 3) { setEst(null); return; }
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const q = new URLSearchParams({ from: a, to: b });
+        if (depTime) q.set('dep', new Date(depTime).toISOString());
+        const r = await apiFetch(`/api/scheduling/leg-estimate?${q.toString()}`);
+        setEst(await r.json());
+      } catch { setEst(null); }
+      setLoading(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [dep, arr, depTime]);
+
+  if (loading) return <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>calculating…</span>;
+  if (!est) return null;
+  if (est.distanceNm == null) return <span style={{ fontSize: 11, color: '#f59e0b' }}>airport not found — check the codes</span>;
+  const h = Math.floor(est.minutes / 60), m = est.minutes % 60;
+  const arr2 = est.arrTime ? ` · arrives ${new Date(est.arrTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : '';
+  return (
+    <span style={{ fontSize: 11, color: 'var(--accent)' }}>
+      ≈ {est.distanceNm.toLocaleString()} nm · {h}:{String(m).padStart(2, '0')} ETE{est.source === 'history' ? ' (from history)' : ''}{arr2}
+    </span>
+  );
+}
 
 export default function SchedulingNewTrip() {
   const navigate = useNavigate();
@@ -98,6 +130,9 @@ export default function SchedulingNewTrip() {
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', paddingBottom: 8 }}><input type="checkbox" checked={l.positioning} onChange={(e) => updateLeg(i, 'positioning', e.target.checked)} /> Ferry</label>
             <button onClick={() => removeLeg(i)} disabled={legs.length === 1} title="Remove leg"
               style={{ padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: legs.length === 1 ? 'default' : 'pointer' }}>✕</button>
+            <div style={{ flexBasis: '100%', minHeight: 14 }}>
+              <LegEstimate dep={l.dep_icao} arr={l.arr_icao} depTime={l.dep_time} />
+            </div>
           </div>
         ))}
         <button onClick={addLeg}
