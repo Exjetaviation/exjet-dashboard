@@ -57,6 +57,7 @@ function legBlock(leg, i, n) {
     ${(leg.depMetar || leg.arrMetar) ? `<div class="metar">${leg.depMetar ? `<div>${esc(leg.depMetar)}</div>` : ''}${leg.arrMetar ? `<div>${esc(leg.arrMetar)}</div>` : ''}</div>` : ''}
     ${crew ? `<div class="crew">${crew}</div>` : ''}
     <div class="fbos">${fboCell('DEPARTURE FBO', leg.depFbo)}${fboCell('ARRIVAL FBO', leg.arrFbo)}</div>
+    ${(leg.manifest && leg.manifest.length) ? `<div class="legpax"><div class="legpaxh">PASSENGERS (${leg.manifest.length})</div><table class="tbl tbl-in"><thead><tr><th>Name</th><th>Weight</th><th>DOB</th><th>Passport</th></tr></thead><tbody>${leg.manifest.map((p) => `<tr><td>${esc(p.name || '')}</td><td>${p.weight != null ? esc(p.weight) + ' lbs' : ''}</td><td>${esc(fmtDate(p.dob))}</td><td>${esc(p.passport || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${(leg.crewNote || leg.releasedBy) ? `<div class="relnote">${leg.crewNote ? `<span class="cl">CREW NOTE</span> ${esc(leg.crewNote)} ` : ''}${leg.releasedBy ? `<span class="cl">RELEASED BY</span> ${esc(leg.releasedBy)}${leg.releasedAt ? ' · ' + esc(fmtZ(leg.releasedAt)) : ''}` : ''}</div>` : ''}
   </div>`;
 }
@@ -135,6 +136,10 @@ export function renderTripSheetHtml(vm, { print = false } = {}) {
   .fbo { flex:1; background:#0e1622; border:1px solid #1a2638; border-radius:7px; padding:8px 10px; }
   .fbol { font-size:9px; letter-spacing:1px; color:#6b7890; } .fbon { font-size:12px; color:#fff; font-weight:600; margin-top:2px; } .fboa { font-size:10px; color:#8a98ad; } .fbonote { font-size:9px; color:#8a98ad; margin-top:4px; font-style:italic; }
   .relnote { font-size:10px; color:#8a98ad; margin-top:6px; }
+  .legpax { margin-top:8px; }
+  .legpaxh { font-size:9px; letter-spacing:1px; color:#6b7890; margin-bottom:3px; }
+  .tbl-in { width:100%; margin:0; }
+  .tbl-in th { padding:3px 6px; } .tbl-in td { padding:3px 6px; }
   #map { margin:14px 30px; height:220px; border-radius:9px; border:1px solid #233247; background:#0a0f18; }
   .nomap { display:flex; height:100%; align-items:center; justify-content:center; color:#5b6b82; font-size:12px; }
   .tbl { width:calc(100% - 60px); margin:0 30px; border-collapse:collapse; font-size:10px; }
@@ -163,7 +168,7 @@ export function renderTripSheetHtml(vm, { print = false } = {}) {
   <div class="sec">ITINERARY · CREW · COMMS · WEATHER</div>
   ${vm.legs.map((leg, i) => legBlock(leg, i, vm.legs.length)).join('')}
   <div id="map"></div>
-  ${manifestBlock(vm.manifest)}
+  ${vm.legs.some((l) => l.manifest && l.manifest.length) ? '' : manifestBlock(vm.manifest)}
   ${maintenanceBlock(vm.maintenance)}
   <div class="foot">Generated ${esc(vm.preparedOn || '')} · ${esc(op.name || 'Exjet Aviation')} · Operational flight release — crew use only.</div>
 </div>

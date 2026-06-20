@@ -58,7 +58,11 @@ export async function buildItinerary(dispatchId) {
   const dispatch = tl?.dispatch;
   if (!dispatch) return null;
   const ac = tl?.aircraft || dispatch?.aircraft || {};
-  const legs = (dispatch.legs || []).map(mapItineraryLeg);
+  // Passenger itinerary: only show legs the passengers are actually on — hide empty
+  // positioning/ferry legs. (Keep all only if none carry pax, so it's never blank.)
+  const allLegs = (dispatch.legs || []).map(mapItineraryLeg);
+  const withPax = allLegs.filter((l) => (l.pax || 0) > 0);
+  const legs = withPax.length ? withPax : allLegs;
 
   // Unique airports (with coords) across all legs -> one forecast each.
   const airports = new Map();

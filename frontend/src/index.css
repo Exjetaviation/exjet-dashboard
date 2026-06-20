@@ -41,3 +41,5 @@ body {
    map never shows light when tiles are slow or fail to load (e.g. older
    smart-TV browsers that can't fetch the CARTO tiles). */
 .leaflet-container { background: var(--bg-primary) !important; }
+/* Tint the dark basemap so water reads as blue while land stays dark. */
+.leaflet-tile-pane { filter: saturate(3) brightness(1.15) hue-rotate(-6deg); }
