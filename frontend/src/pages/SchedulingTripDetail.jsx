@@ -11,13 +11,20 @@ import { distinctCrew } from '../lib/schedulingAggregate';
 const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
 
-// Editable quote line items (LevelFlight-style: every charge adjustable per quote).
-const PRICE_LINES = [['flightCost', 'Flight cost'], ['surcharge', 'Fuel surcharge'], ['landingCost', 'Landings'], ['faCost', 'FA'], ['crewCost', 'Crew'], ['overnightCost', 'Overnights'], ['segmentFee', 'Segment fees']];
-const recomputePrice = (lines, fetRate) => {
+// Reprice from editable RATE inputs (LevelFlight-style: edit the hourly rate / fees,
+// not the dollar totals). Mirrors the backend recomputeFromInputs.
+const recomputeInputs = (i) => {
   const n = (v) => Number(v) || 0;
-  const fetBase = n(lines.flightCost) + n(lines.surcharge) + n(lines.landingCost) + n(lines.faCost) + n(lines.crewCost) + n(lines.overnightCost);
-  const fetAmount = Math.round(fetBase * (Number(fetRate) || 0));
-  return { fetBase: Math.round(fetBase), fetAmount, total: Math.round(fetBase + n(lines.segmentFee) + fetAmount) };
+  const flightCost = Math.round(n(i.hourlyRate) * n(i.hours));
+  const surcharge = Math.round(n(i.surchargePerHr) * n(i.hours));
+  const faCost = Math.round(n(i.faFee) * n(i.faCount));
+  const crewCost = Math.round(n(i.crewFee) * n(i.crewCount));
+  const landingCost = Math.round(n(i.landingFee) * n(i.landings));
+  const overnightCost = Math.round(n(i.overnightCost));
+  const segmentFee = Math.round(n(i.segmentPerPax) * n(i.pax));
+  const fetBase = flightCost + surcharge + landingCost + faCost + crewCost + overnightCost;
+  const fetAmount = Math.round(fetBase * (Number(i.fetRate) || 0));
+  return { flightCost, surcharge, faCost, crewCost, landingCost, overnightCost, segmentFee, fetAmount, total: Math.round(fetBase + segmentFee + fetAmount) };
 };
 const HIDE = new Set(['aircraft']);
 const ROLE_COLOR = { PIC: '#f59e0b', SIC: '#4f8ef7', Cabin: '#22c55e' };
@@ -89,7 +96,16 @@ export default function SchedulingTripDetail() {
 
   const startPriceEdit = () => {
     const p = meta?.pricing || {};
-    setPriceEdit({ flightCost: p.flightCost || 0, surcharge: p.surcharge || 0, landingCost: p.landingCost || 0, faCost: p.faCost || 0, crewCost: p.crewCost || 0, overnightCost: p.overnightCost || 0, segmentFee: p.segmentFee || 0 });
+    const hours = p.hours ?? p.totalHrs ?? 0;
+    const per = (rate, cost, qty) => (rate ?? (qty > 0 ? Math.round((cost || 0) / qty) : 0)); // derive rate for older quotes
+    setPriceEdit({
+      hourlyRate: per(p.hourlyRate, p.flightCost, hours), hours, surchargePerHr: per(p.surchargePerHr, p.surcharge, hours),
+      faFee: per(p.faFee, p.faCost, p.faCount), faCount: p.faCount || 0,
+      crewFee: per(p.crewFee, p.crewCost, p.crewCount), crewCount: p.crewCount || 0,
+      landingFee: per(p.landingFee, p.landingCost, p.landings), landings: p.landings || 0,
+      segmentPerPax: per(p.segmentPerPax, p.segmentFee, p.pax), pax: p.pax || 0,
+      overnightCost: p.overnightCost || 0, fetRate: p.fetRate || 0,
+    });
   };
   const savePrice = async () => {
     setBusy(true); setError(null);
@@ -180,8 +196,12 @@ export default function SchedulingTripDetail() {
         const p = meta.pricing;
         const editing = priceEdit != null;
         const fetRate = p.fetRate || 0;
-        const live = editing ? recomputePrice(priceEdit, fetRate) : { fetAmount: p.fetAmount, total: p.total };
+        const live = editing ? recomputeInputs(priceEdit) : p;
         const btn = { padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
+        const ni = (key, w = 78) => (
+          <input type="number" value={priceEdit[key]} onChange={(e) => setPriceEdit((d) => ({ ...d, [key]: e.target.value }))}
+            style={{ width: w, textAlign: 'right', padding: '2px 5px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 5 }} />
+        );
         return (
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
@@ -205,12 +225,17 @@ export default function SchedulingTripDetail() {
                 {!editing && p.perLeg?.map((l, i) => (
                   <tr key={i}><td style={{ padding: '3px 0' }}>{l.from} → {l.to} · {l.hrs}h{l.source === 'estimate' ? ' (est)' : l.source === 'unknown-airport' ? ' (no coords)' : ''}</td><td style={{ textAlign: 'right' }}>{usd(l.cost)}</td></tr>
                 ))}
-                {editing ? PRICE_LINES.map(([key, label]) => (
-                  <tr key={key}><td style={{ padding: '4px 0' }}>{label}</td><td style={{ textAlign: 'right' }}>
-                    <input type="number" value={priceEdit[key]} onChange={(e) => setPriceEdit((d) => ({ ...d, [key]: e.target.value }))}
-                      style={{ width: 120, textAlign: 'right', padding: '3px 6px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6 }} />
-                  </td></tr>
-                )) : (
+                {editing ? (
+                  <>
+                    <tr><td style={{ padding: '4px 0' }}>Flight · {ni('hourlyRate')}/hr × {ni('hours', 54)} h</td><td style={{ textAlign: 'right' }}>{usd(live.flightCost)}</td></tr>
+                    <tr><td style={{ padding: '4px 0' }}>Fuel surcharge · {ni('surchargePerHr')}/hr</td><td style={{ textAlign: 'right' }}>{usd(live.surcharge)}</td></tr>
+                    <tr><td style={{ padding: '4px 0' }}>FA · {ni('faFee')} × {ni('faCount', 46)}</td><td style={{ textAlign: 'right' }}>{usd(live.faCost)}</td></tr>
+                    <tr><td style={{ padding: '4px 0' }}>Crew · {ni('crewFee')} × {ni('crewCount', 46)}</td><td style={{ textAlign: 'right' }}>{usd(live.crewCost)}</td></tr>
+                    <tr><td style={{ padding: '4px 0' }}>Landings · {ni('landingFee')} × {ni('landings', 46)}</td><td style={{ textAlign: 'right' }}>{usd(live.landingCost)}</td></tr>
+                    <tr><td style={{ padding: '4px 0' }}>Overnight · {ni('overnightCost')}</td><td style={{ textAlign: 'right' }}>{usd(live.overnightCost)}</td></tr>
+                    <tr><td style={{ padding: '4px 0' }}>Segment · {ni('segmentPerPax')}/pax × {ni('pax', 46)}</td><td style={{ textAlign: 'right' }}>{usd(live.segmentFee)}</td></tr>
+                  </>
+                ) : (
                   <>
                     <tr><td style={{ padding: '3px 0' }}>Flight cost</td><td style={{ textAlign: 'right' }}>{usd(p.flightCost)}</td></tr>
                     {p.surcharge > 0 && <tr><td>Fuel surcharge</td><td style={{ textAlign: 'right' }}>{usd(p.surcharge)}</td></tr>}

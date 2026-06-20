@@ -12,14 +12,22 @@ export const calcLeg = (mins, rateCard, { isPositioning = false } = {}) => {
   return { hrs: Math.round(hrs * 100) / 100, mins, cost: Math.round(cost) };
 };
 
-// Recompute FET + total from (possibly hand-edited) line amounts — used when a
-// quote's pricing is adjusted per-line, so the tax + total stay consistent. The
-// federal segment fee stays outside the FET base (same rule as priceTrip).
-export const recomputeTotals = (lines, fetRate = 0) => {
+// Recompute the full breakdown from editable RATE inputs (per-quote overrides:
+// hourly rate, surcharge/hr, FA/crew fees + counts, hours, pax, …). Editing a
+// rate — not a dollar total — reprices the quote, LevelFlight-style. Federal
+// segment fee stays outside the FET base (same rule as priceTrip).
+export const recomputeFromInputs = (i) => {
   const n = (v) => Number(v) || 0;
-  const fetBase = n(lines.flightCost) + n(lines.surcharge) + n(lines.landingCost) + n(lines.faCost) + n(lines.crewCost) + n(lines.overnightCost);
-  const fetAmount = Math.round(fetBase * (Number(fetRate) || 0));
-  return { fetBase: Math.round(fetBase), fetAmount, total: Math.round(fetBase + n(lines.segmentFee) + fetAmount) };
+  const flightCost = Math.round(n(i.hourlyRate) * n(i.hours));
+  const surcharge = Math.round(n(i.surchargePerHr) * n(i.hours));
+  const faCost = Math.round(n(i.faFee) * n(i.faCount));
+  const crewCost = Math.round(n(i.crewFee) * n(i.crewCount));
+  const landingCost = Math.round(n(i.landingFee) * n(i.landings));
+  const overnightCost = Math.round(n(i.overnightCost));
+  const segmentFee = Math.round(n(i.segmentPerPax) * n(i.pax));
+  const fetBase = flightCost + surcharge + landingCost + faCost + crewCost + overnightCost;
+  const fetAmount = Math.round(fetBase * n(i.fetRate));
+  return { flightCost, surcharge, faCost, crewCost, landingCost, overnightCost, segmentFee, fetBase: Math.round(fetBase), fetAmount, total: Math.round(fetBase + segmentFee + fetAmount) };
 };
 
 // legs: [{ from, to, mins, pax, isPositioning }]
@@ -51,13 +59,15 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
   const total = Math.round(fetBase + segmentFee + fetAmount);
 
   return {
-    perLeg, legs: legs.length, totalHrs,
+    perLeg, legs: legs.length, totalHrs, hours: totalHrs,
+    hourlyRate: totalHrs > 0 ? Math.round(flightCost / totalHrs) : (rateCard.hourly_rate || 0),
     flightCost: Math.round(flightCost),
     surchargePerHr: rateCard.surcharge_per_hr || 0, surcharge,
-    landings, landingCost,
-    faCount, faCost, crewCount, crewCost,
+    landingFee: rateCard.landing_fee || 0, landings, landingCost,
+    faFee: rateCard.fa_fee || 0, faCount, faCost,
+    crewFee: rateCard.crew_fee || 0, crewCount, crewCost,
     nights, billableNights, overnightCost,
-    segmentFee,
+    segmentPerPax: rateCard.segment_fee_per_pax || 0, pax: legs.reduce((s, l) => s + (l.pax || 0), 0), segmentFee,
     fetBase: Math.round(fetBase), fetRate: rateCard.fet_rate || 0, fetAmount,
     total,
     rateName: rateCard.rate_name || rateCard.aircraft_tail,

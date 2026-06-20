@@ -11,7 +11,7 @@ import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '
 import { quoteSummary } from '../scheduling/quoteSummary.js';
 import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
-import { recomputeTotals } from '../scheduling/pricing.js';
+import { recomputeFromInputs } from '../scheduling/pricing.js';
 
 const router = express.Router();
 
@@ -300,18 +300,15 @@ router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, r
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
     const base = trip.pricing && !trip.pricing.error ? trip.pricing : {};
     const b = req.body || {};
-    const num = (v, d) => (v === undefined || v === null || v === '' ? (Number(d) || 0) : Number(v) || 0);
-    const lines = {
-      flightCost: num(b.flightCost, base.flightCost),
-      surcharge: num(b.surcharge, base.surcharge),
-      landingCost: num(b.landingCost, base.landingCost),
-      faCost: num(b.faCost, base.faCost),
-      crewCost: num(b.crewCost, base.crewCost),
-      overnightCost: num(b.overnightCost, base.overnightCost),
-      segmentFee: num(b.segmentFee, base.segmentFee),
+    const pick = (k) => (b[k] === undefined || b[k] === null || b[k] === '' ? (Number(base[k]) || 0) : Number(b[k]) || 0);
+    const inputs = {
+      hourlyRate: pick('hourlyRate'), hours: pick('hours'), surchargePerHr: pick('surchargePerHr'),
+      faFee: pick('faFee'), faCount: pick('faCount'), crewFee: pick('crewFee'), crewCount: pick('crewCount'),
+      landingFee: pick('landingFee'), landings: pick('landings'),
+      segmentPerPax: pick('segmentPerPax'), pax: pick('pax'), overnightCost: pick('overnightCost'),
+      fetRate: base.fetRate || 0,
     };
-    const fetRate = base.fetRate || 0;
-    const pricing = { ...base, ...lines, ...recomputeTotals(lines, fetRate), fetRate, manual: true };
+    const pricing = { ...base, ...inputs, ...recomputeFromInputs(inputs), manual: true };
     await supabase.from('scheduling_trips').update({ pricing }).eq('id', trip.id);
     res.json({ pricing });
   } catch (e) {
