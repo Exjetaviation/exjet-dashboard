@@ -392,6 +392,72 @@ router.patch('/trips/:lfOid/crew', requireSchedulingEditor, async (req, res) => 
   }
 });
 
+// Passenger columns we expose/accept.
+const PAX_COLS = 'id, name, dob, weight_lbs, note, tsa_status';
+
+// GET /api/scheduling/trips/:lfOid/passengers — the trip's passenger manifest.
+router.get('/trips/:lfOid/passengers', async (req, res) => {
+  try {
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id').eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const { data, error: pe } = await supabase
+      .from('scheduling_passengers').select(PAX_COLS).eq('trip_id', trip.id).order('name');
+    if (pe) throw pe;
+    res.json({ passengers: data || [] });
+  } catch (e) {
+    console.error('GET passengers:', e.message);
+    res.status(500).json({ error: 'Failed to load passengers' });
+  }
+});
+
+// PUT /api/scheduling/trips/:lfOid/passengers — replace the trip's manifest.
+router.put('/trips/:lfOid/passengers', requireSchedulingEditor, async (req, res) => {
+  try {
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id').eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const list = Array.isArray(req.body?.passengers) ? req.body.passengers : [];
+    const rows = list
+      .filter((p) => (p.name || '').trim())
+      .map((p) => ({
+        trip_id: trip.id, origin: 'native',
+        name: p.name.trim(),
+        dob: p.dob || null,
+        weight_lbs: p.weight_lbs === '' || p.weight_lbs == null ? null : Number(p.weight_lbs),
+        note: (p.note || '').trim() || null,
+        tsa_status: (p.tsa_status || '').trim() || null,
+      }));
+    const { error: de } = await supabase.from('scheduling_passengers').delete().eq('trip_id', trip.id);
+    if (de) throw de;
+    if (rows.length) { const { error: ie } = await supabase.from('scheduling_passengers').insert(rows); if (ie) throw ie; }
+    const { data, error: se } = await supabase.from('scheduling_passengers').select(PAX_COLS).eq('trip_id', trip.id).order('name');
+    if (se) throw se;
+    res.json({ passengers: data || [] });
+  } catch (e) {
+    console.error('PUT passengers:', e.message);
+    res.status(500).json({ error: 'Failed to save passengers' });
+  }
+});
+
+// GET /api/scheduling/passengers/suggest — distinct previous passengers (for the
+// "add from previous passengers" autocomplete).
+router.get('/passengers/suggest', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('scheduling_passengers').select('name, dob, weight_lbs').not('name', 'is', null);
+    if (error) throw error;
+    const byName = new Map();
+    for (const p of data || []) {
+      const n = (p.name || '').trim(); if (!n) continue;
+      if (!byName.has(n)) byName.set(n, { name: n, dob: p.dob || null, weight_lbs: p.weight_lbs ?? null });
+    }
+    res.json({ passengers: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)) });
+  } catch (e) {
+    res.status(502).json({ error: e.message, passengers: [] });
+  }
+});
+
 // POST /api/scheduling/trips/:lfOid/revert — restore the working copy from the LF snapshot.
 router.post('/trips/:lfOid/revert', requireSchedulingEditor, async (req, res) => {
   try {

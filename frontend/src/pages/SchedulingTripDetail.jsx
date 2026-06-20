@@ -60,6 +60,8 @@ export default function SchedulingTripDetail() {
   const [priceEdit, setPriceEdit] = useState(null); // draft line amounts when editing the breakdown
   const [crewEdit, setCrewEdit] = useState(null);   // draft crew assignment when editing
   const [detailsEdit, setDetailsEdit] = useState(null); // draft aircraft/customer/legs when editing
+  const [passengers, setPassengers] = useState([]);     // saved manifest
+  const [paxEdit, setPaxEdit] = useState(null);         // draft manifest when editing
 
   const load = useCallback(async () => {
     try {
@@ -70,7 +72,15 @@ export default function SchedulingTripDetail() {
     } catch (e) { setError(e.message); }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadPassengers = useCallback(async () => {
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/passengers`);
+      const j = await r.json();
+      if (j.passengers) setPassengers(j.passengers);
+    } catch { /* soft */ }
+  }, [id]);
+
+  useEffect(() => { load(); loadPassengers(); }, [load, loadPassengers]);
 
   const setStatus = async (status) => {
     setBusy(true); setError(null);
@@ -150,6 +160,31 @@ export default function SchedulingTripDetail() {
     fa: (legsForView[0]?.attendants || [])[0]?.user || null,
   };
   const fullName = (u) => (u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '');
+
+  // Passenger manifest editor (with autocomplete from previous passengers).
+  const { data: paxSuggestData } = useApi('/api/scheduling/passengers/suggest');
+  const paxSuggestions = paxSuggestData?.passengers || [];
+  const blankPax = () => ({ name: '', weight_lbs: '', dob: '', note: '' });
+  const startPaxEdit = () => setPaxEdit(passengers.length ? passengers.map((p) => ({ name: p.name || '', weight_lbs: p.weight_lbs ?? '', dob: p.dob || '', note: p.note || '' })) : [blankPax()]);
+  const updatePax = (i, field, v) => setPaxEdit((d) => d.map((p, idx) => (idx === i ? { ...p, [field]: v } : p)));
+  const addPax = () => setPaxEdit((d) => [...d, blankPax()]);
+  const removePax = (i) => setPaxEdit((d) => d.filter((_, idx) => idx !== i));
+  // Picking a known name fills in their DOB/weight from history.
+  const onPaxName = (i, name) => {
+    const known = paxSuggestions.find((p) => p.name === name);
+    setPaxEdit((d) => d.map((p, idx) => (idx === i ? { ...p, name, dob: known?.dob || p.dob, weight_lbs: known?.weight_lbs ?? p.weight_lbs } : p)));
+  };
+  const savePax = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/passengers`, { method: 'PUT', body: JSON.stringify({ passengers: paxEdit }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
+      setPassengers(j.passengers || []);
+      setPaxEdit(null);
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
 
   // Trip details editor (aircraft / customer / legs) — native trips only.
   const { data: allLegsData } = useApi('/api/scheduling/legs');
@@ -422,8 +457,43 @@ export default function SchedulingTripDetail() {
         ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No crew assigned.</p>}
       </Section>
 
-      <Section title="Passengers">
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{pax > 0 ? `${pax} passenger${pax === 1 ? '' : 's'} (max across legs)` : 'No passengers on the manifest.'}</p>
+      <Section title="Passengers" right={
+        paxEdit == null ? (
+          <button onClick={startPaxEdit} disabled={busy} style={{ padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>✎ Edit manifest</button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={savePax} disabled={busy} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Save</button>
+            <button onClick={() => setPaxEdit(null)} disabled={busy} style={{ padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        )
+      }>
+        {paxEdit != null ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <datalist id="pax-suggest">{paxSuggestions.map((p) => <option key={p.name} value={p.name} />)}</datalist>
+            {paxEdit.map((p, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input list="pax-suggest" value={p.name} onChange={(e) => onPaxName(i, e.target.value)} placeholder="Passenger name" style={{ ...inp, flex: '2 1 160px' }} />
+                <input type="number" min="0" value={p.weight_lbs} onChange={(e) => updatePax(i, 'weight_lbs', e.target.value)} placeholder="lbs" style={{ ...inp, flex: '0 1 70px' }} />
+                <input type="date" value={p.dob || ''} onChange={(e) => updatePax(i, 'dob', e.target.value)} title="Date of birth" style={{ ...inp, flex: '1 1 130px' }} />
+                <input value={p.note} onChange={(e) => updatePax(i, 'note', e.target.value)} placeholder="Note" style={{ ...inp, flex: '2 1 120px' }} />
+                <button onClick={() => removePax(i)} title="Remove" style={{ padding: '7px 9px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>✕</button>
+              </div>
+            ))}
+            <button onClick={addPax} style={{ alignSelf: 'flex-start', marginTop: 2, padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add passenger</button>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Start typing a name to pick from previous passengers (fills DOB &amp; weight).</p>
+          </div>
+        ) : passengers.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {passengers.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
+                {p.weight_lbs != null && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.weight_lbs} lbs</span>}
+                {p.dob && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>DOB {p.dob}</span>}
+                {p.note && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>· {p.note}</span>}
+              </div>
+            ))}
+          </div>
+        ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{pax > 0 ? `${pax} passenger${pax === 1 ? '' : 's'} on the legs — add names to the manifest.` : 'No passengers on the manifest.'}</p>}
       </Section>
 
       <Section title="Trip Checklist">
