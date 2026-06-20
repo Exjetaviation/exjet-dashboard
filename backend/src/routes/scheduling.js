@@ -13,6 +13,7 @@ import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
+import * as lf from '../services/levelflight.js';
 
 const router = express.Router();
 
@@ -65,6 +66,48 @@ router.get('/leg-estimate', async (req, res) => {
   } catch (e) {
     console.error('GET /api/scheduling/leg-estimate:', e.message);
     res.status(500).json({ error: 'Failed to estimate' });
+  }
+});
+
+// GET /api/scheduling/crew-roster — the full crew list (pilots + flight attendants)
+// for the assignment dropdowns. Built from LevelFlight: the pilot roster + everyone
+// who appears as crew in mirrored leg snapshots (which is how flight attendants get
+// in). Deduped by email/name, role tagged from cockpit seat (>=5 = cabin).
+router.get('/crew-roster', async (req, res) => {
+  try {
+    const byKey = new Map();
+    const add = (m, role) => {
+      const firstName = (m.firstName || '').trim() || null;
+      const lastName = (m.lastName || '').trim() || null;
+      const name = [firstName, lastName].filter(Boolean).join(' ') || (m.email || '').trim();
+      if (!name) return;
+      const key = (m.email || name).toLowerCase();
+      const existing = byKey.get(key);
+      // Prefer a known role + a title if we get more than one record for someone.
+      if (!existing) byKey.set(key, { firstName, lastName, name, title: m.title || null, email: m.email || null, role });
+      else { if (!existing.title && m.title) existing.title = m.title; if (role === 'Cabin') existing.role = 'Cabin'; }
+    };
+
+    // 1) Pilot roster from LevelFlight (best-effort).
+    try {
+      const p = await lf.getPilots(1);
+      const pilots = Array.isArray(p) ? p : (p?.pilots || p?.users || p?.data || []);
+      for (const u of pilots) add(u, 'Pilot');
+    } catch (e) { console.warn('[crew-roster] pilots fetch failed:', e?.message || e); }
+
+    // 2) Everyone who appears as crew in mirrored leg snapshots (captures FAs).
+    const { data: legs } = await supabase.from('scheduling_legs').select('lf_synced_snapshot').eq('origin', 'levelflight');
+    for (const r of legs || []) {
+      const s = r.lf_synced_snapshot || {};
+      for (const c of s.pilots || []) if (c?.user) add({ ...c.user }, c.seat >= 5 ? 'Cabin' : 'Pilot');
+      for (const c of s.attendants || []) if (c?.user) add({ ...c.user }, 'Cabin');
+    }
+
+    const crew = [...byKey.values()].sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === 'Pilot' ? -1 : 1));
+    res.json({ crew });
+  } catch (e) {
+    console.error('GET /api/scheduling/crew-roster:', e.message);
+    res.status(502).json({ error: e.message, crew: [] });
   }
 });
 

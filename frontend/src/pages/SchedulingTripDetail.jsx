@@ -190,17 +190,18 @@ export default function SchedulingTripDetail() {
   const crew = distinctCrew(legsForView);
   const pax = legsForView.reduce((m, l) => Math.max(m, l.passengerCount || 0), 0);
 
-  // Crew assignment editor (per-trip PIC / SIC / FA from the pilot roster).
-  const { data: rosterData } = useApi('/api/levelflight/pilots');
-  const roster = Array.isArray(rosterData) ? rosterData : (rosterData?.pilots || []);
+  // Crew assignment editor (per-trip PIC / SIC / FA from the full crew roster).
+  const { data: rosterData } = useApi('/api/scheduling/crew-roster');
+  const roster = rosterData?.crew || [];
+  const pilotRoster = roster.filter((c) => c.role !== 'Cabin');
+  const cabinRoster = roster.filter((c) => c.role === 'Cabin');
+  const crewKey = (u) => (u?.email || [u?.firstName, u?.lastName].filter(Boolean).join(' ') || '');
   const legPilots = legsForView[0]?.pilots || [];
   const curCrew = {
     pic: legPilots.find((p) => p.seat === 2)?.user || null,
     sic: legPilots.find((p) => p.seat === 3)?.user || null,
     fa: (legsForView[0]?.attendants || [])[0]?.user || null,
   };
-  const fullName = (u) => (u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '');
-
   // Passenger manifest editor (with autocomplete from previous passengers).
   const { data: paxSuggestData } = useApi('/api/scheduling/passengers/suggest');
   const paxSuggestions = paxSuggestData?.passengers || [];
@@ -258,17 +259,12 @@ export default function SchedulingTripDetail() {
     setBusy(false);
   };
 
-  const startCrewEdit = () => setCrewEdit({ pic: curCrew.pic?.email || '', sic: curCrew.sic?.email || '', fa: fullName(curCrew.fa) });
+  const startCrewEdit = () => setCrewEdit({ pic: crewKey(curCrew.pic), sic: crewKey(curCrew.sic), fa: crewKey(curCrew.fa) });
   const saveCrew = async () => {
     setBusy(true); setError(null);
     try {
-      const byEmail = (e) => roster.find((p) => p.email === e) || null;
-      const faName = (crewEdit.fa || '').trim();
-      const faParts = faName.split(/\s+/);
-      const body = {
-        pic: byEmail(crewEdit.pic), sic: byEmail(crewEdit.sic),
-        fa: faName ? { firstName: faParts[0], lastName: faParts.slice(1).join(' ') || null } : null,
-      };
+      const byKey = (k) => roster.find((p) => crewKey(p) === k) || null;
+      const body = { pic: byKey(crewEdit.pic), sic: byKey(crewEdit.sic), fa: byKey(crewEdit.fa) };
       const r = await apiFetch(`/api/scheduling/trips/${id}/crew`, { method: 'PATCH', body: JSON.stringify(body) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
       setCrewEdit(null);
@@ -464,22 +460,17 @@ export default function SchedulingTripDetail() {
       }>
         {crewEdit != null ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[['pic', 'PIC'], ['sic', 'SIC']].map(([key, label]) => (
+            {[['pic', 'PIC', pilotRoster], ['sic', 'SIC', pilotRoster], ['fa', 'FA', cabinRoster]].map(([key, label, list]) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', width: 34 }}>{label}</span>
                 <select value={crewEdit[key]} onChange={(e) => setCrewEdit((d) => ({ ...d, [key]: e.target.value }))}
                   style={{ flex: 1, padding: '7px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8 }}>
                   <option value="">— Unassigned —</option>
-                  {roster.map((p) => <option key={p.email || `${p.firstName}${p.lastName}`} value={p.email}>{[p.firstName, p.lastName].filter(Boolean).join(' ')}{p.title ? ` · ${p.title}` : ''}</option>)}
+                  {list.map((p) => <option key={crewKey(p)} value={crewKey(p)}>{p.name}{p.title ? ` · ${p.title}` : ''}</option>)}
                 </select>
               </div>
             ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', width: 34 }}>FA</span>
-              <input value={crewEdit.fa} onChange={(e) => setCrewEdit((d) => ({ ...d, fa: e.target.value }))} placeholder="Flight attendant name"
-                style={{ flex: 1, padding: '7px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' }} />
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Applies to all legs of this trip.</p>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Applies to all legs of this trip. {pilotRoster.length} pilots · {cabinRoster.length} cabin crew available.</p>
           </div>
         ) : crew.length ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
