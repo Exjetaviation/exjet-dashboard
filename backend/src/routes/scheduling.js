@@ -48,6 +48,25 @@ router.get('/legs', async (req, res) => {
   }
 });
 
+// GET /api/scheduling/leg-estimate?from=KFXE&to=KTEB[&dep=ISO] — live distance +
+// flight time for the quote builder, computed as soon as both airports are entered.
+router.get('/leg-estimate', async (req, res) => {
+  try {
+    const from = String(req.query.from || '').trim().toUpperCase();
+    const to = String(req.query.to || '').trim().toUpperCase();
+    if (!from || !to) return res.status(400).json({ error: 'from and to are required' });
+    const [t] = await legMinutes(null, [{ dep_icao: from, arr_icao: to }]);
+    const known = t.distanceNm != null;
+    const minutes = known ? Math.round(t.minutes) : null;
+    const depMs = req.query.dep ? Date.parse(req.query.dep) : null;
+    const arrTime = (known && depMs != null && Number.isFinite(depMs)) ? new Date(depMs + minutes * 60000).toISOString() : null;
+    res.json({ from, to, distanceNm: known ? Math.round(t.distanceNm) : null, minutes, source: t.source, arrTime });
+  } catch (e) {
+    console.error('GET /api/scheduling/leg-estimate:', e.message);
+    res.status(500).json({ error: 'Failed to estimate' });
+  }
+});
+
 // GET /api/scheduling/quotes — trips at the working 'quote' stage, summarized for
 // the Quotes list. Booking a quote (PATCH status='booked') moves it out of here.
 router.get('/quotes', async (req, res) => {
