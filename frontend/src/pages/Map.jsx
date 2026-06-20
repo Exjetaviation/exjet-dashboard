@@ -126,6 +126,16 @@ const destinationIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
+// Initial bearing (degrees) from a [lat,lng] to b, for orienting the replay icon.
+const bearing = (a, b) => {
+  const toR = (d) => (d * Math.PI) / 180;
+  const toD = (r) => (r * 180) / Math.PI;
+  const dLng = toR(b[1] - a[1]);
+  const y = Math.sin(dLng) * Math.cos(toR(b[0]));
+  const x = Math.cos(toR(a[0])) * Math.sin(toR(b[0])) - Math.sin(toR(a[0])) * Math.cos(toR(b[0])) * Math.cos(dLng);
+  return (toD(Math.atan2(y, x)) + 360) % 360;
+};
+
 export default function Map() {
   const { data, loading } = useApi('/api/levelflight/legs');
   const [showTrail, setShowTrail] = useState(false);
@@ -136,7 +146,8 @@ export default function Map() {
   const markersRef = useRef({});
   const trailLayerRef = useRef(null);
   const overlayLayerRef = useRef(null);   // destination icons + dashed dest lines, redrawn each update
-  const prevLayerRef = useRef(null);      // historical (previous-flight) tracks for the selected aircraft
+  const prevLayerRef = useRef(null);      // replay layer: faint full track + growing trail + ghost plane
+  const replayRafRef = useRef(null);      // requestAnimationFrame id for the replay loop
   const didFitRef = useRef(false);
   const mapWrapRef = useRef(null);
   const [cssFs, setCssFs] = useState(false);      // CSS-maximize fallback when the Fullscreen API is unavailable
@@ -145,7 +156,11 @@ export default function Map() {
   const [selectedTail, setSelectedTail] = useState(null);
   const [prevDays, setPrevDays] = useState(3);
   const [prevFlights, setPrevFlights] = useState([]);
-  const [prevIndex, setPrevIndex] = useState(0);   // which previous flight the stepper shows
+  const [leftTab, setLeftTab] = useState('fleet');        // 'fleet' | 'history'
+  const [replayFlight, setReplayFlight] = useState(null); // the previous flight being replayed
+  const [replayNonce, setReplayNonce] = useState(0);      // bump to (re)start the replay
+  const [replayPct, setReplayPct] = useState(0);
+  const [replayDone, setReplayDone] = useState(false);
 
   const legs = data?.legs || [];
   const scheduled = getAircraftPositions(legs);
@@ -273,7 +288,7 @@ export default function Map() {
         .addTo(map)
         .on('click', () => {
           setSelected(ac);
-          setSelectedTail(cur => (cur === ac.tail ? null : ac.tail));
+          setSelectedTail(ac.tail);
         });
 
       // For airborne aircraft, draw the destination airport + a faint dashed
@@ -320,40 +335,68 @@ export default function Map() {
   // Fetch the aircraft's previous flights when selected (or the day range changes).
   // Drawing is handled separately so the user can step through them one at a time.
   useEffect(() => {
-    if (!selectedTail) { setPrevFlights([]); setPrevIndex(0); return; }
+    setReplayFlight(null);
+    if (!selectedTail) { setPrevFlights([]); return; }
     let alive = true;
     (async () => {
       try {
         const res = await fetchPreviousFlights(selectedTail, prevDays);
         if (!alive) return;
         setPrevFlights(res?.flights || []);
-        setPrevIndex(0);
       } catch {
-        if (alive) { setPrevFlights([]); setPrevIndex(0); }
+        if (alive) setPrevFlights([]);
       }
     })();
     return () => { alive = false; };
   }, [selectedTail, prevDays]);
 
-  // Draw ONLY the stepper's current previous flight into its own layer (so past
-  // flights no longer dump onto the map all at once, and clearing is one toggle).
+  // Replay: fly a ghost plane along a previous flight's recorded track ("glimpse
+  // into the past"). A faint full path is drawn, with a bright trail growing
+  // behind the moving plane. Restart by bumping replayNonce.
   useEffect(() => {
     const map = mapInstanceRef.current;
+    if (replayRafRef.current) { cancelAnimationFrame(replayRafRef.current); replayRafRef.current = null; }
     if (prevLayerRef.current) { prevLayerRef.current.remove(); prevLayerRef.current = null; }
-    if (!map) return;
-    const drawable = prevFlights.filter(f => f.track && f.track.length >= 2);
-    const f = drawable[Math.min(prevIndex, drawable.length - 1)];
-    if (!f) return;
-    const group = L.layerGroup();
-    L.polyline(f.track, { color: '#38bdf8', weight: 2.5, opacity: 0.85 })
-      .bindTooltip(`${f.from} → ${f.to}`, { className: 'exjet-tooltip', sticky: true })
-      .addTo(group);
-    group.addTo(map);
+    setReplayPct(0); setReplayDone(false);
+    const track = replayFlight?.track;
+    if (!map || !track || track.length < 2) return;
+
+    const group = L.layerGroup().addTo(map);
     prevLayerRef.current = group;
-  }, [prevFlights, prevIndex]);
+    L.polyline(track, { color: '#38bdf8', weight: 1.5, opacity: 0.28 }).addTo(group);
+    const trail = L.polyline([track[0]], { color: '#38bdf8', weight: 3, opacity: 0.9 }).addTo(group);
+    const plane = L.marker(track[0], { icon: createAircraftIcon('#f59e0b', true, bearing(track[0], track[1])), interactive: false, zIndexOffset: 1000 }).addTo(group);
+    map.fitBounds(L.latLngBounds(track), { padding: [70, 70], maxZoom: 9 });
+
+    const DURATION = 8000;
+    let start = null, lastPct = -1;
+    const tick = (ts) => {
+      if (start == null) start = ts;
+      const p = Math.min((ts - start) / DURATION, 1);
+      const f = p * (track.length - 1);
+      const i = Math.min(Math.floor(f), track.length - 2);
+      const frac = f - i;
+      const a = track[i], b = track[i + 1];
+      const lat = a[0] + (b[0] - a[0]) * frac, lng = a[1] + (b[1] - a[1]) * frac;
+      plane.setLatLng([lat, lng]);
+      plane.setIcon(createAircraftIcon('#f59e0b', true, bearing(a, b)));
+      trail.setLatLngs([...track.slice(0, i + 1), [lat, lng]]);
+      const pct = Math.round(p * 100);
+      if (pct !== lastPct) { lastPct = pct; setReplayPct(pct); }
+      if (p < 1) { replayRafRef.current = requestAnimationFrame(tick); }
+      else { plane.setLatLng(track[track.length - 1]); setReplayDone(true); }
+    };
+    replayRafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (replayRafRef.current) { cancelAnimationFrame(replayRafRef.current); replayRafRef.current = null; }
+      if (prevLayerRef.current) { prevLayerRef.current.remove(); prevLayerRef.current = null; }
+    };
+  }, [replayFlight, replayNonce]);
 
   const flyTo = (ac) => {
     setSelected(ac);
+    setSelectedTail(ac.tail);
     mapInstanceRef.current?.flyTo([ac.position.lat, ac.position.lng], 7, { duration: 1.2 });
   };
 
@@ -393,13 +436,23 @@ export default function Map() {
 
       <div style={{ display: 'flex', gap: '16px', height: '65vh', minHeight: '400px' }}>
 
-        {/* Aircraft list sidebar */}
+        {/* Left sidebar: Fleet roster / flight History */}
         <div style={{ width: '220px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
-          {loading ? (
-            <div style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>Loading...</div>
-          ) : aircraft.length === 0 ? (
-            <div style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>No aircraft found</div>
-          ) : aircraft.map(ac => (
+          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)' }}>
+            {[['fleet', 'Fleet'], ['history', 'History']].map(([id, label]) => (
+              <button key={id} onClick={() => setLeftTab(id)}
+                style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none',
+                  color: leftTab === id ? 'var(--accent)' : 'var(--text-secondary)',
+                  borderBottom: leftTab === id ? '2px solid var(--accent)' : '2px solid transparent' }}>{label}</button>
+            ))}
+          </div>
+
+          {leftTab === 'fleet' ? (
+            loading ? (
+              <div style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>Loading...</div>
+            ) : aircraft.length === 0 ? (
+              <div style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>No aircraft found</div>
+            ) : aircraft.map(ac => (
             <div key={ac.tail}
               onClick={() => flyTo(ac)}
               style={{
@@ -427,7 +480,49 @@ export default function Map() {
                 border: `1px solid ${ac.source === 'adsb' ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
               }}>{ac.source === 'adsb' ? 'Live · ADS-B' : 'Scheduled'}</span>
             </div>
-          ))}
+          ))
+          ) : !selectedTail ? (
+            <div style={{ padding: '14px 10px', color: 'var(--text-secondary)', fontSize: '12px', lineHeight: 1.5 }}>
+              Select an aircraft in the <strong style={{ color: 'var(--text-primary)' }}>Fleet</strong> tab to replay its previous flights.
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{selectedTail}</span>
+                <select value={prevDays} onChange={e => setPrevDays(Number(e.target.value))}
+                  style={{ fontSize: 11, padding: '3px 5px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                  <option value={1}>1d</option><option value={3}>3d</option><option value={7}>7d</option><option value={14}>14d</option>
+                </select>
+              </div>
+              {(() => {
+                const flights = prevFlights.filter(f => f.track && f.track.length >= 2);
+                if (!flights.length) return <p style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '4px 2px' }}>{prevFlights.length ? 'No recorded tracks in range.' : 'Loading flights…'}</p>;
+                const fmt = (ms) => (ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+                return flights.map((f, idx) => {
+                  const active = replayFlight?.legId === f.legId;
+                  return (
+                    <div key={f.legId || idx} onClick={() => { setReplayFlight(f); setReplayNonce(n => n + 1); }}
+                      style={{ background: active ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '9px 11px', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{f.from} → {f.to}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{fmt(f.depTime)}{f.tripId ? ` · #${f.tripId}` : ''}</div>
+                      {active && (
+                        <div style={{ marginTop: 7 }}>
+                          <div style={{ height: 4, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                            <div style={{ width: `${replayPct}%`, height: '100%', background: '#f59e0b' }} />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                            <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{replayDone ? '● Landed' : `Replaying… ${replayPct}%`}</span>
+                            <button onClick={(e) => { e.stopPropagation(); setReplayNonce(n => n + 1); }}
+                              style={{ padding: '3px 9px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>↺ Replay</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </>
+          )}
         </div>
 
         {/* Map */}
@@ -448,55 +543,7 @@ export default function Map() {
             {showTrail ? 'Flight trail: On' : 'Flight trail: Off'}
           </button>
 
-          {/* Previous-flights panel for the clicked aircraft */}
-          {selectedTail && (
-            <div style={{
-              position: 'absolute', top: 12, left: 12, zIndex: 1000,
-              background: 'rgba(10,10,15,0.92)', border: '1px solid var(--border)',
-              borderRadius: 10, padding: '10px 12px', backdropFilter: 'blur(8px)',
-              minWidth: 180, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>{selectedTail}</span>
-                <button
-                  onClick={() => setSelectedTail(null)}
-                  style={{ padding: '3px 9px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
-                >✕ Done</button>
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Previous flights</p>
-              <select
-                value={prevDays}
-                onChange={e => setPrevDays(Number(e.target.value))}
-                style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', width: '100%' }}
-              >
-                <option value={1}>Last 1 day</option>
-                <option value={3}>Last 3 days</option>
-                <option value={7}>Last 7 days</option>
-              </select>
-              {(() => {
-                const drawable = prevFlights.filter(f => f.track && f.track.length >= 2);
-                if (!drawable.length) {
-                  return <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '8px 0 0' }}>{prevFlights.length ? 'No recorded tracks in range.' : 'Loading…'}</p>;
-                }
-                const i = Math.min(prevIndex, drawable.length - 1);
-                const f = drawable[i];
-                const fmt = (ms) => (ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
-                const step = (d) => setPrevIndex((p) => (Math.min(p, drawable.length - 1) + d + drawable.length) % drawable.length);
-                const stepBtn = { padding: '4px 11px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, cursor: drawable.length < 2 ? 'default' : 'pointer', opacity: drawable.length < 2 ? 0.5 : 1 };
-                return (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <button onClick={() => step(-1)} disabled={drawable.length < 2} style={stepBtn}>◀</button>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Flight {i + 1} / {drawable.length}</span>
-                      <button onClick={() => step(1)} disabled={drawable.length < 2} style={stepBtn}>▶</button>
-                    </div>
-                    <p style={{ fontSize: 12, color: 'var(--text-primary)', margin: '8px 0 0', textAlign: 'center', fontWeight: 600 }}>{f.from} → {f.to}</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0', textAlign: 'center' }}>{fmt(f.depTime)}</p>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+          {/* Previous flights now live in the left "History" tab, with replay. */}
 
           {/* Selected aircraft detail card */}
           {selectedAc && (
