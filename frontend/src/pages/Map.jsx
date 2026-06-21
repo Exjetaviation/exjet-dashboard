@@ -601,7 +601,7 @@ export default function FleetMap() {
 
         {/* Map */}
         <div ref={mapWrapRef} className="exjet-map-wrap" style={{ overflow: 'hidden', ...(cssFs ? { position: 'fixed', inset: 0, zIndex: 9999, borderRadius: 0, border: 'none', background: 'var(--bg-primary)' } : { flex: 1, borderRadius: '12px', border: '1px solid var(--border)', position: 'relative' }) }}>
-          <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+          <div ref={mapRef} className="bluewater-map" style={{ width: '100%', height: '100%' }} />
 
           {/* Bottom-left of the map container — lifted above the selected-
               aircraft detail card when it's open so they don't overlap. */}
