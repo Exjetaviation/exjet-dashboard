@@ -396,12 +396,13 @@ router.get('/trips/:lfOid/itinerary/email-preview', async (req, res) => {
   }
 });
 
-// POST /api/scheduling/trips/:lfOid/itinerary/send  body { to, recipientName }
+// POST /api/scheduling/trips/:lfOid/itinerary/send  body { to, cc, recipientName }
 // — email the formatted passenger itinerary (HTML) with the PDF attached, via the
-// Exjet Gmail. Auth-only (like the quote send-link).
+// Exjet Gmail. `cc` sends a copy (comma-separate multiple). Auth-only (like the quote send-link).
 router.post('/trips/:lfOid/itinerary/send', async (req, res) => {
   try {
     const to = (req.body?.to || '').trim();
+    const cc = (req.body?.cc || '').trim();
     if (!to) return res.status(400).json({ error: 'Recipient email required' });
     const vm = await buildItinerary(req.params.lfOid);
     if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
@@ -414,7 +415,7 @@ router.post('/trips/:lfOid/itinerary/send', async (req, res) => {
       const pdf = await renderQuotePdf(renderItineraryHtml(vm, { print: true }));
       attachments = [{ filename: `exjet-itinerary-${vm.tripNumber || req.params.lfOid}.pdf`, content: pdf, contentType: 'application/pdf' }];
     } catch (e) { console.warn('[itinerary send] PDF attach failed, sending without:', e?.message || e); }
-    await sendEmail({ to, subject, html, attachments });
+    await sendEmail({ to, cc: cc || undefined, subject, html, attachments });
     res.json({ success: true });
   } catch (e) {
     console.error('POST itinerary/send:', e.message);
