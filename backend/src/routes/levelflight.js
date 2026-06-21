@@ -1,5 +1,6 @@
 import express from 'express';
 import * as lf from '../services/levelflight.js';
+import { assignedPaxCount } from '../services/paxCount.js';
 
 const router = express.Router();
 
@@ -53,7 +54,10 @@ router.get('/legs', async (req, res) => {
       timestamps.map(ts => lf.getScheduledLegs(ts).catch(() => ({ legs: [] })))
     );
     const allLegs = results.flatMap(r => r.legs || []);
-    const legs = dedupeLegs(allLegs).sort((a, b) => (b.departure?.time || 0) - (a.departure?.time || 0));
+    // Report ASSIGNED passengers (the `passengers` list), not LF's passengerCount
+    // field, so Flights/Calendar/FlightDetail show the right count.
+    const legs = dedupeLegs(allLegs).sort((a, b) => (b.departure?.time || 0) - (a.departure?.time || 0))
+      .map((l) => ({ ...l, passengerCount: assignedPaxCount(l) }));
     res.json({ success: true, legs, months: monthsBack + 1 });
   } catch (err) {
     res.status(500).json({ error: err.message });

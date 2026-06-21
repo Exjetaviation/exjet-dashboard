@@ -69,3 +69,27 @@ test('mapScheduledLegs skips a leg with no dispatch id', () => {
   assert.equal(trips.length, 0);
   assert.equal(legs.length, 0);
 });
+
+// Regression (Trip #25093): the snapshot must carry the ASSIGNED passenger count
+// (the `passengers` list), not LF's passengerCount field — so every mirror-backed
+// display (lists, calendar, trip page) shows the right number.
+test('mapScheduledLegs stores assigned passenger count as snapshot.passengerCount', () => {
+  const leg = {
+    _id: { $oid: 'legP' }, dispatch, pilots,
+    departure: { airport: 'KFXE', time: 1 }, arrival: { airport: 'KDAL', time: 2 },
+    passengerCount: 15,
+    passengers: Array.from({ length: 13 }, (_, i) => ({ user: { _id: { $oid: String(i) } }, seat: i + 1 })),
+  };
+  const { legs } = mapScheduledLegs([leg]);
+  assert.equal(legs[0].snapshot.passengerCount, 13);
+});
+
+test('mapScheduledLegs falls back to passengerCount when no assigned list', () => {
+  const leg = {
+    _id: { $oid: 'legQ' }, dispatch, pilots,
+    departure: { airport: 'KFXE', time: 1 }, arrival: { airport: 'KDAL', time: 2 },
+    passengerCount: 6,
+  };
+  const { legs } = mapScheduledLegs([leg]);
+  assert.equal(legs[0].snapshot.passengerCount, 6);
+});
