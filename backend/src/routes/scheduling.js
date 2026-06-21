@@ -17,6 +17,7 @@ import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
 import * as lf from '../services/levelflight.js';
+import { sendEmail } from '../services/gmail.js';
 
 const router = express.Router();
 
@@ -373,6 +374,29 @@ router.delete('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   } catch (e) {
     console.error('DELETE /api/scheduling/trips/:lfOid:', e.message);
     res.status(500).json({ error: 'Failed to delete trip' });
+  }
+});
+
+// POST /api/scheduling/trips/:lfOid/itinerary/send  body { to } — email the public
+// passenger-itinerary link (same render as the /itinerary/:id page) via the Exjet Gmail.
+router.post('/trips/:lfOid/itinerary/send', requireSchedulingEditor, async (req, res) => {
+  try {
+    const to = (req.body?.to || '').trim();
+    if (!to) return res.status(400).json({ error: 'Recipient email required' });
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('trip_number').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const link = `${req.protocol}://${req.get('host')}/itinerary/${req.params.lfOid}`;
+    await sendEmail({
+      to,
+      subject: `Your Exjet Aviation itinerary${trip.trip_number ? ` — Trip #${trip.trip_number}` : ''}`,
+      body: `Your flight itinerary is ready.\n\nView it here:\n${link}\n\nThank you for flying with Exjet Aviation.`,
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('POST /api/scheduling/trips/:lfOid/itinerary/send:', e.message);
+    res.status(500).json({ error: e.message || 'Failed to send itinerary' });
   }
 });
 
