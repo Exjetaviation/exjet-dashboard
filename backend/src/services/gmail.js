@@ -69,16 +69,18 @@ const encodeHeader = (s) => (/[^\x00-\x7F]/.test(s) ? `=?UTF-8?B?${Buffer.from(s
 
 // Send an email via the Exjet Gmail. Plain text: { to, subject, body }. Rich:
 // pass `html` and/or `attachments` (each { filename, content: Buffer, contentType }).
-export const sendEmail = async ({ to, subject, body, html, attachments = [] }) => {
+export const sendEmail = async ({ to, cc, subject, body, html, attachments = [] }) => {
   const gmail = getGmail();
   const CRLF = '\r\n';
+  // Gmail routes to Cc recipients from the header; include it only when provided.
+  const addr = [`To: ${to}`, ...(cc ? [`Cc: ${cc}`] : [])];
   let raw;
   if (!html && !attachments.length) {
-    raw = [`To: ${to}`, `Subject: ${encodeHeader(subject)}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', '', body || ''].join(CRLF);
+    raw = [...addr, `Subject: ${encodeHeader(subject)}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', '', body || ''].join(CRLF);
   } else {
     const boundary = 'exjet_' + Math.random().toString(36).slice(2);
     const lines = [
-      `To: ${to}`,
+      ...addr,
       `Subject: ${encodeHeader(subject)}`,
       'MIME-Version: 1.0',
       `Content-Type: multipart/mixed; boundary="${boundary}"`,

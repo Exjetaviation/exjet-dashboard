@@ -12,6 +12,7 @@ const btnPrimary = { padding: '8px 18px', fontSize: 13, fontWeight: 600, backgro
 
 export default function ItinerarySendModal({ dispatchId, onClose }) {
   const [to, setTo] = useState('');
+  const [cc, setCc] = useState('');
   const [name, setName] = useState('');
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +47,7 @@ export default function ItinerarySendModal({ dispatchId, onClose }) {
     setSending(true); setError(null);
     try {
       const r = await apiFetch(`/api/scheduling/trips/${dispatchId}/itinerary/send`, {
-        method: 'POST', body: JSON.stringify({ to: to.trim(), recipientName: name }),
+        method: 'POST', body: JSON.stringify({ to: to.trim(), cc: cc.trim(), recipientName: name }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `Send failed (${r.status})`);
@@ -66,7 +67,7 @@ export default function ItinerarySendModal({ dispatchId, onClose }) {
         {done ? (
           <div style={{ padding: 30, textAlign: 'center' }}>
             <div style={{ fontSize: 30 }}>✅</div>
-            <p style={{ color: 'var(--text-primary)', marginTop: 8 }}>Itinerary sent to <strong>{to}</strong></p>
+            <p style={{ color: 'var(--text-primary)', marginTop: 8 }}>Itinerary sent to <strong>{to}</strong>{cc.trim() && <> · copy to <strong>{cc.trim()}</strong></>}</p>
             <button onClick={() => onClose(true)} style={{ ...btnPrimary, marginTop: 14 }}>Done</button>
           </div>
         ) : (
@@ -81,6 +82,9 @@ export default function ItinerarySendModal({ dispatchId, onClose }) {
                   <input value={name} onChange={(e) => setName(e.target.value)} placeholder="First name" style={inp} />
                 </label>
               </div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>Cc — send a copy (optional)
+                <input value={cc} onChange={(e) => setCc(e.target.value)} type="text" placeholder="you@flyexjet.vip, broker@email.com" style={inp} />
+              </label>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Subject: <span style={{ color: 'var(--text-primary)' }}>{preview?.subject || '…'}</span></div>
               <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
                 {loading ? <p style={{ padding: 20, color: '#888', fontSize: 13 }}>Loading preview…</p>
