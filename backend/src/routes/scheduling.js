@@ -13,6 +13,7 @@ import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
+import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
 import * as lf from '../services/levelflight.js';
 
 const router = express.Router();
@@ -518,6 +519,20 @@ router.get('/passengers/suggest', async (req, res) => {
     res.json({ passengers: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)) });
   } catch (e) {
     res.status(502).json({ error: e.message, passengers: [] });
+  }
+});
+
+// GET /api/scheduling/airport-search?q=KFX — ranked airport matches for the New Quote
+// From/To pickers. Searches only codes the flight-time engine can compute, so every
+// suggestion is a quotable airport. Returns [{ code, name, city, region }].
+router.get('/airport-search', (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 20);
+    res.json({ airports: q ? searchAirports(defaultAirportIndex(), q, limit) : [] });
+  } catch (e) {
+    console.error('GET /api/scheduling/airport-search:', e.message);
+    res.status(500).json({ error: 'Airport search failed', airports: [] });
   }
 });
 
