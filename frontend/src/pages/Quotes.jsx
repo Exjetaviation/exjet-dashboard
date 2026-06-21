@@ -18,6 +18,7 @@ export default function Quotes() {
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailTo, setEmailTo] = useState('');
+  const [emailCc, setEmailCc] = useState('');
   const [emailMsg, setEmailMsg] = useState('');
 
   useEffect(() => {
@@ -57,14 +58,14 @@ export default function Quotes() {
     if (!sel || !emailTo.trim()) { setEmailMsg('Enter a client email first.'); return; }
     setEmailMsg('Sending…');
     try {
-      const r = await apiFetch(`/api/quotes/dispatch/${sel}/send-link`, { method: 'POST', body: JSON.stringify({ to: emailTo.trim() }) });
+      const r = await apiFetch(`/api/quotes/dispatch/${sel}/send-link`, { method: 'POST', body: JSON.stringify({ to: emailTo.trim(), cc: emailCc.trim() }) });
       if (!r.ok) {
         let detail = '';
         try { const j = await r.json(); detail = j?.error ? `: ${j.error}` : ''; } catch { /* non-JSON body */ }
         setEmailMsg(`Failed (HTTP ${r.status})${detail}`);
         return;
       }
-      setEmailMsg('Quote link sent ✓'); setEmailOpen(false); setEmailTo('');
+      setEmailMsg('Quote link sent ✓'); setEmailOpen(false); setEmailTo(''); setEmailCc('');
     } catch (e) { setEmailMsg(`Failed: ${e?.message || 'network error'}`); }
   };
 
@@ -123,6 +124,8 @@ export default function Quotes() {
                 {emailOpen && (
                   <>
                     <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="client@email.com"
+                      style={{ padding: '7px 10px', fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)' }} />
+                    <input type="text" value={emailCc} onChange={(e) => setEmailCc(e.target.value)} placeholder="Cc (optional)"
                       style={{ padding: '7px 10px', fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)' }} />
                     <button onClick={sendEmailLink} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Send</button>
                   </>
