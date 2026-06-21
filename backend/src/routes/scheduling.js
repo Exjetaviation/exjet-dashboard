@@ -388,8 +388,8 @@ router.get('/trips/:lfOid/itinerary/email-preview', async (req, res) => {
   try {
     const vm = await buildItinerary(req.params.lfOid);
     if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
-    const link = `${req.protocol}://${req.get('host')}/itinerary/${req.params.lfOid}`;
-    res.json(buildItineraryEmail(vm, { recipientName: req.query.name, link }));
+    const base = `${req.protocol}://${req.get('host')}`;
+    res.json(buildItineraryEmail(vm, { recipientName: req.query.name, link: `${base}/itinerary/${req.params.lfOid}`, logoUrl: `${base}/itinerary/email-logo.png` }));
   } catch (e) {
     console.error('GET itinerary email-preview:', e.message);
     res.status(500).json({ error: e.message || 'Failed to build itinerary email' });
@@ -405,8 +405,8 @@ router.post('/trips/:lfOid/itinerary/send', async (req, res) => {
     if (!to) return res.status(400).json({ error: 'Recipient email required' });
     const vm = await buildItinerary(req.params.lfOid);
     if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
-    const link = `${req.protocol}://${req.get('host')}/itinerary/${req.params.lfOid}`;
-    const { subject, html } = buildItineraryEmail(vm, { recipientName: req.body?.recipientName, link });
+    const base = `${req.protocol}://${req.get('host')}`;
+    const { subject, html } = buildItineraryEmail(vm, { recipientName: req.body?.recipientName, link: `${base}/itinerary/${req.params.lfOid}`, logoUrl: `${base}/itinerary/email-logo.png` });
     // Attach the itinerary PDF (best-effort — still send the formatted email if the
     // PDF renderer is unavailable).
     let attachments = [];

@@ -21,7 +21,7 @@ export function itinerarySummary(vm) {
 }
 
 // Returns { subject, html, summary, recipientName }.
-export function buildItineraryEmail(vm, { recipientName, link } = {}) {
+export function buildItineraryEmail(vm, { recipientName, link, logoUrl } = {}) {
   const s = itinerarySummary(vm);
   const name = (recipientName || '').trim() || firstNameOf(vm?.client?.name);
   const subject = `Exjet Aviation – Passenger Itinerary${s.tripNumber ? ` | Trip #${s.tripNumber}` : ''}`;
@@ -42,12 +42,15 @@ export function buildItineraryEmail(vm, { recipientName, link } = {}) {
     </p>
     <p>Should you have any questions or need to make changes, please don't hesitate to reach out. We look forward to providing you with an exceptional flight experience.</p>
     <p style="margin-top:22px">Warm regards,</p>
-    <p style="margin:2px 0">
-      <strong>Jaime A Torres</strong><br>
-      Exjet Aviation<br>
-      4250 Execuair Street, Suite G | Orlando, FL 32827<br>
-      +1 (407) 677-7792
-    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:2px 0"><tr>
+      ${logoUrl ? `<td style="vertical-align:middle;padding-right:16px"><img src="${esc(logoUrl)}" alt="Exjet Aviation" width="130" style="display:block;border:0"></td>` : ''}
+      <td style="vertical-align:middle;font-size:13px;color:#1a1a1a;line-height:1.5">
+        <strong>Jaime A Torres</strong><br>
+        Exjet Aviation<br>
+        4250 Execuair Street, Suite G | Orlando, FL 32827<br>
+        +1 (407) 677-7792
+      </td>
+    </tr></table>
   </div></body></html>`;
   return { subject, html, summary: s, recipientName: name };
 }
