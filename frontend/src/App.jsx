@@ -26,6 +26,7 @@ import CrewCalendar from './pages/CrewCalendar';
 import Scheduling from './pages/Scheduling';
 import SchedulingTripDetail from './pages/SchedulingTripDetail';
 import SchedulingNewTrip from './pages/SchedulingNewTrip';
+import SchedulingTripSheet from './pages/SchedulingTripSheet';
 
 // The existing dashboard: left sidebar + pages, with the global TopNav on top.
 function Dashboard() {
@@ -96,6 +97,7 @@ function SchedulingApp() {
           <Route index element={<Scheduling />} />
           <Route path="new" element={<SchedulingNewTrip />} />
           <Route path="trips/:id" element={<SchedulingTripDetail />} />
+          <Route path="trips/:id/sheet" element={<SchedulingTripSheet />} />
         </Routes>
       </main>
     </div>

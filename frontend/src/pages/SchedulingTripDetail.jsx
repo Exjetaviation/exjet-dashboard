@@ -323,7 +323,7 @@ export default function SchedulingTripDetail() {
             <>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>· Closes automatically once the flight is complete.</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 6, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
-                <a href={`${API_BASE}/tripsheet/${id}`} target="_blank" rel="noopener noreferrer"
+                <a href={`/scheduling/trips/${id}/sheet`} target="_blank" rel="noopener noreferrer"
                   style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Crew Trip Sheet ↗</a>
               </div>
             </>
@@ -561,7 +561,7 @@ export default function SchedulingTripDetail() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           <a href={`${API_BASE}/itinerary/${id}`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Passenger Itinerary ↗</a>
-          <a href={`${API_BASE}/tripsheet/${id}`} target="_blank" rel="noopener noreferrer"
+          <a href={`/scheduling/trips/${id}/sheet`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Crew Trip Sheet ↗</a>
         </div>
 
