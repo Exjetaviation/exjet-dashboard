@@ -53,3 +53,14 @@ test('mapClient assembles name, company, address from the dispatch', () => {
   assert.equal(c.company, 'Concierge One');
   assert.equal(c.address, '2735 High St, London, W1, UK');
 });
+
+// Regression (Trip #25093): passengerCount=15 but only 13 passengers assigned.
+// The itinerary must reflect the ASSIGNED count (leg.pax list), not passengerCount.
+test('mapItineraryLeg counts assigned passengers, not the passengerCount field', () => {
+  const l = { passengerCount: 15, passengers: Array.from({ length: 13 }, (_, i) => ({ user: { _id: String(i) }, seat: i + 1 })) };
+  assert.equal(mapItineraryLeg(l).pax, 13);
+});
+
+test('mapItineraryLeg with an empty assigned list reports 0 assigned', () => {
+  assert.equal(mapItineraryLeg({ passengerCount: 4, passengers: [] }).pax, 0);
+});
