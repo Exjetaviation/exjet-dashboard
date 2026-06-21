@@ -69,6 +69,10 @@ const CUSTOMER_TTL_MS = 60 * 60 * 1000; // 1h
 export const getCustomer = async (id) =>
   (await (await lf()).get(`/api/customer/${encodeURIComponent(id)}`)).data;
 
+// Resolve an image id (from customer.images[].id) to its presigned S3 download URL.
+export const getImageUrl = async (imageId) =>
+  (await (await lf()).get(`/api/image/${encodeURIComponent(imageId)}`))?.data?.url || null;
+
 // Full passenger directory across all letters, normalized + cached.
 export const getAllCustomers = async () => {
   if (_customerCache && Date.now() - _customerCacheAt < CUSTOMER_TTL_MS) return _customerCache;
@@ -95,6 +99,31 @@ export const getAllCustomers = async () => {
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   _customerCache = out; _customerCacheAt = Date.now();
+  return out;
+};
+
+// Full customer directory as RAW records (with _id, name parts, email…), deduped
+// by oid. Used by the incremental sync to import customers we don't have yet.
+export const getAllCustomersRaw = async () => {
+  const out = [];
+  const seen = new Set();
+  for (const letter of CUSTOMER_LETTERS) {
+    for (let page = 1; page <= 40; page++) {
+      let arr;
+      try {
+        const d = await getCustomersByLetter(letter, page);
+        arr = Array.isArray(d) ? d : (d?.results || d?.customers || d?.data || d?.list || []);
+      } catch { break; }
+      if (!arr.length) break;
+      for (const c of arr) {
+        const id = c._id?.$oid || c._id;
+        if (id && seen.has(id)) continue;
+        if (id) seen.add(id);
+        out.push(c);
+      }
+      if (arr.length < CUSTOMER_PAGE) break;
+    }
+  }
   return out;
 };
 

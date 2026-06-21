@@ -10,6 +10,7 @@ import { syncDb } from './syncDb.js';
 import { autoCloseCompletedTrips } from './autoClose.js';
 import { calibratePerfProfiles } from './perfCalibrate.js';
 import { getAllCustomers } from '../services/levelflight.js';
+import { syncLfDirectory } from './lfEnrich.js';
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 let started = false;
@@ -24,6 +25,10 @@ export async function syncNow() {
   await calibratePerfProfiles().catch((e) => console.warn('[scheduling calibrate] failed:', e?.message || e));
   // Warm the LevelFlight passenger directory cache so the autocomplete is instant.
   getAllCustomers().catch((e) => console.warn('[scheduling customers warm] failed:', e?.message || e));
+  // Keep the passenger directory current from LevelFlight — import new customers
+  // (hourly), enrich a bounded batch (detail + scans), link recent trip pax.
+  // Best-effort: never fails the core sync.
+  await syncLfDirectory().catch((e) => console.warn('[scheduling lf-directory] failed:', e?.message || e));
   return counts;
 }
 
