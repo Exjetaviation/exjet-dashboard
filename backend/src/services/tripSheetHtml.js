@@ -146,7 +146,7 @@ export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
   .foot { padding:18px 30px 30px; font-size:9px; color:#5b6b82; }
   .webbar { display:flex; justify-content:flex-end; padding:10px 30px 0; }
   .webbtn { font-size:12px; padding:8px 14px; border-radius:8px; background:#1a2436; border:1px solid #8893a5; color:#e8edf4; text-decoration:none; }
-  ${print ? '.leg{break-inside:avoid;} .mxbox{break-inside:avoid;}' : ''}
+  ${print ? '.legsep,.legroute,.comms,.metar,.crew,.fbo,.fbos,.legpax,.mxbox,.hero{break-inside:avoid;page-break-inside:avoid;} .sec,.legsep{break-after:avoid;page-break-after:avoid;} tr{break-inside:avoid;}' : ''}
 </style></head>
 <body><div class="page">
   ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}">Download PDF</a></div>` : ''}

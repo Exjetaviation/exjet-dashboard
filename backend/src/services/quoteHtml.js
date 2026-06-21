@@ -68,7 +68,7 @@ export function renderQuoteHtml(vm, { print = false, web = false } = {}) {
   .webbar { display:flex; justify-content:flex-end; padding:10px 30px 0; }
   .webbtn { font-size:12px; padding:8px 14px; border-radius:8px; background:#1a2436; border:1px solid #8893a5; color:#e8edf4; text-decoration:none; }
   .cta { margin:8px 30px 26px; padding:14px; text-align:center; border-radius:9px; background:linear-gradient(90deg,#cfd6e0,#aab4c2); color:#0b1018; font-weight:700; letter-spacing:3px; font-size:13px; text-decoration:none; display:block; }
-  ${print ? '.terms{break-before:page;} .terms summary span:last-child{display:none;}' : ''}
+  ${print ? '.terms{break-before:page;} .terms summary span:last-child{display:none;} .leg,.total,.sign,.hero{break-inside:avoid;page-break-inside:avoid;} .sec{break-after:avoid;page-break-after:avoid;}' : ''}
 </style></head>
 <body><div class="page">
   ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}">Download PDF</a></div>` : ''}
