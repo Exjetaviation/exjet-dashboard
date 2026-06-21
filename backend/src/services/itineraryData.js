@@ -5,27 +5,20 @@
 import { getTripLog } from './levelflight.js';
 import { getDailyForecast } from './weather.js';
 import { assignedPaxCount } from './paxCount.js';
+import { leadUserId } from './leadPassenger.js';
 
 const fullName = (u) => (u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : '') || null;
 const oid = (x) => x?.$oid || x;
 const loc = (x) => (x && x.lat != null && x.lng != null ? [x.lat, x.lng] : null);
 
-// Passenger names for a leg, LEAD FIRST. LevelFlight's lead-passenger toggle assigns
-// that passenger a forward (lowest, distinct) seat while everyone else shares a
-// default seat — so the lead is the single passenger holding the unique lowest seat.
-// No clear standout (all same seat, or none seated) -> no lead, original order kept.
+// Passenger names for a leg, LEAD FIRST (lead = the LevelFlight lead-toggle passenger,
+// identified by their unique forward seat — see leadPassenger.js). No clear standout
+// -> no lead, original order kept.
 function mapLegPassengers(list) {
-  const arr = (list || [])
-    .map((p) => ({ name: fullName(p?.user), id: oid(p?.user?._id), seat: p?.seat }))
-    .filter((p) => p.name);
-  const seated = arr.filter((p) => p.seat != null);
-  let leadId = null;
-  if (seated.length) {
-    const min = Math.min(...seated.map((p) => p.seat));
-    if (seated.filter((p) => p.seat === min).length === 1) leadId = seated.find((p) => p.seat === min).id;
-  }
-  return arr
-    .map((p) => ({ name: p.name, lead: leadId != null && p.id != null && p.id === leadId }))
+  const leadId = leadUserId(list);
+  return (list || [])
+    .map((p) => ({ name: fullName(p?.user), lead: leadId != null && oid(p?.user?._id) === leadId }))
+    .filter((p) => p.name)
     .sort((a, b) => Number(b.lead) - Number(a.lead)); // lead first; others keep order (stable)
 }
 

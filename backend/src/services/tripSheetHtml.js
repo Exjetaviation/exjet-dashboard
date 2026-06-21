@@ -52,14 +52,14 @@ function legBlock(leg, i, n) {
     ${(leg.depMetar || leg.arrMetar) ? `<div class="metar">${leg.depMetar ? `<div>${esc(leg.depMetar)}</div>` : ''}${leg.arrMetar ? `<div>${esc(leg.arrMetar)}</div>` : ''}</div>` : ''}
     ${crew ? `<div class="crew">${crew}</div>` : ''}
     <div class="fbos">${fboCell('DEPARTURE FBO', leg.depFbo)}${fboCell('ARRIVAL FBO', leg.arrFbo)}</div>
-    ${(leg.manifest && leg.manifest.length) ? `<div class="legpax"><div class="legpaxh">PASSENGERS (${leg.manifest.length})</div><table class="tbl tbl-in"><thead><tr><th>Name</th><th>Weight</th><th>DOB</th><th>Passport</th></tr></thead><tbody>${leg.manifest.map((p) => `<tr><td>${esc(p.name || '')}</td><td>${p.weight != null ? esc(p.weight) + ' lbs' : ''}</td><td>${esc(fmtDate(p.dob))}</td><td>${esc(p.passport || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${(leg.manifest && leg.manifest.length) ? `<div class="legpax"><div class="legpaxh">PASSENGERS (${leg.manifest.length})</div><table class="tbl tbl-in"><thead><tr><th>Name</th><th>Weight</th><th>DOB</th><th>Passport</th></tr></thead><tbody>${leg.manifest.map((p) => `<tr${p.lead ? ' class="leadrow"' : ''}><td>${esc(p.name || '')}${p.lead ? ' <span class="leadtag">LEAD</span>' : ''}</td><td>${p.weight != null ? esc(p.weight) + ' lbs' : ''}</td><td>${esc(fmtDate(p.dob))}</td><td>${esc(p.passport || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${(leg.crewNote || leg.releasedBy) ? `<div class="relnote">${leg.crewNote ? `<span class="cl">CREW NOTE</span> ${esc(leg.crewNote)} ` : ''}${leg.releasedBy ? `<span class="cl">RELEASED BY</span> ${esc(leg.releasedBy)}${leg.releasedAt ? ' · ' + esc(fmtZ(leg.releasedAt)) : ''}` : ''}</div>` : ''}
   </div>`;
 }
 
 function manifestBlock(manifest) {
   if (!manifest || !manifest.length) return '';
-  const rows = manifest.map((p) => `<tr><td>${esc(p.name || '')}</td><td>${esc(p.gender || '')}</td><td>${p.weight != null ? esc(p.weight) + ' lbs' : ''}</td><td>${esc(fmtDate(p.dob))}</td><td>${esc(p.citizenship || '')}</td><td>${esc(p.passport || '')}</td></tr>`).join('');
+  const rows = manifest.map((p) => `<tr${p.lead ? ' class="leadrow"' : ''}><td>${esc(p.name || '')}${p.lead ? ' <span class="leadtag">LEAD</span>' : ''}</td><td>${esc(p.gender || '')}</td><td>${p.weight != null ? esc(p.weight) + ' lbs' : ''}</td><td>${esc(fmtDate(p.dob))}</td><td>${esc(p.citizenship || '')}</td><td>${esc(p.passport || '')}</td></tr>`).join('');
   return `<div class="sec">PASSENGER MANIFEST (${manifest.length})</div>
     <table class="tbl"><thead><tr><th>Name</th><th>Gender</th><th>Weight</th><th>DOB</th><th>Citizenship</th><th>Passport</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -140,6 +140,8 @@ export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
   .tbl { width:calc(100% - 60px); margin:0 30px; border-collapse:collapse; font-size:10px; }
   .tbl th { text-align:left; color:#6b7890; font-weight:600; border-bottom:1px solid #233247; padding:5px 8px; font-size:9px; letter-spacing:1px; }
   .tbl td { color:#cfd6e0; border-bottom:1px solid #141e2e; padding:5px 8px; }
+  .leadrow td { background:rgba(56,189,248,0.13); color:#fff; }
+  .leadtag { font-size:7px; letter-spacing:1px; font-weight:700; color:#bfe6ff; }
   .mxbox { margin:0 30px; background:#0e1622; border:1px solid #1a2638; border-radius:8px; padding:10px 12px; }
   .mxline { font-size:11px; color:#cfd6e0; padding:2px 0; } .mxsub { font-size:9px; letter-spacing:1px; color:#6b7890; margin:8px 0 2px; }
   .mxbox .tbl { width:100%; margin:8px 0 0; }
