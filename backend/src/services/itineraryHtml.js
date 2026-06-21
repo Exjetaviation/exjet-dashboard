@@ -28,10 +28,10 @@ function legBlock(leg, i) {
   const c = leg.crew || {};
   const crew = [crewCell('PIC', c.pic), crewCell('SIC', c.sic), ...(c.ca || []).map((n) => crewCell('CA', n))].filter(Boolean).join('');
   const meta = [leg.eft ? esc(leg.eft) : '', leg.distance != null ? esc(leg.distance) + ' nm' : '', leg.pax != null ? esc(leg.pax) + ' PAX' : ''].filter(Boolean).join(' · ');
-  const paxNames = (leg.passengerNames || []).filter(Boolean);
-  const pax = paxNames.length
-    ? `<div class="paxsec"><div class="paxlbl">PASSENGERS · ${paxNames.length}</div><div class="paxchips">${
-        paxNames.map((n) => `<span class="paxchip"><span class="paxav">${esc(initials(n))}</span>${esc(n)}</span>`).join('')
+  const paxList = (leg.passengers || []).filter((p) => p.name);
+  const pax = paxList.length
+    ? `<div class="paxsec"><div class="paxlbl">PASSENGERS · ${paxList.length}</div><div class="paxchips">${
+        paxList.map((p) => `<span class="paxchip${p.lead ? ' lead' : ''}"><span class="paxav">${esc(initials(p.name))}</span>${esc(p.name)}${p.lead ? '<span class="leadtag">LEAD</span>' : ''}</span>`).join('')
       }</div></div>`
     : '';
   return `<div class="leg">
@@ -99,6 +99,9 @@ export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
   .paxchips { display:flex; flex-wrap:wrap; gap:6px; }
   .paxchip { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#dfe7f2; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); border-radius:16px; padding:3px 11px 3px 3px; }
   .paxav { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:rgba(79,142,247,0.20); color:#9ec1f5; font-size:8px; font-weight:700; }
+  .paxchip.lead { background:rgba(56,189,248,0.18); border-color:rgba(56,189,248,0.5); color:#fff; font-weight:600; }
+  .paxchip.lead .paxav { background:rgba(56,189,248,0.5); color:#06283d; }
+  .leadtag { font-size:7px; letter-spacing:1px; font-weight:700; color:#bfe6ff; margin-left:5px; }
   .fbos { display:flex; gap:14px; margin-top:6px; }
   .fbo { flex:1; background:#0e1622; border:1px solid #1a2638; border-radius:7px; padding:8px 10px; }
   .fbol { font-size:9px; letter-spacing:1px; color:#6b7890; } .fbon { font-size:12px; color:#fff; font-weight:600; margin-top:2px; } .fboa { font-size:10px; color:#8a98ad; }
