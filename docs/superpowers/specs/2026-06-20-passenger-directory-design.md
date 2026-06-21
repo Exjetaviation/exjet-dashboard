@@ -23,9 +23,9 @@ We want a **persistent passenger directory**: a passenger becomes a first-class 
 7. **Profile fields:** Identity includes **middle name** (TSA Secure Flight exact match) and **citizenship** (distinct from nationality).
 8. **Expiry warnings: yes.** Warn when a passport/visa/green card expires before — or within 6 months of — a booked trip.
 
-## Prerequisites (verify before implementing)
+## Prerequisites
 
-- **Migrations 012 (`scheduling_documents`) and 013 (`passenger_documents`) applied** in Supabase, and the **private `scheduling-docs` Storage bucket exists.** The document backfill (decision 2/3) depends on these being live. *Status unconfirmed at design time — verify as step zero.*
+- **Migrations 012 (`scheduling_documents`) and 013 (`passenger_documents`) and the private `scheduling-docs` Storage bucket are live in Supabase** (confirmed by user 2026-06-20). The document backfill (decision 2/3) depends on these — prerequisite satisfied.
 
 ## Data Model
 
