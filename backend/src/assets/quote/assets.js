@@ -11,6 +11,7 @@ const uri = (file, mime) => {
 };
 
 export const LOGO_DATA_URI = uri('logo.png', 'image/png');
+export const WINGS_DATA_URI = uri('wings.png', 'image/png');
 
 // { tail: { interior, exterior, cabin } } — extend as photos are added.
 export function aircraftPhotos(tail) {

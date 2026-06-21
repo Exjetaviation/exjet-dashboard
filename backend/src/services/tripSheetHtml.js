@@ -3,7 +3,7 @@
 // "Midnight" HTML document — same design family as the quote/itinerary, with the
 // operational content crews need (call signs, comms, METARs, FBOs, crew, passenger
 // manifest, aircraft maintenance/currency). Used for the dashboard modal AND the PDF.
-import { LOGO_DATA_URI } from '../assets/quote/assets.js';
+import { LOGO_DATA_URI, WINGS_DATA_URI } from '../assets/quote/assets.js';
 import { mapScript } from './docMap.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -34,7 +34,7 @@ function fboCell(label, fbo) {
     ${fbo.crewNote ? `<div class="fbonote">${esc(fbo.crewNote)}</div>` : ''}</div>`;
 }
 
-const WINGS = '<svg class="wings" width="132" height="16" viewBox="0 0 132 16" fill="none" stroke="#aab4c2" stroke-width="1" stroke-linecap="round"><circle cx="66" cy="8" r="2.6" fill="#c4ced9" stroke="none"/><path d="M61 8 L46 5 M61 8 L42 7 M61 9 L44 9.5 M61 9 L48 11.5 M61 10 L53 13"/><path d="M71 8 L86 5 M71 8 L90 7 M71 9 L88 9.5 M71 9 L84 11.5 M71 10 L79 13"/></svg>';
+const WINGS = WINGS_DATA_URI ? `<img class="wings" src="${WINGS_DATA_URI}" alt="">` : '';
 
 function legBlock(leg, i, n) {
   const c = leg.crew || {};
@@ -114,7 +114,7 @@ export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
   .sec { font-size:10px; letter-spacing:3px; color:#6b7890; margin:16px 30px 6px; }
   .leg { padding:4px 30px 20px; }
   .legsep { text-align:center; padding:18px 0 12px; margin-top:8px; border-top:1px solid #233247; }
-  .wings { display:block; margin:0 auto 7px; opacity:.92; }
+  .wings { display:block; margin:0 auto 7px; height:42px; width:auto; opacity:.92; }
   .legtitle { font-size:13px; letter-spacing:5px; color:#fff; font-weight:700; }
   .legtype { display:inline-block; margin-top:6px; font-size:10px; letter-spacing:2px; padding:2px 11px; border-radius:20px; }
   .legtype.is135 { color:#0b1018; background:linear-gradient(90deg,#cfd6e0,#aab4c2); font-weight:700; }
