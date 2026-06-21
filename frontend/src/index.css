@@ -45,5 +45,9 @@ body {
    then colorize the water to blue. Land lands on (0,0,0), water on ~(48,95,196).
    Filters render per-tile (no backdrop needed); markers/routes are in higher
    panes and stay untinted. */
-.leaflet-container { background: #344d66 !important; }
-.leaflet-tile-pane { filter: invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95); }
+.leaflet-container { background: var(--bg-primary) !important; }
+/* Black land + screenshot-blue water — ONLY the Fleet Map (Toner basemap).
+   Scoped so the other dashboard maps (FlightTrackMap, TripPathMap on dark_all)
+   aren't inverted/colorized. */
+.exjet-map-wrap .leaflet-container { background: #344d66 !important; }
+.exjet-map-wrap .leaflet-tile-pane { filter: invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95); }
