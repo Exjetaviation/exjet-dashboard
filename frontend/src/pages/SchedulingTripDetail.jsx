@@ -5,6 +5,7 @@ import FlightsList from '../components/FlightsList';
 import { distinctCrew, distinctClients } from '../lib/schedulingAggregate';
 import { useApi } from '../hooks/useApi';
 
+
 const FLEET = ['N408JS', 'N69FP'];
 const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_time: '', pax: '', positioning: false });
 const toLocalInput = (ms) => { if (!ms) return ''; const d = new Date(ms); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
@@ -201,19 +202,53 @@ export default function SchedulingTripDetail() {
     sic: legPilots.find((p) => p.seat === 3)?.user || null,
     fa: (legsForView[0]?.attendants || [])[0]?.user || null,
   };
-  // Passenger manifest editor (with autocomplete from previous passengers).
-  const { data: paxSuggestData } = useApi('/api/scheduling/passengers/suggest');
-  const paxSuggestions = paxSuggestData?.passengers || [];
-  const blankPax = () => ({ name: '', weight_lbs: '', dob: '', note: '' });
-  const startPaxEdit = () => setPaxEdit(passengers.length ? passengers.map((p) => ({ id: p.id, name: p.name || '', weight_lbs: p.weight_lbs ?? '', dob: p.dob || '', note: p.note || '' })) : [blankPax()]);
+  // Passenger manifest editor — people-directory-based picker.
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [peopleResults, setPeopleResults] = useState([]);
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await apiFetch(`/api/scheduling/people?q=${encodeURIComponent(peopleQuery)}`);
+        const j = await r.json();
+        if (live) setPeopleResults(j.people || []);
+      } catch { /* ignore */ }
+    }, 200);
+    return () => { live = false; clearTimeout(t); };
+  }, [peopleQuery]);
+
+  // Draft rows carry person_id + per-trip fields; identity (name/dob/weight) is
+  // carried for display only — it comes from the joined person on the backend.
+  const startPaxEdit = () => setPaxEdit((passengers || []).map((p) => ({
+    id: p.id, person_id: p.person_id, name: p.name, dob: p.dob, weight_lbs: p.weight_lbs,
+    seat: p.seat || '', cargo_lbs: p.cargo_lbs ?? '', tsa_status: p.tsa_status || '', note: p.note || '',
+  })));
+
   const updatePax = (i, field, v) => setPaxEdit((d) => d.map((p, idx) => (idx === i ? { ...p, [field]: v } : p)));
-  const addPax = () => setPaxEdit((d) => [...d, blankPax()]);
   const removePax = (i) => setPaxEdit((d) => d.filter((_, idx) => idx !== i));
-  // Picking a known name fills in their DOB/weight from history.
-  const onPaxName = (i, name) => {
-    const known = paxSuggestions.find((p) => p.name === name);
-    setPaxEdit((d) => d.map((p, idx) => (idx === i ? { ...p, name, dob: known?.dob || p.dob, weight_lbs: known?.weight_lbs ?? p.weight_lbs } : p)));
+
+  const addPerson = (person) => {
+    setPaxEdit((d) => {
+      if ((d || []).some((r) => r.person_id === person.id)) return d; // already on the trip
+      return [...(d || []), {
+        person_id: person.id, name: [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' '),
+        dob: person.dob, weight_lbs: person.weight_lbs, seat: '', cargo_lbs: '', tsa_status: '', note: '',
+      }];
+    });
+    setPeopleQuery('');
   };
+
+  const addNewPerson = async () => {
+    const first = window.prompt('First name?'); if (!first) return;
+    const last = window.prompt('Last name?') || '';
+    try {
+      const r = await apiFetch('/api/scheduling/people', { method: 'POST', body: JSON.stringify({ first_name: first, last_name: last }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Create failed');
+      addPerson(j.person);
+    } catch (e) { setError(e.message); }
+  };
+
   const savePax = async () => {
     setBusy(true); setError(null);
     try {
@@ -222,6 +257,7 @@ export default function SchedulingTripDetail() {
       if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
       setPassengers(j.passengers || []);
       setPaxEdit(null);
+      setPeopleQuery('');
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
@@ -488,61 +524,58 @@ export default function SchedulingTripDetail() {
       </Section>
 
       <Section title="Passengers" right={
-        paxEdit == null ? (
+        !paxEdit && (
           <button onClick={startPaxEdit} disabled={busy} style={{ padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>✎ Edit manifest</button>
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={savePax} disabled={busy} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Save</button>
-            <button onClick={() => setPaxEdit(null)} disabled={busy} style={{ padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
-          </div>
         )
       }>
-        {paxEdit != null ? (
+        {paxEdit ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <datalist id="pax-suggest">{paxSuggestions.map((p) => <option key={p.name} value={p.name} />)}</datalist>
-            {paxEdit.map((p, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input list="pax-suggest" value={p.name} onChange={(e) => onPaxName(i, e.target.value)} placeholder="Passenger name" style={{ ...inp, flex: '2 1 160px' }} />
-                <input type="number" min="0" value={p.weight_lbs} onChange={(e) => updatePax(i, 'weight_lbs', e.target.value)} placeholder="lbs" style={{ ...inp, flex: '0 1 70px' }} />
-                <input type="date" value={p.dob || ''} onChange={(e) => updatePax(i, 'dob', e.target.value)} title="Date of birth" style={{ ...inp, flex: '1 1 130px' }} />
-                <input value={p.note} onChange={(e) => updatePax(i, 'note', e.target.value)} placeholder="Note" style={{ ...inp, flex: '2 1 120px' }} />
-                <button onClick={() => removePax(i)} title="Remove" style={{ padding: '7px 9px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>✕</button>
+            {/* picker */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input value={peopleQuery} onChange={(e) => setPeopleQuery(e.target.value)} placeholder="Search people to add…" style={{ ...inp, flex: '1 1 220px' }} />
+              <button onClick={addNewPerson} style={{ padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add new person</button>
+            </div>
+            {peopleQuery && peopleResults.length > 0 && (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8 }}>
+                {peopleResults.map((r) => (
+                  <div key={r.id} onClick={() => addPerson(r)} style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{[r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ')} <span style={{ color: 'var(--text-secondary)' }}>· {r.dob || 'no DOB'}{r.hasPassport ? ' · 🛂' : ''}</span></span>
+                    <span style={{ color: 'var(--accent)' }}>add →</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* manifest rows: identity read-only, per-trip editable */}
+            {(paxEdit || []).map((p, i) => (
+              <div key={p.person_id} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
+                <span style={{ flex: '2 1 160px', fontSize: 13, color: 'var(--text-primary)' }}>{p.name} <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{p.dob || ''}</span></span>
+                <input value={p.seat} onChange={(e) => updatePax(i, 'seat', e.target.value)} placeholder="Seat" style={{ ...inp, flex: '0 1 70px' }} />
+                <input value={p.cargo_lbs} onChange={(e) => updatePax(i, 'cargo_lbs', e.target.value)} placeholder="Bags lb" type="number" style={{ ...inp, flex: '0 1 80px' }} />
+                <input value={p.tsa_status} onChange={(e) => updatePax(i, 'tsa_status', e.target.value)} placeholder="TSA" style={{ ...inp, flex: '0 1 90px' }} />
+                <input value={p.note} onChange={(e) => updatePax(i, 'note', e.target.value)} placeholder="Trip note" style={{ ...inp, flex: '1 1 120px' }} />
+                <button onClick={() => removePax(i)} style={{ padding: '4px 8px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--danger)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>✕</button>
               </div>
             ))}
-            <button onClick={addPax} style={{ alignSelf: 'flex-start', marginTop: 2, padding: '5px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add passenger</button>
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Start typing a name to pick from previous passengers (fills DOB &amp; weight).</p>
+            {error && <p style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={savePax} disabled={busy} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{busy ? 'Saving…' : 'Save manifest'}</button>
+              <button onClick={() => { setPaxEdit(null); setPeopleQuery(''); }} style={{ padding: '6px 14px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Name, DOB &amp; weight come from the person — edit those on their profile. Only seat/bags/TSA/note are per-trip.</p>
           </div>
         ) : passengers.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {passengers.map((p) => {
-              const pDocs = documents.filter((d) => d.passenger_id === p.id);
-              return (
-                <div key={p.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
-                    {p.weight_lbs != null && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.weight_lbs} lbs</span>}
-                    {p.dob && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>DOB {p.dob}</span>}
-                    {p.note && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>· {p.note}</span>}
-                    <label style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--accent)', cursor: docBusy ? 'default' : 'pointer', opacity: docBusy ? 0.6 : 1 }}>
-                      ↑ Upload ID/doc
-                      <input type="file" disabled={docBusy} onChange={(e) => { uploadDoc(e.target.files?.[0], p.id); e.target.value = ''; }} style={{ display: 'none' }} />
-                    </label>
-                  </div>
-                  {pDocs.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 5, paddingLeft: 2 }}>
-                      {pDocs.map((d) => (
-                        <span key={d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 8px' }}>
-                          {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)' }}>{d.name}</a> : <span style={{ color: 'var(--text-primary)' }}>{d.name}</span>}
-                          <button onClick={() => deleteDoc(d.id)} disabled={docBusy} title="Delete" style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 12, padding: 0 }}>✕</button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {passengers.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, flexWrap: 'wrap' }}>
+                <a href={`/scheduling/people/${p.person_id}`} style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>{p.name}</a>
+                {p.hasPassport && <span title="Passport on file">🛂</span>}
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {p.dob ? `DOB ${p.dob}` : ''}{p.weight_lbs ? ` · ${p.weight_lbs} lb` : ''}{p.seat ? ` · seat ${p.seat}` : ''}{p.cargo_lbs ? ` · ${p.cargo_lbs} lb bags` : ''}{p.tsa_status ? ` · ${p.tsa_status}` : ''}{p.note ? ` · ${p.note}` : ''}
+                </span>
+              </div>
+            ))}
           </div>
-        ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{pax > 0 ? `${pax} passenger${pax === 1 ? '' : 's'} on the legs — add names to the manifest.` : 'No passengers on the manifest.'}</p>}
+        ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No passengers on the manifest. Click "Edit manifest" to add some.</p>}
       </Section>
 
       <Section title="Trip Checklist">

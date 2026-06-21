@@ -10,6 +10,8 @@ import { buildNativeLegSnapshot } from '../scheduling/buildNativeLeg.js';
 import { workflowStage, nextActions, isValidTransition, shouldAutoClose } from '../scheduling/workflow.js';
 import { quoteSummary } from '../scheduling/quoteSummary.js';
 import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
+import { documentAlerts } from '../scheduling/docExpiry.js';
+import { rankPeople } from '../scheduling/peopleSearch.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
@@ -440,40 +442,214 @@ router.patch('/trips/:lfOid/crew', requireSchedulingEditor, async (req, res) => 
   }
 });
 
-// Passenger columns we expose/accept.
-const PAX_COLS = 'id, name, dob, weight_lbs, note, tsa_status';
+const PERSON_COLS = 'id, first_name, middle_name, last_name, dob, gender, nationality, citizenship, weight_lbs, email, phone, passport_number, passport_country, passport_expiry, green_card_number, green_card_expiry, visa_number, visa_expiry, known_traveler_number, redress_number, notes, origin, lf_oid, created_at, updated_at';
 
-// GET /api/scheduling/trips/:lfOid/passengers — the trip's passenger manifest.
+// Leg departure times are epoch ms for native legs but ISO strings for mirrored
+// LF legs — normalize to ms so documentAlerts (which compares to Date.now()) works
+// for both. Returns null for missing/unparseable values.
+function toMs(v) {
+  if (v == null) return null;
+  const ms = typeof v === 'number' ? v : Date.parse(v);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// GET /api/scheduling/people?q=&limit= — passenger directory search. Returns
+// summaries with trip count + expiry alerts for the directory list.
+router.get('/people', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const { data: all, error } = await supabase.from('scheduling_people').select(PERSON_COLS);
+    if (error) throw error;
+    const ranked = rankPeople(all || [], req.query.q, limit);
+    const ids = ranked.map((p) => p.id);
+
+    // Trip counts + each person's upcoming trip dates (for expiry alerts).
+    const counts = {};
+    const datesById = {};
+    if (ids.length) {
+      const { data: paxRows } = await supabase
+        .from('scheduling_passengers').select('person_id, trip_id').in('person_id', ids);
+      const tripIds = [...new Set((paxRows || []).map((r) => r.trip_id))];
+      const { data: legRows } = tripIds.length
+        ? await supabase.from('scheduling_legs').select('trip_id, seq, lf_synced_snapshot').in('trip_id', tripIds).order('seq')
+        : { data: [] };
+      const startByTrip = {};
+      for (const l of legRows || []) if (startByTrip[l.trip_id] == null) startByTrip[l.trip_id] = toMs(l.lf_synced_snapshot?.departure?.time);
+      const tripsByPerson = {};
+      for (const r of paxRows || []) (tripsByPerson[r.person_id] ||= new Set()).add(r.trip_id);
+      for (const id of ids) {
+        const tset = tripsByPerson[id] || new Set();
+        counts[id] = tset.size;
+        datesById[id] = [...tset].map((t) => startByTrip[t]).filter((v) => v != null);
+      }
+    }
+
+    res.json({ people: ranked.map((p) => ({
+      id: p.id, first_name: p.first_name, middle_name: p.middle_name, last_name: p.last_name, dob: p.dob,
+      hasPassport: !!p.passport_number, tripCount: counts[p.id] || 0, alerts: documentAlerts(p, datesById[p.id] || []),
+    })) });
+  } catch (e) {
+    console.error('GET people:', e.message);
+    res.status(502).json({ error: e.message, people: [] });
+  }
+});
+
+// GET /api/scheduling/people/:id — full profile: person, their documents (signed
+// URLs), trip history, and expiry alerts.
+router.get('/people/:id', async (req, res) => {
+  try {
+    const { data: person, error } = await supabase
+      .from('scheduling_people').select(PERSON_COLS).eq('id', req.params.id).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Person not found' }); throw error; }
+
+    // Trips this person is on (via the per-trip manifest join).
+    const { data: paxRows } = await supabase
+      .from('scheduling_passengers').select('trip_id').eq('person_id', person.id);
+    const tripIds = [...new Set((paxRows || []).map((r) => r.trip_id))];
+    const trips = [];
+    const tripDates = [];
+    if (tripIds.length) {
+      const { data: tripRows } = await supabase
+        .from('scheduling_trips').select('id, lf_oid, trip_number, status').in('id', tripIds);
+      const { data: legRows } = await supabase
+        .from('scheduling_legs').select('trip_id, seq, lf_synced_snapshot').in('trip_id', tripIds).order('seq');
+      const byTrip = new Map();
+      for (const l of legRows || []) { const a = byTrip.get(l.trip_id) || []; a.push(l.lf_synced_snapshot); byTrip.set(l.trip_id, a); }
+      for (const t of tripRows || []) {
+        const s = quoteSummary((byTrip.get(t.id) || []).filter(Boolean));
+        const startMs = toMs(s.start);
+        if (startMs != null) tripDates.push(startMs);
+        trips.push({ id: t.id, ref: t.lf_oid || t.id, trip_number: t.trip_number, status: t.status, route: s.route, start: s.start });
+      }
+      trips.sort((a, b) => (b.start || 0) - (a.start || 0));
+    }
+
+    // Person documents with short-lived signed URLs.
+    const { data: docRows } = await supabase
+      .from('scheduling_documents').select(DOC_COLS).eq('person_id', person.id).order('created_at', { ascending: false });
+    const documents = [];
+    for (const d of docRows || []) {
+      const { data: signed } = await supabase.storage.from(DOC_BUCKET).createSignedUrl(d.storage_path, 3600);
+      documents.push({ ...d, url: signed?.signedUrl || null });
+    }
+
+    res.json({ person, trips, documents, alerts: documentAlerts(person, tripDates) });
+  } catch (e) {
+    console.error('GET person:', e.message);
+    res.status(500).json({ error: 'Failed to load person' });
+  }
+});
+
+// Person fields a client may write.
+const PERSON_WRITABLE = ['first_name', 'middle_name', 'last_name', 'dob', 'gender', 'nationality',
+  'citizenship', 'weight_lbs', 'email', 'phone', 'passport_number', 'passport_country', 'passport_expiry',
+  'green_card_number', 'green_card_expiry', 'visa_number', 'visa_expiry', 'known_traveler_number',
+  'redress_number', 'notes'];
+
+function personFields(body) {
+  const out = {};
+  for (const k of PERSON_WRITABLE) {
+    if (!(k in body)) continue;
+    let v = body[k];
+    if (typeof v === 'string') v = v.trim();
+    if (v === '') v = null;
+    if (k === 'weight_lbs') { const n = v == null ? null : Number(v); v = Number.isFinite(n) ? n : null; }
+    out[k] = v;
+  }
+  return out;
+}
+
+// POST /api/scheduling/people — create a person.
+router.post('/people', requireSchedulingEditor, async (req, res) => {
+  try {
+    const fields = personFields(req.body || {});
+    if (!fields.first_name && !fields.last_name) return res.status(400).json({ error: 'A name is required' });
+    const { data, error } = await supabase.from('scheduling_people')
+      .insert({ ...fields, origin: 'native', modified_by: req.user?.email || null, modified_at: new Date().toISOString() })
+      .select(PERSON_COLS).single();
+    if (error) throw error;
+    res.status(201).json({ person: data });
+  } catch (e) { console.error('POST person:', e.message); res.status(500).json({ error: 'Failed to create person' }); }
+});
+
+// PATCH /api/scheduling/people/:id — update a person.
+router.patch('/people/:id', requireSchedulingEditor, async (req, res) => {
+  try {
+    const fields = personFields(req.body || {});
+    const { data, error } = await supabase.from('scheduling_people')
+      .update({ ...fields, modified_by: req.user?.email || null, modified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', req.params.id).select(PERSON_COLS).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Person not found' }); throw error; }
+    res.json({ person: data });
+  } catch (e) { console.error('PATCH person:', e.message); res.status(500).json({ error: 'Failed to update person' }); }
+});
+
+// DELETE /api/scheduling/people/:id — remove a person (only if on no trips).
+router.delete('/people/:id', requireSchedulingEditor, async (req, res) => {
+  try {
+    const { count } = await supabase.from('scheduling_passengers')
+      .select('id', { count: 'exact', head: true }).eq('person_id', req.params.id);
+    if (count && count > 0) return res.status(409).json({ error: `Can't delete — this person is on ${count} trip${count === 1 ? '' : 's'}. Remove them from those trips first.` });
+    // Clean up their document files, then the person (docs cascade via FK).
+    const { data: docRows } = await supabase.from('scheduling_documents').select('storage_path').eq('person_id', req.params.id);
+    const paths = (docRows || []).map((d) => d.storage_path).filter(Boolean);
+    if (paths.length) await supabase.storage.from(DOC_BUCKET).remove(paths);
+    const { error } = await supabase.from('scheduling_people').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) { console.error('DELETE person:', e.message); res.status(500).json({ error: 'Failed to delete person' }); }
+});
+
+// Per-trip passenger row + the joined person. Identity comes from the person;
+// only seat/bags/TSA/note are per-trip.
+const PAX_SELECT = 'id, person_id, seat, cargo_lbs, tsa_status, note, ' +
+  'person:scheduling_people(id, first_name, middle_name, last_name, dob, weight_lbs, passport_number, passport_expiry, visa_expiry, green_card_expiry)';
+
+function shapePax(row) {
+  const p = row.person || {};
+  return {
+    id: row.id, person_id: row.person_id,
+    first_name: p.first_name, middle_name: p.middle_name, last_name: p.last_name,
+    name: [p.first_name, p.middle_name, p.last_name].filter(Boolean).join(' '),
+    dob: p.dob ?? null, weight_lbs: p.weight_lbs ?? null,
+    seat: row.seat ?? null, cargo_lbs: row.cargo_lbs ?? null, tsa_status: row.tsa_status ?? null, note: row.note ?? null,
+    hasPassport: !!p.passport_number,
+  };
+}
+
+// GET /api/scheduling/trips/:lfOid/passengers — manifest with joined person.
 router.get('/trips/:lfOid/passengers', async (req, res) => {
   try {
     const { data: trip, error } = await supabase
       .from('scheduling_trips').select('id').eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
     const { data, error: pe } = await supabase
-      .from('scheduling_passengers').select(PAX_COLS).eq('trip_id', trip.id).order('name');
+      .from('scheduling_passengers').select(PAX_SELECT).eq('trip_id', trip.id);
     if (pe) throw pe;
-    res.json({ passengers: data || [] });
+    const passengers = (data || []).map(shapePax).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    res.json({ passengers });
   } catch (e) {
     console.error('GET passengers:', e.message);
     res.status(500).json({ error: 'Failed to load passengers' });
   }
 });
 
-// PUT /api/scheduling/trips/:lfOid/passengers — replace the trip's manifest.
+// PUT /api/scheduling/trips/:lfOid/passengers — replace the manifest. Each row
+// references a person (person_id) and carries only per-trip fields.
 router.put('/trips/:lfOid/passengers', requireSchedulingEditor, async (req, res) => {
   try {
     const { data: trip, error } = await supabase
       .from('scheduling_trips').select('id').eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
-    const list = (Array.isArray(req.body?.passengers) ? req.body.passengers : []).filter((p) => (p.name || '').trim());
+    const list = (Array.isArray(req.body?.passengers) ? req.body.passengers : []).filter((p) => p.person_id);
     const fields = (p) => ({
-      name: p.name.trim(),
-      dob: p.dob || null,
-      weight_lbs: p.weight_lbs === '' || p.weight_lbs == null ? null : Number(p.weight_lbs),
-      note: (p.note || '').trim() || null,
+      person_id: p.person_id,
+      seat: (p.seat || '').trim() || null,
+      cargo_lbs: Number.isFinite(Number(p.cargo_lbs)) && p.cargo_lbs !== '' && p.cargo_lbs != null ? Number(p.cargo_lbs) : null,
       tsa_status: (p.tsa_status || '').trim() || null,
+      note: (p.note || '').trim() || null,
     });
-    // Upsert preserving ids so each passenger's documents survive a manifest edit.
+    // Delete rows the client dropped (keep ids it kept — preserves any attachments).
     const keepIds = list.map((p) => p.id).filter(Boolean);
     let delQ = supabase.from('scheduling_passengers').delete().eq('trip_id', trip.id);
     if (keepIds.length) delQ = delQ.not('id', 'in', `(${keepIds.join(',')})`);
@@ -484,15 +660,17 @@ router.put('/trips/:lfOid/passengers', requireSchedulingEditor, async (req, res)
     }
     const inserts = list.filter((x) => !x.id).map((p) => ({ trip_id: trip.id, origin: 'native', ...fields(p) }));
     if (inserts.length) { const { error: ie } = await supabase.from('scheduling_passengers').insert(inserts); if (ie) throw ie; }
-    const { data, error: se } = await supabase.from('scheduling_passengers').select(PAX_COLS).eq('trip_id', trip.id).order('name');
+    const { data, error: se } = await supabase.from('scheduling_passengers').select(PAX_SELECT).eq('trip_id', trip.id);
     if (se) throw se;
-    res.json({ passengers: data || [] });
+    res.json({ passengers: (data || []).map(shapePax).sort((a, b) => (a.name || '').localeCompare(b.name || '')) });
   } catch (e) {
     console.error('PUT passengers:', e.message);
     res.status(500).json({ error: 'Failed to save passengers' });
   }
 });
 
+// DEPRECATED — superseded by GET /people (the manifest picker now searches the
+// person directory). Kept for backward-compat; safe to remove once nothing calls it.
 // GET /api/scheduling/passengers/suggest — passenger directory for the autocomplete:
 // LevelFlight's full customer directory merged with passengers entered here (which
 // carry DOB/weight). Deduped by name.
@@ -537,7 +715,7 @@ router.get('/airport-search', (req, res) => {
 });
 
 const DOC_BUCKET = 'scheduling-docs';        // private Supabase Storage bucket
-const DOC_COLS = 'id, name, doc_type, storage_path, content_type, size_bytes, created_at, passenger_id';
+const DOC_COLS = 'id, name, doc_type, storage_path, content_type, size_bytes, created_at, passenger_id, person_id';
 const safeName = (s) => String(s || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
 
 // GET /api/scheduling/trips/:lfOid/documents — list a trip's documents with
@@ -593,6 +771,32 @@ router.post('/trips/:lfOid/documents', requireSchedulingEditor, express.json({ l
     console.error('POST documents:', e.message);
     res.status(500).json({ error: 'Failed to upload document' });
   }
+});
+
+// POST /api/scheduling/people/:id/documents — upload a person document
+// (passport/green card/visa/id). Stored under people/{id}/… and reused on every
+// trip. Body: { name, doc_type, content_type, data_base64 }.
+router.post('/people/:id/documents', requireSchedulingEditor, express.json({ limit: '25mb' }), async (req, res) => {
+  try {
+    const { data: person, error } = await supabase.from('scheduling_people').select('id').eq('id', req.params.id).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Person not found' }); throw error; }
+    const b = req.body || {};
+    const name = safeName(b.name);
+    const base64 = (b.data_base64 || '').replace(/^data:[^;]+;base64,/, '');
+    if (!base64) return res.status(400).json({ error: 'No file data' });
+    const buffer = Buffer.from(base64, 'base64');
+    if (!buffer.length) return res.status(400).json({ error: 'Empty file' });
+    const storage_path = `people/${person.id}/${Date.now()}-${name}`;
+    const { error: ue } = await supabase.storage.from(DOC_BUCKET)
+      .upload(storage_path, buffer, { contentType: b.content_type || 'application/octet-stream', upsert: false });
+    if (ue) { if (/bucket/i.test(ue.message)) return res.status(500).json({ error: `Storage bucket "${DOC_BUCKET}" is missing — create it (private) in Supabase.` }); throw ue; }
+    const { data: row, error: ie } = await supabase.from('scheduling_documents').insert({
+      person_id: person.id, name, doc_type: (b.doc_type || 'passport').trim() || 'passport',
+      storage_path, content_type: b.content_type || null, size_bytes: buffer.length, uploaded_by: req.user?.email || null,
+    }).select(DOC_COLS).single();
+    if (ie) throw ie;
+    res.status(201).json({ document: row });
+  } catch (e) { console.error('POST person doc:', e.message); res.status(500).json({ error: 'Failed to upload document' }); }
 });
 
 // DELETE /api/scheduling/documents/:id — remove a document (storage + row).
