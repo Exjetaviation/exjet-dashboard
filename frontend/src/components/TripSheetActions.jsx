@@ -50,7 +50,7 @@ export default function TripSheetActions({ dispatchId, tripId, compact = false }
       {err && <span style={{ fontSize: '12px', color: 'var(--danger, #e5484d)' }}>{err}</span>}
       {html !== null && (
         <div onClick={() => setHtml(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '24px' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 4000, display: 'flex', flexDirection: 'column', padding: '24px' }}>
           <div onClick={(e) => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: '10px', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxWidth: '900px', width: '100%', margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #ddd', background: '#f5f5f5' }}>

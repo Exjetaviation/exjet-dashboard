@@ -45,7 +45,9 @@ body {
    then colorize the water to blue. Land lands on (0,0,0), water on ~(48,95,196).
    Filters render per-tile (no backdrop needed); markers/routes are in higher
    panes and stay untinted. */
-.leaflet-container { background: var(--bg-primary) !important; }
+/* Contain Leaflet's internal pane/control z-indexes in their own stacking context
+   so the map can't bleed in front of app modals/overlays. */
+.leaflet-container { background: var(--bg-primary) !important; isolation: isolate; }
 /* Black land + screenshot-blue water on the Toner basemap. Scoped to maps that
    opt in with .bluewater-map (Fleet Map, FlightTrackMap, TripPathMap) so other
    leaflet maps aren't inverted. */
