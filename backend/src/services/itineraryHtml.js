@@ -9,6 +9,7 @@ import { easternTime, zuluTime } from './docTime.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Itinerary leg times: Eastern (auto EST/EDT) with Zulu beneath.
 const timeCell = (ms) => (ms == null ? '' : `${esc(easternTime(ms))}<br><span class="zulu">${esc(zuluTime(ms))}</span>`);
+const initials = (n) => String(n || '').split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 const fmtDay = (iso) => { const d = new Date(iso + 'T12:00:00'); return Number.isNaN(d.getTime()) ? esc(iso) : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); };
 
 function crewCell(label, name) {
@@ -28,7 +29,11 @@ function legBlock(leg, i) {
   const crew = [crewCell('PIC', c.pic), crewCell('SIC', c.sic), ...(c.ca || []).map((n) => crewCell('CA', n))].filter(Boolean).join('');
   const meta = [leg.eft ? esc(leg.eft) : '', leg.distance != null ? esc(leg.distance) + ' nm' : '', leg.pax != null ? esc(leg.pax) + ' PAX' : ''].filter(Boolean).join(' · ');
   const paxNames = (leg.passengerNames || []).filter(Boolean);
-  const pax = paxNames.length ? `<div class="paxn"><span class="paxl">PASSENGERS</span> ${esc(paxNames.join(', '))}</div>` : '';
+  const pax = paxNames.length
+    ? `<div class="paxsec"><div class="paxlbl">PASSENGERS · ${paxNames.length}</div><div class="paxchips">${
+        paxNames.map((n) => `<span class="paxchip"><span class="paxav">${esc(initials(n))}</span>${esc(n)}</span>`).join('')
+      }</div></div>`
+    : '';
   return `<div class="leg">
     <div class="leghd"><span class="legno">LEG ${i + 1}</span><span class="legmeta">${meta}</span></div>
     <div class="legroute">
@@ -89,8 +94,11 @@ export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
   .plane { position:absolute; right:0; top:-8px; color:#38bdf8; }
   .crew { display:flex; flex-wrap:wrap; gap:8px 18px; margin:6px 0; }
   .crl { font-size:9px; letter-spacing:1px; color:#6b7890; } .crn { font-size:12px; color:#e8edf4; }
-  .paxn { font-size:12px; color:#e8edf4; margin:6px 0; }
-  .paxl { font-size:9px; letter-spacing:1px; color:#6b7890; margin-right:4px; }
+  .paxsec { margin:8px 0 2px; }
+  .paxlbl { font-size:9px; letter-spacing:1px; color:#6b7890; margin-bottom:6px; }
+  .paxchips { display:flex; flex-wrap:wrap; gap:6px; }
+  .paxchip { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#dfe7f2; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); border-radius:16px; padding:3px 11px 3px 3px; }
+  .paxav { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:rgba(79,142,247,0.20); color:#9ec1f5; font-size:8px; font-weight:700; }
   .fbos { display:flex; gap:14px; margin-top:6px; }
   .fbo { flex:1; background:#0e1622; border:1px solid #1a2638; border-radius:7px; padding:8px 10px; }
   .fbol { font-size:9px; letter-spacing:1px; color:#6b7890; } .fbon { font-size:12px; color:#fff; font-weight:600; margin-top:2px; } .fboa { font-size:10px; color:#8a98ad; }
