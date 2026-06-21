@@ -14,7 +14,7 @@ export function mapScript(viewModel) {
     const segs = ${JSON.stringify(pts)};
     if (segs.length) {
       const map = L.map('map', { zoomControl: false, attributionControl: false });
-      (function(){ const s = document.createElement('style'); s.textContent = '#map{background:#3f4178}.leaflet-tile-pane{filter:invert(1) brightness(0.22) sepia(1) saturate(3) hue-rotate(200deg)}'; document.head.appendChild(s); })();
+      (function(){ const s = document.createElement('style'); s.textContent = '#map{background:#344d66}.leaflet-tile-pane{filter:invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95)}'; document.head.appendChild(s); })();
       L.tileLayer(${JSON.stringify(tileUrl)}, { maxZoom: 20 }).addTo(map);
       const all = [];
       segs.forEach((s) => {
