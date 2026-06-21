@@ -11,6 +11,7 @@ import SchedulingRequests from './scheduling/Requests';
 import SchedulingCrew from './scheduling/Crew';
 import SchedulingAircraft from './scheduling/Aircraft';
 import SchedulingClients from './scheduling/Clients';
+import SchedulingPeople from './scheduling/People';
 import RateCards from './RateCards';
 
 // The new Scheduling section — sourced from the MIRROR (scheduling_legs) rather
@@ -18,11 +19,17 @@ import RateCards from './RateCards';
 // "Trips" reuses the existing list components. The board is what distinguishes
 // this section from the live Flights page.
 export default function Scheduling() {
-  const [section, setSection] = useState('overview');
+  const [params, setParams] = useSearchParams();
+  const [section, setSection] = useState(params.get('section') || 'overview');
   const navigate = useNavigate();
 
+  const selectSection = (id) => {
+    setSection(id);
+    setParams((p) => { const n = new URLSearchParams(p); id === 'overview' ? n.delete('section') : n.set('section', id); return n; }, { replace: true });
+  };
+
   const SectionTab = ({ id, label }) => (
-    <button onClick={() => setSection(id)}
+    <button onClick={() => selectSection(id)}
       style={{ padding: '8px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: 'none', border: 'none',
         color: section === id ? 'var(--accent)' : 'var(--text-secondary)',
         borderBottom: section === id ? '2px solid var(--accent)' : '2px solid transparent' }}>
@@ -50,6 +57,7 @@ export default function Scheduling() {
         <SectionTab id="crew" label="Crew" />
         <SectionTab id="aircraft" label="Aircraft" />
         <SectionTab id="clients" label="Clients" />
+        <SectionTab id="people" label="Passengers" />
         <SectionTab id="ratecards" label="Rate Cards" />
       </div>
 
@@ -61,6 +69,7 @@ export default function Scheduling() {
       {section === 'crew' && <SchedulingCrew />}
       {section === 'aircraft' && <SchedulingAircraft />}
       {section === 'clients' && <SchedulingClients />}
+      {section === 'people' && <SchedulingPeople />}
       {section === 'ratecards' && <RateCards />}
     </div>
   );

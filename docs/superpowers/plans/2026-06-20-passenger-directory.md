@@ -379,7 +379,7 @@ export function rankPeople(people, query, limit = 50) {
     else if (String(p.dob || '').includes(q)) score = 1;
     if (score > 0) scored.push({ p, score, name });
   }
-  scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  scored.sort((a, b) => b.score - a.score || (a.p.last_name || '').localeCompare(b.p.last_name || '') || a.name.localeCompare(b.name));
   return scored.slice(0, limit).map((s) => s.p);
 }
 ```
