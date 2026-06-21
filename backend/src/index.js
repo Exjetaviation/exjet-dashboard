@@ -13,6 +13,7 @@ import adsbRoutes from './routes/adsb.js';
 import tripSheetRoutes from './routes/tripSheet.js';
 import publicQuotesRoutes from './routes/publicQuotes.js';
 import publicItineraryRoutes from './routes/publicItinerary.js';
+import publicTripSheetRoutes from './routes/publicTripSheet.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { startRecorder } from './services/adsbRecorder.js';
 import { startReconciler } from './services/flightTrackReconciler.js';
@@ -47,6 +48,8 @@ app.use('/api/quotes/auth-callback', quotesRoutes);
 app.use('/quote', publicQuotesRoutes);
 // Public passenger-itinerary pages — same unauthenticated dispatch-ID access model.
 app.use('/itinerary', publicItineraryRoutes);
+// Web crew trip-sheet pages — same dispatch-ID access model (sensitive: crew/mx data).
+app.use('/tripsheet', publicTripSheetRoutes);
 
 // Everything below this line REQUIRES a valid login token — EXCEPT temporary
 // /finances/debug/* endpoints, so they can be opened directly in a browser.

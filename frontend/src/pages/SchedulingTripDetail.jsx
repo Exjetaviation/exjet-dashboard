@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch, API_BASE } from '../lib/api';
 import FlightsList from '../components/FlightsList';
-import TripSheetActions from '../components/TripSheetActions';
 import { distinctCrew, distinctClients } from '../lib/schedulingAggregate';
 import { useApi } from '../hooks/useApi';
 
@@ -324,8 +323,8 @@ export default function SchedulingTripDetail() {
             <>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>· Closes automatically once the flight is complete.</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 6, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Crew Trip Sheet:</span>
-                <TripSheetActions dispatchId={id} tripId={meta?.trip_number} compact />
+                <a href={`${API_BASE}/tripsheet/${id}`} target="_blank" rel="noopener noreferrer"
+                  style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Crew Trip Sheet ↗</a>
               </div>
             </>
           )}
@@ -562,7 +561,8 @@ export default function SchedulingTripDetail() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           <a href={`${API_BASE}/itinerary/${id}`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Passenger Itinerary ↗</a>
-          <TripSheetActions dispatchId={id} tripId={meta?.trip_number} compact />
+          <a href={`${API_BASE}/tripsheet/${id}`} target="_blank" rel="noopener noreferrer"
+            style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Crew Trip Sheet ↗</a>
         </div>
 
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
