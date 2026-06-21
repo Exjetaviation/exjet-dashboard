@@ -40,8 +40,10 @@ body {
    only from the dark tiles painting over it. Force the container dark so the
    map never shows light when tiles are slow or fail to load (e.g. older
    smart-TV browsers that can't fetch the CARTO tiles). */
-/* Toner basemap × this blue background via multiply = black land + dark-blue
-   water. The background color IS the water color (white water * blue = blue;
-   black land * blue = black). Markers/routes paint in higher panes, untinted. */
-.leaflet-container { background: #14365c !important; }
-.leaflet-tile-pane { mix-blend-mode: multiply; }
+/* Toner basemap (white land, black water) recolored to black land + dark-blue
+   water via a verified CSS filter chain: invert (land->black, water->white),
+   then colorize the water to blue. Land lands on (0,0,0), water on ~(48,95,196).
+   Filters render per-tile (no backdrop needed); markers/routes are in higher
+   panes and stay untinted. */
+.leaflet-container { background: #16335f !important; }
+.leaflet-tile-pane { filter: invert(1) brightness(0.3) sepia(1) saturate(7) hue-rotate(192deg) brightness(0.95); }
