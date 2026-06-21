@@ -351,6 +351,31 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   }
 });
 
+// DELETE /api/scheduling/trips/:lfOid — permanently remove a NATIVE (created-here)
+// trip and everything under it (legs/crew/passengers/documents cascade via FK).
+// Mirrored LevelFlight trips can't be deleted here (they'd just re-sync) — cancel those.
+router.delete('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, origin').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    if (trip.origin !== 'native') {
+      return res.status(400).json({ error: 'Only trips created here can be deleted. Cancel a LevelFlight trip instead.' });
+    }
+    // Best-effort: remove the trip's document files from storage (rows cascade with the trip).
+    const { data: docs } = await supabase.from('scheduling_documents').select('storage_path').eq('trip_id', trip.id);
+    const paths = (docs || []).map((d) => d.storage_path).filter(Boolean);
+    if (paths.length) await supabase.storage.from(DOC_BUCKET).remove(paths);
+    const { error: de } = await supabase.from('scheduling_trips').delete().eq('id', trip.id);
+    if (de) throw de;
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/scheduling/trips/:lfOid:', e.message);
+    res.status(500).json({ error: 'Failed to delete trip' });
+  }
+});
+
 // POST /api/scheduling/trips/:lfOid/price — recompute + store the quote breakdown.
 router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => {
   try {
