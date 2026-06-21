@@ -113,6 +113,10 @@ export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
   .webbar { display:flex; justify-content:flex-end; padding:10px 30px 0; }
   .webbtn { font-size:12px; padding:8px 14px; border-radius:8px; background:#1a2436; border:1px solid #8893a5; color:#e8edf4; text-decoration:none; }
   .foot { padding:18px 30px 30px; font-size:9px; color:#5b6b82; }
+  /* PDF pagination: never slice a leg/weather card/hero/map across a page break,
+     and keep a section header with the content that follows it. */
+  .leg, .wx, .hero, #map, .fbo { break-inside:avoid; page-break-inside:avoid; }
+  .sec { break-after:avoid; page-break-after:avoid; }
 </style></head>
 <body><div class="page">
   ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}">Download PDF</a></div>` : ''}
