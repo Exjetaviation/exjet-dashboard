@@ -23,6 +23,7 @@ const CREDENTIALS = [
 
 export default function PersonProfile() {
   const { id } = useParams();
+  const isNew = id === 'new';                // /scheduling/people/new — add a passenger
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -37,11 +38,21 @@ export default function PersonProfile() {
       if (j.person) setData(j); else setError(j.error || 'Failed to load');
     } catch (e) { setError(e.message); }
   }, [id]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (isNew) { setData({ person: {}, trips: [], documents: [], alerts: [] }); setEdit({}); }
+    else { load(); }
+  }, [isNew, load]);
 
   const save = async () => {
     setBusy(true); setError(null);
     try {
+      if (isNew) {
+        const r = await apiFetch('/api/scheduling/people', { method: 'POST', body: JSON.stringify(edit) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || `Create failed (${r.status})`);
+        navigate(`/scheduling/people/${j.person.id}`, { replace: true }); // open the new profile
+        return;
+      }
       const r = await apiFetch(`/api/scheduling/people/${id}`, { method: 'PATCH', body: JSON.stringify(edit) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
@@ -97,12 +108,12 @@ export default function PersonProfile() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/scheduling?section=people')} style={{ ...inp, width: 'auto', cursor: 'pointer' }}>← Passengers</button>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>{fullName(person)}</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)' }}>{isNew ? 'New passenger' : fullName(person)}</h1>
         <div style={{ flex: 1 }} />
         {edit ? (
           <>
-            <button onClick={save} disabled={busy} style={{ ...inp, width: 'auto', cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none' }}>{busy ? 'Saving…' : 'Save'}</button>
-            <button onClick={() => { setEdit(null); setError(null); }} style={{ ...inp, width: 'auto', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={save} disabled={busy} style={{ ...inp, width: 'auto', cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none' }}>{busy ? 'Saving…' : isNew ? 'Create passenger' : 'Save'}</button>
+            <button onClick={() => { if (isNew) navigate('/scheduling?section=people'); else { setEdit(null); setError(null); } }} style={{ ...inp, width: 'auto', cursor: 'pointer' }}>Cancel</button>
           </>
         ) : (
           <button onClick={() => setEdit({ ...person })} style={{ ...inp, width: 'auto', cursor: 'pointer' }}>✎ Edit</button>
@@ -129,10 +140,14 @@ export default function PersonProfile() {
               <button onClick={() => delDoc(d.id)} style={{ ...inp, width: 'auto', padding: '2px 8px', cursor: 'pointer' }}>✕</button>
             </div>
           )) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No documents yet.</p>}
-          <label style={{ ...inp, width: 'auto', display: 'inline-block', marginTop: 8, cursor: 'pointer', color: 'var(--accent)' }}>
-            ↑ Upload document
-            <input type="file" style={{ display: 'none' }} onChange={(e) => uploadDoc(e.target.files?.[0])} />
-          </label>
+          {isNew ? (
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>Create the passenger first, then upload documents.</p>
+          ) : (
+            <label style={{ ...inp, width: 'auto', display: 'inline-block', marginTop: 8, cursor: 'pointer', color: 'var(--accent)' }}>
+              ↑ Upload document
+              <input type="file" style={{ display: 'none' }} onChange={(e) => uploadDoc(e.target.files?.[0])} />
+            </label>
+          )}
         </div>
 
         <div style={card}>

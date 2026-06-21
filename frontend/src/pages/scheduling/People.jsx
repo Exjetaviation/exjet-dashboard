@@ -29,12 +29,16 @@ export default function SchedulingPeople() {
 
   return (
     <div>
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search passengers by name or DOB…"
-        style={{ width: '100%', maxWidth: 360, padding: '8px 12px', marginBottom: 14, fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', boxSizing: 'border-box' }}
-      />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search passengers by name or DOB…"
+          style={{ flex: '1 1 240px', maxWidth: 360, padding: '8px 12px', fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', boxSizing: 'border-box' }}
+        />
+        <button onClick={() => navigate('/scheduling/people/new')}
+          style={{ padding: '9px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Add passenger</button>
+      </div>
       {!loading && !error && (
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
           {q

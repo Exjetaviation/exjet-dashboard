@@ -142,6 +142,18 @@ export default function SchedulingTripDetail() {
     setBusy(false);
   };
 
+  const deleteTrip = async () => {
+    if (!window.confirm('Permanently delete this trip and all its legs, passengers, and documents? This cannot be undone.')) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'DELETE' });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Delete failed (${r.status})`); }
+      navigate('/scheduling'); // it's gone — back to the list
+      return;
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+
   const reprice = async () => {
     setBusy(true); setError(null);
     try {
@@ -320,6 +332,10 @@ export default function SchedulingTripDetail() {
         {isNative && detailsEdit == null && (
           <button onClick={startDetailsEdit} disabled={busy}
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}>✎ Edit trip</button>
+        )}
+        {isNative && detailsEdit == null && (
+          <button onClick={deleteTrip} disabled={busy} title="Delete this trip (created here)"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 14px', color: 'var(--danger)', cursor: 'pointer', fontSize: 13 }}>🗑 Delete</button>
         )}
       </div>
 
