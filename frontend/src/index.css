@@ -45,5 +45,5 @@ body {
    then colorize the water to blue. Land lands on (0,0,0), water on ~(48,95,196).
    Filters render per-tile (no backdrop needed); markers/routes are in higher
    panes and stay untinted. */
-.leaflet-container { background: #45597d !important; }
-.leaflet-tile-pane { filter: invert(1) contrast(0.3) brightness(0.5) sepia(1) saturate(1.6) hue-rotate(180deg); }
+.leaflet-container { background: #53678a !important; }
+.leaflet-tile-pane { filter: invert(1) brightness(0.32) sepia(1) saturate(1.6) hue-rotate(195deg); }
