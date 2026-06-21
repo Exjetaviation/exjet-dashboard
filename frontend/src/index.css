@@ -40,16 +40,17 @@ body {
    only from the dark tiles painting over it. Force the container dark so the
    map never shows light when tiles are slow or fail to load (e.g. older
    smart-TV browsers that can't fetch the CARTO tiles). */
-/* Toner basemap (white land, black water) recolored to black land + dark-blue
+/* Toner basemap (white land, black water) recolored to grey land + deep-blue
    water via a verified CSS filter chain: invert (land->black, water->white),
-   then colorize the water to blue. Land lands on (0,0,0), water on ~(48,95,196).
+   then colorize. The filter couples the two tones, so the params are tuned to
+   land grey ~#2d2f3b while water lands on ~#3d5169 (the deep blue we want).
    Filters render per-tile (no backdrop needed); markers/routes are in higher
    panes and stay untinted. */
 /* Contain Leaflet's internal pane/control z-indexes in their own stacking context
    so the map can't bleed in front of app modals/overlays. */
 .leaflet-container { background: var(--bg-primary) !important; isolation: isolate; }
-/* Black land + screenshot-blue water on the Toner basemap. Scoped to maps that
+/* Grey land + deep-blue water on the Toner basemap. Scoped to maps that
    opt in with .bluewater-map (Fleet Map, FlightTrackMap, TripPathMap) so other
    leaflet maps aren't inverted. */
-.bluewater-map.leaflet-container { background: #4a5470 !important; }
-.bluewater-map .leaflet-tile-pane { filter: invert(1) contrast(0.4) brightness(0.51) sepia(1) saturate(1) hue-rotate(192deg); }
+.bluewater-map.leaflet-container { background: #3d5169 !important; }
+.bluewater-map .leaflet-tile-pane { filter: invert(1) contrast(0.30) brightness(0.39) sepia(1) saturate(1.6) hue-rotate(173deg); }

@@ -5,7 +5,7 @@ export function mapScript(viewModel) {
   const pts = (viewModel.legs || [])
     .filter((l) => l.fromLatLng && l.toLatLng)
     .map((l) => [l.fromLatLng, l.toLatLng]);
-  // With a Stadia key: Toner basemap recolored to black land + dark-blue water.
+  // With a Stadia key: Toner basemap recolored to grey land + deep-blue water.
   // Without one (Stadia 401s off localhost): fall back to CARTO's keyless dark
   // basemap so the doc map always renders.
   const key = process.env.STADIA_API_KEY;
@@ -13,7 +13,7 @@ export function mapScript(viewModel) {
     ? `https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png?api_key=${key}`
     : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
   const tileOpts = key ? { maxZoom: 20 } : { subdomains: 'abcd', maxZoom: 19 };
-  const waterStyle = key ? "#map{background:#4a5470}.leaflet-tile-pane{filter:invert(1) contrast(0.4) brightness(0.51) sepia(1) saturate(1) hue-rotate(192deg)}" : '';
+  const waterStyle = key ? "#map{background:#3d5169}.leaflet-tile-pane{filter:invert(1) contrast(0.30) brightness(0.39) sepia(1) saturate(1.6) hue-rotate(173deg)}" : '';
   return `
     const segs = ${JSON.stringify(pts)};
     if (segs.length) {
