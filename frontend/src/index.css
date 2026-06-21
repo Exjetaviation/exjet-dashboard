@@ -40,4 +40,8 @@ body {
    only from the dark tiles painting over it. Force the container dark so the
    map never shows light when tiles are slow or fail to load (e.g. older
    smart-TV browsers that can't fetch the CARTO tiles). */
-.leaflet-container { background: #aadaff !important; }
+/* Dark basemap (black land) with the water pushed to a visible dark blue:
+   strong saturation barely affects the near-gray land but makes the water's
+   blue tint pop; the blue container shows through during tile load. */
+.leaflet-container { background: #0b2c4a !important; }
+.leaflet-tile-pane { filter: saturate(7) brightness(1.15) hue-rotate(-8deg); }
