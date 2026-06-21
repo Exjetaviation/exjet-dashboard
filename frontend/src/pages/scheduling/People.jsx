@@ -25,6 +25,7 @@ export default function SchedulingPeople() {
   const [q, setQ] = useState('');
   const { data, loading, error } = useApi(`/api/scheduling/people?q=${encodeURIComponent(q)}`);
   const people = data?.people || [];
+  const total = data?.total ?? people.length;
 
   return (
     <div>
@@ -34,6 +35,15 @@ export default function SchedulingPeople() {
         placeholder="Search passengers by name or DOB…"
         style={{ width: '100%', maxWidth: 360, padding: '8px 12px', marginBottom: 14, fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)', boxSizing: 'border-box' }}
       />
+      {!loading && !error && (
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+          {q
+            ? `${people.length} match${people.length === 1 ? '' : 'es'}${total > people.length ? ` of ${total}` : ''}`
+            : total > people.length
+              ? `Showing ${people.length} of ${total} passengers — search to find anyone`
+              : `${total} passenger${total === 1 ? '' : 's'}`}
+        </p>
+      )}
       {error && <div style={{ ...card, color: 'var(--danger)' }}>Error loading passengers: {error}</div>}
       {loading ? (
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Loading passengers…</p>

@@ -64,6 +64,11 @@ let _customerCache = null;
 let _customerCacheAt = 0;
 const CUSTOMER_TTL_MS = 60 * 60 * 1000; // 1h
 
+// Single customer detail — the full record, including DOB (birthday), weight,
+// citizenship, gender, address, tsaInfo, documents[] and images[] when present.
+export const getCustomer = async (id) =>
+  (await (await lf()).get(`/api/customer/${encodeURIComponent(id)}`)).data;
+
 // Full passenger directory across all letters, normalized + cached.
 export const getAllCustomers = async () => {
   if (_customerCache && Date.now() - _customerCacheAt < CUSTOMER_TTL_MS) return _customerCache;
