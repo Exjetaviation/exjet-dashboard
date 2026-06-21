@@ -123,7 +123,7 @@ export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
       <div style="margin-top:10px">Trip <span style="color:#fff;font-weight:600">${esc(vm.tripNumber || '—')}</span><br>Quote ${esc(vm.quoteNumber || '—')}<br>${esc(vm.preparedOn || '')}</div></div>
   </div>
   <div class="rule"></div>
-  <div class="prep">PREPARED FOR<br><span class="nm">${esc(cl.name || cl.company || '—')}</span>${cl.company && cl.name ? ` · ${esc(cl.company)}` : ''}${cl.address ? `<br>${esc(cl.address)}` : ''}</div>
+  <div class="prep">PREPARED FOR<br><span class="nm">${esc(cl.company || cl.name || '—')}</span>${cl.address ? `<br>${esc(cl.address)}` : ''}</div>
   <div class="hero">
     <div style="flex:0 0 200px"><div class="tail">${esc(vm.tail || '')}</div><div class="type">${esc(vm.aircraftType || '')}</div>
       ${vm.maxPax ? `<div style="font-size:11px;color:#8a98ad;margin-top:8px">Max ${esc(vm.maxPax)} passengers</div>` : ''}</div>
