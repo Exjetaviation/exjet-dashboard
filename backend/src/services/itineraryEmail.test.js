@@ -25,7 +25,7 @@ test('buildItineraryEmail: subject format + greeting first name + button link', 
   assert.equal(subject, 'Exjet Aviation – Passenger Itinerary | Trip #25093');
   assert.equal(recipientName, 'Emily');           // first name from client
   assert.match(html, /Dear Emily,/);
-  assert.match(html, /your passenger itinerary for your upcoming trip\./);
+  assert.match(html, /the passenger itinerary for your upcoming trip\./);
   assert.match(html, /Gulfstream GIV SP \(N69FP\)/);
   assert.match(html, /href="https:\/\/x\/itinerary\/abc"/);
   assert.match(html, />View Itinerary</);

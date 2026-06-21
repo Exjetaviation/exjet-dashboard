@@ -29,7 +29,7 @@ export function buildItineraryEmail(vm, { recipientName, link, logoUrl } = {}) {
   const html = `<!DOCTYPE html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;line-height:1.5">
   <div style="max-width:600px;margin:0 auto;padding:28px 24px;background:#ffffff">
     <p>Dear ${esc(name)},</p>
-    <p>Thank you for choosing Exjet Aviation. Please find attached your passenger itinerary for your upcoming trip.</p>
+    <p>Thank you for choosing Exjet Aviation. Please find attached the passenger itinerary for your upcoming trip.</p>
     <p>Below is a summary of your flight details:</p>
     <ul style="list-style:disc;padding-left:20px;margin:8px 0 16px">
       ${row('Date', s.date)}
