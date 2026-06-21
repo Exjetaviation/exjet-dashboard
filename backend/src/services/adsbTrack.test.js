@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMoved, detectTakeoff, clipTrackToLeg, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, clipTrackToLeg, deriveActualTimes, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
 
 test('normReg canonicalizes case, dashes, and spaces', () => {
   assert.equal(normReg('n69fp'), 'N69FP');
@@ -33,6 +33,41 @@ test('clipTrackToLeg keeps positions within the padded leg window, ordered by ti
   const leg = { depTime: 150, arrTime: 350 };
   assert.deepEqual(clipTrackToLeg(positions, leg, 0), [[2, 2], [3, 3]]);
   assert.deepEqual(clipTrackToLeg(positions, leg, 60), [[1, 1], [2, 2], [3, 3], [4, 4]]);
+});
+
+const legW = { depTime: 1000, arrTime: 5000 };
+test('deriveActualTimes finds ground->air departure and air->ground arrival', () => {
+  const pts = [
+    { t: 900, on_ground: true }, { t: 1000, on_ground: true },
+    { t: 1100, on_ground: false }, // wheels-up
+    { t: 3000, on_ground: false },
+    { t: 4800, on_ground: true },  // wheels-down
+    { t: 5000, on_ground: true },
+  ];
+  assert.deepEqual(deriveActualTimes(pts, legW, 500), { actualDep: 1100, actualArr: 4800 });
+});
+
+test('deriveActualTimes returns null dep when the track starts mid-air (no observed takeoff)', () => {
+  const pts = [{ t: 1100, on_ground: false }, { t: 3000, on_ground: false }, { t: 4800, on_ground: true }];
+  assert.deepEqual(deriveActualTimes(pts, legW, 500), { actualDep: null, actualArr: null });
+});
+
+test('deriveActualTimes returns null arr when it never lands in-window', () => {
+  const pts = [{ t: 1000, on_ground: true }, { t: 1100, on_ground: false }, { t: 4900, on_ground: false }];
+  assert.deepEqual(deriveActualTimes(pts, legW, 500), { actualDep: 1100, actualArr: null });
+});
+
+test('deriveActualTimes returns nulls when always on the ground', () => {
+  const pts = [{ t: 1000, on_ground: true }, { t: 3000, on_ground: true }, { t: 5000, on_ground: true }];
+  assert.deepEqual(deriveActualTimes(pts, legW, 500), { actualDep: null, actualArr: null });
+});
+
+test('deriveActualTimes respects the padded window (ignores out-of-window samples)', () => {
+  const pts = [
+    { t: 100, on_ground: true }, { t: 200, on_ground: false }, // before window+pad -> ignored
+    { t: 1000, on_ground: true }, { t: 1100, on_ground: false }, { t: 4800, on_ground: true },
+  ];
+  assert.deepEqual(deriveActualTimes(pts, legW, 500), { actualDep: 1100, actualArr: 4800 });
 });
 
 test('monthAnchors covers the window plus the prior month', () => {

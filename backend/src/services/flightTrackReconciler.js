@@ -6,8 +6,8 @@
 
 import * as lf from './levelflight.js';
 import { queryTrack } from './adsbStore.js';
-import { clipTrackToLeg, monthAnchors, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
-import { getStoredLegIds, upsertFlightTrack } from './flightTrackStore.js';
+import { clipTrackToLeg, deriveActualTimes, monthAnchors, normReg, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
+import { getStoredLegIds, upsertFlightTrack, updateFlightTrackActuals, getRowsMissingActuals } from './flightTrackStore.js';
 
 const PAD_MS = 10 * 60 * 1000;          // match the previous-flights pad
 const HOURLY_MS = 60 * 60 * 1000;
@@ -59,7 +59,17 @@ export async function runReconcile({ days = RECONCILE_LOOKBACK_DAYS } = {}) {
           track,
           point_count: track.length,
         });
-        if (ok) written++;
+        if (ok) {
+          written++;
+          // Derive + record actual dep/arr from the same clipped positions (decoupled
+          // write — soft-fails harmlessly if migration 016 isn't applied yet).
+          const { actualDep, actualArr } = deriveActualTimes(positions, leg, PAD_MS);
+          await updateFlightTrackActuals(
+            leg.id,
+            actualDep ? new Date(actualDep).toISOString() : null,
+            actualArr ? new Date(actualArr).toISOString() : null,
+          );
+        }
       }
     }
   } catch (e) {
@@ -69,11 +79,52 @@ export async function runReconcile({ days = RECONCILE_LOOKBACK_DAYS } = {}) {
   return { scanned, written, skipped };
 }
 
+// One-time bounded backfill: fill actuals for already-stored snapshots that predate
+// this feature. Limited to the firehose retention window — positions older than that
+// are pruned, so actuals can't be derived for them.
+export async function backfillActuals({ days = 13 } = {}) {
+  const fromIso = new Date(Date.now() - days * 86400000).toISOString();
+  let updated = 0;
+  try {
+    const rows = await getRowsMissingActuals(fromIso);
+    const byTail = new Map();
+    for (const r of rows) {
+      const tail = normReg(r.registration);
+      if (!tail) continue;
+      if (!byTail.has(tail)) byTail.set(tail, []);
+      byTail.get(tail).push(r);
+    }
+    for (const [tail, legs] of byTail.entries()) {
+      const lo = Math.min(...legs.map((l) => Date.parse(l.dep_time))) - PAD_MS;
+      const hi = Math.max(...legs.map((l) => Date.parse(l.arr_time))) + PAD_MS;
+      const positions = await queryTrack(tail, new Date(lo).toISOString(), new Date(hi).toISOString());
+      if (!positions.length) continue;
+      for (const r of legs) {
+        const leg = { depTime: Date.parse(r.dep_time), arrTime: Date.parse(r.arr_time) };
+        const { actualDep, actualArr } = deriveActualTimes(positions, leg, PAD_MS);
+        if (actualDep == null && actualArr == null) continue;
+        const ok = await updateFlightTrackActuals(
+          r.leg_id,
+          actualDep ? new Date(actualDep).toISOString() : null,
+          actualArr ? new Date(actualArr).toISOString() : null,
+        );
+        if (ok) updated++;
+      }
+    }
+  } catch (e) {
+    console.warn('[flightTrackReconciler] backfillActuals error (soft):', e?.message || e);
+  }
+  console.log(`[flightTrackReconciler] actuals backfill days=${days} updated=${updated}`);
+  return { updated };
+}
+
 export function startReconciler() {
   if (started) return;
   started = true;
   // One-time backfill on boot (idempotent), then a short-lookback hourly pass.
   runReconcile({ days: 90 }).catch(() => {});
+  // Fill actuals for snapshots stored before this feature (firehose window only).
+  backfillActuals({ days: 13 }).catch(() => {});
   setInterval(() => { runReconcile({ days: RECONCILE_LOOKBACK_DAYS }).catch(() => {}); }, HOURLY_MS);
   console.log('[flightTrackReconciler] started (90d backfill on boot, hourly', RECONCILE_LOOKBACK_DAYS, 'day pass)');
 }
