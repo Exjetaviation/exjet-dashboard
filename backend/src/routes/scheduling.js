@@ -457,8 +457,11 @@ function toMs(v) {
 // summaries with trip count + expiry alerts for the directory list.
 router.get('/people', async (req, res) => {
   try {
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
-    const { data: all, error } = await supabase.from('scheduling_people').select(PERSON_COLS);
+    // Cap at 200 so the per-person aggregation's `.in(person_id, …)` query stays
+    // within URL length limits even with a large directory. The list is
+    // search-driven; `total` lets the UI show the full directory size.
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
+    const { data: all, error } = await supabase.from('scheduling_people').select(PERSON_COLS).order('last_name').order('first_name');
     if (error) throw error;
     const ranked = rankPeople(all || [], req.query.q, limit);
     const ids = ranked.map((p) => p.id);
@@ -484,7 +487,7 @@ router.get('/people', async (req, res) => {
       }
     }
 
-    res.json({ people: ranked.map((p) => ({
+    res.json({ total: (all || []).length, shown: ranked.length, people: ranked.map((p) => ({
       id: p.id, first_name: p.first_name, middle_name: p.middle_name, last_name: p.last_name, dob: p.dob,
       hasPassport: !!p.passport_number, tripCount: counts[p.id] || 0, alerts: documentAlerts(p, datesById[p.id] || []),
     })) });
