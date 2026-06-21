@@ -4,15 +4,16 @@
 import { LOGO_DATA_URI, aircraftPhotos } from '../assets/quote/assets.js';
 import { QUOTE_TERMS_HTML } from './quoteTerms.js';
 import { mapScript } from './docMap.js';
+import { easternTime, zuluTime } from './docTime.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }));
-const fmtDT = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+const timeCell = (ms) => (ms == null ? '' : `${esc(easternTime(ms))}<br><span class="zulu">${esc(zuluTime(ms))}</span>`);
 
 function legRow(leg, i) {
   return `<div class="leg">
     <div class="legno">${i + 1}</div>
-    <div class="legdate">${esc(fmtDT(leg.depTime))}</div>
+    <div class="legdate">${timeCell(leg.depTime)}</div>
     <div class="legroute">
       <div><div class="apt">${esc(leg.from)}</div></div>
       <div class="line"><span class="plane">&#9992;</span></div>
@@ -48,7 +49,8 @@ export function renderQuoteHtml(vm, { print = false, web = false } = {}) {
   .sec { font-size:10px; letter-spacing:3px; color:#6b7890; margin:0 30px 6px; }
   .leg { display:flex; align-items:center; gap:16px; padding:13px 30px; border-bottom:1px solid #1a2638; }
   .legno { width:18px; color:#c4ced9; font-weight:700; }
-  .legdate { width:130px; font-size:11px; color:#8a98ad; }
+  .legdate { width:130px; font-size:11px; color:#cdd6e3; line-height:1.4; }
+  .legdate .zulu { font-size:9px; color:#6b7889; }
   .legroute { flex:1; display:flex; align-items:center; gap:10px; }
   .apt { font-size:18px; font-weight:600; color:#fff; }
   .line { flex:1; height:1px; background:linear-gradient(90deg,#38bdf8,#2a3852); position:relative; }

@@ -5,14 +5,9 @@
 // manifest, aircraft maintenance/currency). Used for the dashboard modal AND the PDF.
 import { LOGO_DATA_URI, WINGS_DATA_URI } from '../assets/quote/assets.js';
 import { mapScript } from './docMap.js';
+import { easternTime, zuluTime } from './docTime.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmtLocal = (ms, tz) => {
-  if (ms == null) return '';
-  try { return new Date(ms).toLocaleString('en-US', { timeZone: tz || undefined, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }); }
-  catch { return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-};
-const fmtZ = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', hour12: false, hour: '2-digit', minute: '2-digit' }) + ' Z');
 const fmtDate = (ms) => (ms == null ? '' : new Date(ms).toLocaleDateString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }));
 const fmtMin = (m) => (m == null ? '' : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`);
 const commsLine = (c) => (c ? Object.entries(c).map(([k, v]) => `${k} ${esc(v)}`).join(' · ') : '');
@@ -49,9 +44,9 @@ function legBlock(leg, i, n) {
       <div class="legsub">${leg.callSign ? '<span class="csign">' + esc(leg.callSign) + '</span>' : ''}${meta ? `<span class="legmeta">${meta}</span>` : ''}</div>
     </div>
     <div class="legroute">
-      <div><div class="apt">${esc(leg.from || '')}</div><div class="aptn">${esc(leg.fromName || '')}${leg.fromElev != null ? ` · elev ${esc(leg.fromElev)}'` : ''}</div><div class="aptt">${esc(fmtLocal(leg.depTime, leg.depTz))}</div><div class="aptz">${esc(fmtZ(leg.depTime))}</div></div>
+      <div><div class="apt">${esc(leg.from || '')}</div><div class="aptn">${esc(leg.fromName || '')}${leg.fromElev != null ? ` · elev ${esc(leg.fromElev)}'` : ''}</div><div class="aptt">${esc(easternTime(leg.depTime))}</div><div class="aptz">${esc(zuluTime(leg.depTime))}</div></div>
       <div class="line"><span class="plane">&#9992;</span></div>
-      <div style="text-align:right"><div class="apt">${esc(leg.to || '')}</div><div class="aptn">${esc(leg.toName || '')}${leg.toElev != null ? ` · elev ${esc(leg.toElev)}'` : ''}</div><div class="aptt">${esc(fmtLocal(leg.arrTime, leg.arrTz))}</div><div class="aptz">${esc(fmtZ(leg.arrTime))}</div></div>
+      <div style="text-align:right"><div class="apt">${esc(leg.to || '')}</div><div class="aptn">${esc(leg.toName || '')}${leg.toElev != null ? ` · elev ${esc(leg.toElev)}'` : ''}</div><div class="aptt">${esc(easternTime(leg.arrTime))}</div><div class="aptz">${esc(zuluTime(leg.arrTime))}</div></div>
     </div>
     ${(leg.depComms || leg.arrComms) ? `<div class="comms"><div><span class="cl">DEP COMMS</span> ${commsLine(leg.depComms)}</div><div><span class="cl">ARR COMMS</span> ${commsLine(leg.arrComms)}</div></div>` : ''}
     ${(leg.depMetar || leg.arrMetar) ? `<div class="metar">${leg.depMetar ? `<div>${esc(leg.depMetar)}</div>` : ''}${leg.arrMetar ? `<div>${esc(leg.arrMetar)}</div>` : ''}</div>` : ''}

@@ -36,6 +36,7 @@ export function mapItineraryLeg(l) {
     distance: l?._calc?.distance?.value ?? null,
     eft: l?._calc?.time ?? null,
     pax: assignedPaxCount(l), // assigned passengers, not LF's passengerCount field
+    passengerNames: (l?.passengers || []).map((p) => fullName(p?.user)).filter(Boolean),
     fromLatLng: loc(l?._calc?.from?.location),
     toLatLng: loc(l?._calc?.to?.location),
     depFbo: mapFbo(l?.departure),

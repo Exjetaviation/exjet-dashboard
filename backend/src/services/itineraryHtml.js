@@ -4,12 +4,11 @@
 // the quote document's styling and reuses the shared map+plane script.
 import { LOGO_DATA_URI, aircraftPhotos } from '../assets/quote/assets.js';
 import { mapScript } from './docMap.js';
+import { easternTime, zuluTime } from './docTime.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-// Itinerary leg times show Eastern (the operation's time zone) with Zulu beneath.
-const fmtEastern = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }));
-const fmtZulu = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false }) + 'Z');
-const timeCell = (ms) => (ms == null ? '' : `${esc(fmtEastern(ms))}<br><span class="zulu">${esc(fmtZulu(ms))}</span>`);
+// Itinerary leg times: Eastern (auto EST/EDT) with Zulu beneath.
+const timeCell = (ms) => (ms == null ? '' : `${esc(easternTime(ms))}<br><span class="zulu">${esc(zuluTime(ms))}</span>`);
 const fmtDay = (iso) => { const d = new Date(iso + 'T12:00:00'); return Number.isNaN(d.getTime()) ? esc(iso) : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); };
 
 function crewCell(label, name) {
@@ -28,6 +27,8 @@ function legBlock(leg, i) {
   const c = leg.crew || {};
   const crew = [crewCell('PIC', c.pic), crewCell('SIC', c.sic), ...(c.ca || []).map((n) => crewCell('CA', n))].filter(Boolean).join('');
   const meta = [leg.eft ? esc(leg.eft) : '', leg.distance != null ? esc(leg.distance) + ' nm' : '', leg.pax != null ? esc(leg.pax) + ' PAX' : ''].filter(Boolean).join(' · ');
+  const paxNames = (leg.passengerNames || []).filter(Boolean);
+  const pax = paxNames.length ? `<div class="paxn"><span class="paxl">PASSENGERS</span> ${esc(paxNames.join(', '))}</div>` : '';
   return `<div class="leg">
     <div class="leghd"><span class="legno">LEG ${i + 1}</span><span class="legmeta">${meta}</span></div>
     <div class="legroute">
@@ -35,6 +36,7 @@ function legBlock(leg, i) {
       <div class="line"><span class="plane">&#9992;</span></div>
       <div style="text-align:right"><div class="apt">${esc(leg.to || '')}</div><div class="aptn">${esc(leg.toName || '')}</div><div class="aptt">${timeCell(leg.arrTime)}</div></div>
     </div>
+    ${pax}
     ${crew ? `<div class="crew">${crew}</div>` : ''}
     <div class="fbos">${fboCell('DEPARTURE FBO', leg.depFbo)}${fboCell('ARRIVAL FBO', leg.arrFbo)}</div>
   </div>`;
@@ -87,6 +89,8 @@ export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
   .plane { position:absolute; right:0; top:-8px; color:#38bdf8; }
   .crew { display:flex; flex-wrap:wrap; gap:8px 18px; margin:6px 0; }
   .crl { font-size:9px; letter-spacing:1px; color:#6b7890; } .crn { font-size:12px; color:#e8edf4; }
+  .paxn { font-size:12px; color:#e8edf4; margin:6px 0; }
+  .paxl { font-size:9px; letter-spacing:1px; color:#6b7890; margin-right:4px; }
   .fbos { display:flex; gap:14px; margin-top:6px; }
   .fbo { flex:1; background:#0e1622; border:1px solid #1a2638; border-radius:7px; padding:8px 10px; }
   .fbol { font-size:9px; letter-spacing:1px; color:#6b7890; } .fbon { font-size:12px; color:#fff; font-weight:600; margin-top:2px; } .fboa { font-size:10px; color:#8a98ad; }
