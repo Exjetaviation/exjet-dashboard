@@ -34,7 +34,10 @@ export function mapItineraryLeg(l) {
     arrTime: l?.arrival?.time ?? null,
     distance: l?._calc?.distance?.value ?? null,
     eft: l?._calc?.time ?? null,
-    pax: l?.passengerCount ?? null,
+    // Count the passengers actually ASSIGNED to the leg (the `passengers` {user,seat}
+    // list); LF's passengerCount field can disagree (e.g. 15 vs 13 assigned). Fall
+    // back to passengerCount only when no assigned list is present.
+    pax: (Array.isArray(l?.passengers) ? l.passengers.length : null) ?? l?.passengerCount ?? null,
     fromLatLng: loc(l?._calc?.from?.location),
     toLatLng: loc(l?._calc?.to?.location),
     depFbo: mapFbo(l?.departure),
