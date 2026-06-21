@@ -44,6 +44,16 @@ export default function TripDetail() {
   );
 
   const s = STATUS_MAP[trip.status] || { label: '—', color: '#888' };
+  const sendItinerary = async () => {
+    const to = (window.prompt('Send passenger itinerary to (email address):') || '').trim();
+    if (!to) return;
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${trip.dispatchId}/itinerary/send`, { method: 'POST', body: JSON.stringify({ to }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Send failed (${r.status})`);
+      window.alert(`Itinerary sent to ${to}`);
+    } catch (e) { window.alert(`Couldn't send: ${e.message}`); }
+  };
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -58,6 +68,8 @@ export default function TripDetail() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <a href={`${API_BASE}/itinerary/${trip.dispatchId}`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, textDecoration: 'none' }}>Itinerary ↗</a>
+          <button onClick={sendItinerary}
+            style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>✉ Send Itinerary</button>
           <TripSheetActions dispatchId={trip.dispatchId} tripId={trip.tripId} />
         </div>
       </div>
