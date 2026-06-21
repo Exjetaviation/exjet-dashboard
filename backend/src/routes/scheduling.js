@@ -18,6 +18,10 @@ import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
 import * as lf from '../services/levelflight.js';
 import { sendEmail } from '../services/gmail.js';
+import { buildItinerary } from '../services/itineraryData.js';
+import { renderItineraryHtml } from '../services/itineraryHtml.js';
+import { renderQuotePdf } from '../services/quotePdf.js';
+import { buildItineraryEmail } from '../services/itineraryEmail.js';
 
 const router = express.Router();
 
@@ -377,29 +381,43 @@ router.delete('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
   }
 });
 
-// POST /api/scheduling/trips/:lfOid/itinerary/send  body { to } — email the public
-// passenger-itinerary link (same render as the /itinerary/:id page) via the Exjet
-// Gmail. Auth-only (like the quote send-link); the :lfOid is the dispatch/itinerary
-// id and need not be a mirrored trip here — the trip number is a best-effort lookup.
+// GET /api/scheduling/trips/:lfOid/itinerary/email-preview?name= — render the
+// formatted itinerary email (subject + HTML + summary) so the dispatcher can review
+// it before sending. :lfOid is the dispatch/itinerary id.
+router.get('/trips/:lfOid/itinerary/email-preview', async (req, res) => {
+  try {
+    const vm = await buildItinerary(req.params.lfOid);
+    if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
+    const link = `${req.protocol}://${req.get('host')}/itinerary/${req.params.lfOid}`;
+    res.json(buildItineraryEmail(vm, { recipientName: req.query.name, link }));
+  } catch (e) {
+    console.error('GET itinerary email-preview:', e.message);
+    res.status(500).json({ error: e.message || 'Failed to build itinerary email' });
+  }
+});
+
+// POST /api/scheduling/trips/:lfOid/itinerary/send  body { to, recipientName }
+// — email the formatted passenger itinerary (HTML) with the PDF attached, via the
+// Exjet Gmail. Auth-only (like the quote send-link).
 router.post('/trips/:lfOid/itinerary/send', async (req, res) => {
   try {
     const to = (req.body?.to || '').trim();
     if (!to) return res.status(400).json({ error: 'Recipient email required' });
-    let tripNumber = null;
-    try {
-      const col = tripColumn(req.params.lfOid);
-      const { data } = await supabase.from('scheduling_trips').select('trip_number').eq(col, req.params.lfOid).maybeSingle();
-      tripNumber = data?.trip_number || null;
-    } catch { /* itinerary still sendable without a local trip record */ }
+    const vm = await buildItinerary(req.params.lfOid);
+    if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
     const link = `${req.protocol}://${req.get('host')}/itinerary/${req.params.lfOid}`;
-    await sendEmail({
-      to,
-      subject: `Your Exjet Aviation itinerary${tripNumber ? ` — Trip #${tripNumber}` : ''}`,
-      body: `Your flight itinerary is ready.\n\nView it here:\n${link}\n\nThank you for flying with Exjet Aviation.`,
-    });
+    const { subject, html } = buildItineraryEmail(vm, { recipientName: req.body?.recipientName, link });
+    // Attach the itinerary PDF (best-effort — still send the formatted email if the
+    // PDF renderer is unavailable).
+    let attachments = [];
+    try {
+      const pdf = await renderQuotePdf(renderItineraryHtml(vm, { print: true }));
+      attachments = [{ filename: `exjet-itinerary-${vm.tripNumber || req.params.lfOid}.pdf`, content: pdf, contentType: 'application/pdf' }];
+    } catch (e) { console.warn('[itinerary send] PDF attach failed, sending without:', e?.message || e); }
+    await sendEmail({ to, subject, html, attachments });
     res.json({ success: true });
   } catch (e) {
-    console.error('POST /api/scheduling/trips/:lfOid/itinerary/send:', e.message);
+    console.error('POST itinerary/send:', e.message);
     res.status(500).json({ error: e.message || 'Failed to send itinerary' });
   }
 });

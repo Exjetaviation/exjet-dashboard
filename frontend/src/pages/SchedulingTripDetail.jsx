@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch, API_BASE } from '../lib/api';
 import FlightsList from '../components/FlightsList';
+import ItinerarySendModal from '../components/ItinerarySendModal';
 import { distinctCrew, distinctClients } from '../lib/schedulingAggregate';
 import { useApi } from '../hooks/useApi';
 
@@ -63,6 +64,7 @@ export default function SchedulingTripDetail() {
   const [passengers, setPassengers] = useState([]);     // saved manifest
   const [paxEdit, setPaxEdit] = useState(null);         // draft manifest when editing
   const [documents, setDocuments] = useState([]);       // uploaded trip documents
+  const [showSend, setShowSend] = useState(false);      // itinerary send modal
   const [docType, setDocType] = useState('contract');
   const [docBusy, setDocBusy] = useState(false);
 
@@ -154,18 +156,6 @@ export default function SchedulingTripDetail() {
     setBusy(false);
   };
 
-  const sendItinerary = async () => {
-    const to = (window.prompt('Send passenger itinerary to (email address):') || '').trim();
-    if (!to) return;
-    setBusy(true); setError(null);
-    try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/itinerary/send`, { method: 'POST', body: JSON.stringify({ to }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || `Send failed (${r.status})`);
-      window.alert(`Itinerary sent to ${to}`);
-    } catch (e) { setError(e.message); }
-    setBusy(false);
-  };
 
   const reprice = async () => {
     setBusy(true); setError(null);
@@ -623,8 +613,9 @@ export default function SchedulingTripDetail() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           <a href={`${API_BASE}/itinerary/${id}`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Passenger Itinerary ↗</a>
-          <button onClick={sendItinerary} disabled={busy}
+          <button onClick={() => setShowSend(true)} disabled={busy}
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>✉ Send Itinerary</button>
+          {showSend && <ItinerarySendModal dispatchId={id} onClose={() => setShowSend(false)} />}
           <a href={`/scheduling/trips/${id}/sheet`} target="_blank" rel="noopener noreferrer"
             style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Crew Trip Sheet ↗</a>
         </div>

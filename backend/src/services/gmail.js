@@ -64,21 +64,47 @@ export const markAsRead = async (messageId) => {
   });
 };
 
-export const sendEmail = async ({ to, subject, body }) => {
-  const gmail = getGmail();
-  const message = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    'Content-Type: text/plain; charset=utf-8',
-    '',
-    body,
-  ].join('\n');
+// RFC 2047-encode a header value when it contains non-ASCII (e.g. the en dash).
+const encodeHeader = (s) => (/[^\x00-\x7F]/.test(s) ? `=?UTF-8?B?${Buffer.from(s).toString('base64')}?=` : s);
 
-  const encoded = Buffer.from(message).toString('base64url');
-  await gmail.users.messages.send({
-    userId: 'me',
-    requestBody: { raw: encoded },
-  });
+// Send an email via the Exjet Gmail. Plain text: { to, subject, body }. Rich:
+// pass `html` and/or `attachments` (each { filename, content: Buffer, contentType }).
+export const sendEmail = async ({ to, subject, body, html, attachments = [] }) => {
+  const gmail = getGmail();
+  const CRLF = '\r\n';
+  let raw;
+  if (!html && !attachments.length) {
+    raw = [`To: ${to}`, `Subject: ${encodeHeader(subject)}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', '', body || ''].join(CRLF);
+  } else {
+    const boundary = 'exjet_' + Math.random().toString(36).slice(2);
+    const lines = [
+      `To: ${to}`,
+      `Subject: ${encodeHeader(subject)}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      html ? 'Content-Type: text/html; charset=utf-8' : 'Content-Type: text/plain; charset=utf-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      html || body || '',
+    ];
+    for (const att of attachments) {
+      const b64 = Buffer.from(att.content).toString('base64').replace(/(.{76})/g, `$1${CRLF}`);
+      lines.push(
+        `--${boundary}`,
+        `Content-Type: ${att.contentType || 'application/octet-stream'}; name="${att.filename}"`,
+        'Content-Transfer-Encoding: base64',
+        `Content-Disposition: attachment; filename="${att.filename}"`,
+        '',
+        b64,
+      );
+    }
+    lines.push(`--${boundary}--`);
+    raw = lines.join(CRLF);
+  }
+  const encoded = Buffer.from(raw).toString('base64url');
+  await gmail.users.messages.send({ userId: 'me', requestBody: { raw: encoded } });
 };
 
 export const getAuthUrl = () => {
