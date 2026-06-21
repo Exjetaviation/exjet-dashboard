@@ -86,7 +86,7 @@ function maintenanceBlock(m) {
     </div>`;
 }
 
-export function renderTripSheetHtml(vm, { print = false } = {}) {
+export function renderTripSheetHtml(vm, { print = false, web = false } = {}) {
   const cl = vm.client || {};
   const op = vm.operator || {};
   const ac = vm.aircraft || {};
@@ -149,9 +149,12 @@ export function renderTripSheetHtml(vm, { print = false } = {}) {
   .mxline { font-size:11px; color:#cfd6e0; padding:2px 0; } .mxsub { font-size:9px; letter-spacing:1px; color:#6b7890; margin:8px 0 2px; }
   .mxbox .tbl { width:100%; margin:8px 0 0; }
   .foot { padding:18px 30px 30px; font-size:9px; color:#5b6b82; }
+  .webbar { display:flex; justify-content:flex-end; padding:10px 30px 0; }
+  .webbtn { font-size:12px; padding:8px 14px; border-radius:8px; background:#1a2436; border:1px solid #8893a5; color:#e8edf4; text-decoration:none; }
   ${print ? '.leg{break-inside:avoid;} .mxbox{break-inside:avoid;}' : ''}
 </style></head>
 <body><div class="page">
+  ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}">Download PDF</a></div>` : ''}
   <div class="hdr">
     <div>${LOGO_DATA_URI ? `<img class="logo" src="${LOGO_DATA_URI}" alt="Exjet">` : '<div class="tail">EXJET</div>'}
       <div class="addr">${esc(op.name || 'EXJET AVIATION')}${op.address ? '<br>' + esc(op.address) : ''}${op.cert ? '<br>Cert ' + esc(op.cert) : ''}</div></div>
