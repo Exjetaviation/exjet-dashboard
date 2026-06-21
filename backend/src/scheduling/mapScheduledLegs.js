@@ -10,6 +10,7 @@
 // columns; `ref` carries a parent's lf_oid for the orchestrator to resolve into a
 // uuid FK before upserting.
 import { oidToStr, toIsoTimestamp } from './lfNormalize.js';
+import { assignedPaxCount } from '../services/paxCount.js';
 
 function legOidOf(l) {
   return oidToStr(l?._id?.$oid) || oidToStr(l?._id) || oidToStr(l?.oid) || oidToStr(l?.id);
@@ -80,7 +81,9 @@ export function mapScheduledLegs(rawLegs) {
         dep_time: depTimeOf(l),
         arr_time: arrTimeOf(l),
       },
-      snapshot: l,
+      // Store the ASSIGNED passenger count as passengerCount so every mirror-backed
+      // display (lists, calendar, trip page) shows it instead of LF's field.
+      snapshot: { ...l, passengerCount: assignedPaxCount(l) },
       ref: { tripLfOid: dispatchOid },
     });
 
