@@ -13,7 +13,7 @@ export function mapScript(viewModel) {
     ? `https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png?api_key=${key}`
     : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
   const tileOpts = key ? { maxZoom: 20 } : { subdomains: 'abcd', maxZoom: 19 };
-  const waterStyle = key ? "#map{background:#344d66}.leaflet-tile-pane{filter:invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95)}" : '';
+  const waterStyle = key ? "#map{background:#4a5470}.leaflet-tile-pane{filter:invert(1) contrast(0.4) brightness(0.51) sepia(1) saturate(1) hue-rotate(192deg)}" : '';
   return `
     const segs = ${JSON.stringify(pts)};
     if (segs.length) {

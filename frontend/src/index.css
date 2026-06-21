@@ -51,5 +51,5 @@ body {
 /* Black land + screenshot-blue water on the Toner basemap. Scoped to maps that
    opt in with .bluewater-map (Fleet Map, FlightTrackMap, TripPathMap) so other
    leaflet maps aren't inverted. */
-.bluewater-map.leaflet-container { background: #344d66 !important; }
-.bluewater-map .leaflet-tile-pane { filter: invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95); }
+.bluewater-map.leaflet-container { background: #4a5470 !important; }
+.bluewater-map .leaflet-tile-pane { filter: invert(1) contrast(0.4) brightness(0.51) sepia(1) saturate(1) hue-rotate(192deg); }
