@@ -29,6 +29,21 @@ test('mapReleaseLeg builds a per-leg manifest from the leg passengers', () => {
   assert.equal(mapReleaseLeg({}).manifest, null);
 });
 
+test('mapReleaseLeg flags the lead (unique lowest seat) and lists them first', () => {
+  const paxById = new Map([
+    ['p1', { name: 'Bob Lee' }],
+    ['p2', { name: 'Antonela Roccuzzo' }],
+    ['p3', { name: 'Emily Johnson' }],
+  ]);
+  const leg = mapReleaseLeg({ passengers: [
+    { user: { _id: { $oid: 'p1' } }, seat: 9 },
+    { user: { _id: { $oid: 'p2' } }, seat: 8 }, // lead
+    { user: { _id: { $oid: 'p3' } }, seat: 9 },
+  ] }, new Map(), paxById);
+  assert.equal(leg.manifest[0].name, 'Antonela Roccuzzo'); // lead first
+  assert.deepEqual(leg.manifest.map((p) => p.lead), [true, false, false]);
+});
+
 test('mapReleaseLeg falls back to the trip manifest when a leg carries pax but no list', () => {
   const trip = [{ name: 'Ada Lovelace' }, { name: 'Grace Hopper' }];
   // Leg has passengers aboard but no explicit per-leg list -> use the trip manifest.

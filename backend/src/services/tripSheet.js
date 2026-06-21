@@ -5,6 +5,7 @@
 // Pure mappers (mapReleaseLeg, mapManifest, mapMaintenance) are unit-tested; the I/O
 // (getDispatchRelease) lives in buildCrewTripSheet.
 import { getDispatchRelease } from './levelflight.js';
+import { leadUserId } from './leadPassenger.js';
 
 const oid = (v) => (v && typeof v === 'object' ? v.$oid : v) || null;
 const fullName = (u) => (u ? [u.firstName, u.lastName].filter((s) => String(s || '').trim()).join(' ').trim() : '') || null;
@@ -72,8 +73,16 @@ export function mapReleaseLeg(r, empById = new Map(), paxById = new Map(), tripM
   // trip-level pax details. LevelFlight only populates the explicit list on some legs,
   // so a leg that carries passengers (paxCount > 0) but no explicit list falls back to
   // the full trip manifest — otherwise that leg would show no passengers at all.
+  // Mark + sort the lead passenger first (the LF lead toggle = unique forward seat).
+  const leadId = leadUserId(r?.passengers);
   let legManifest = Array.isArray(r?.passengers)
-    ? r.passengers.map((pp) => paxById.get(oid(pp?.user?._id)) || (pp?.user ? { name: fullName(pp.user) } : null)).filter(Boolean)
+    ? r.passengers
+        .map((pp) => {
+          const row = paxById.get(oid(pp?.user?._id)) || (pp?.user ? { name: fullName(pp.user) } : null);
+          return row ? { ...row, lead: leadId != null && oid(pp?.user?._id) === leadId } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => Number(b.lead) - Number(a.lead))
     : null;
   if ((!legManifest || !legManifest.length) && paxCount > 0) legManifest = tripManifest;
   const ca = (r?.attendants || []).map((a) => crewMember(a, empById)).filter(Boolean);
