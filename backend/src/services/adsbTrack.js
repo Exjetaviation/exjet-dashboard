@@ -40,6 +40,32 @@ export function clipTrackToLeg(positions, leg, padMs) {
     .map((p) => [p.lat, p.lon]);
 }
 
+// Derive ACTUAL departure/arrival (epoch ms, or null) from a tail's firehose
+// positions ({ t, on_ground }) within a leg's [depTime - pad, arrTime + pad] window.
+//   actualDep = first OBSERVED ground->air transition (prev on-ground, next airborne)
+//   actualArr = first air->ground transition AFTER that departure
+// Requires a real transition, so a track that starts mid-air (we booted/began logging
+// after takeoff) yields actualDep=null rather than a fabricated time — honest over
+// guessing, matching detectTakeoff. ~20s precision (the poll interval).
+export function deriveActualTimes(positions, leg, padMs) {
+  const lo = leg.depTime - padMs;
+  const hi = leg.arrTime + padMs;
+  const pts = (positions || []).filter((p) => p.t >= lo && p.t <= hi).sort((a, b) => a.t - b.t);
+  let actualDep = null;
+  let actualArr = null;
+  for (let i = 1; i < pts.length; i++) {
+    const prevGround = !!pts[i - 1].on_ground;
+    const curGround = !!pts[i].on_ground;
+    if (actualDep == null) {
+      if (prevGround && !curGround) actualDep = pts[i].t; // ground -> air
+    } else if (!prevGround && curGround) {
+      actualArr = pts[i].t; // air -> ground after departure
+      break;
+    }
+  }
+  return { actualDep, actualArr };
+}
+
 // Months (UTC, 1st of month) spanning [startMs, endMs], plus the prior month, as
 // anchor timestamps for LevelFlight's scheduledLegs queries. Moved here from
 // routes/adsb.js so the reconciler can reuse it.
