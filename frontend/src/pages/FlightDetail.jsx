@@ -49,6 +49,17 @@ export default function FlightDetail() {
   const dispatchId = leg?.dispatch?._id?.$oid || leg?.dispatch?._id || null;
   const itineraryUrl = dispatchId ? `${API_BASE}/itinerary/${dispatchId}` : null;
 
+  const sendItinerary = async () => {
+    const to = (window.prompt('Send passenger itinerary to (email address):') || '').trim();
+    if (!to) return;
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${dispatchId}/itinerary/send`, { method: 'POST', body: JSON.stringify({ to }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Send failed (${r.status})`);
+      window.alert(`Itinerary sent to ${to}`);
+    } catch (e) { window.alert(`Couldn't send: ${e.message}`); }
+  };
+
   const [ffBriefing, setFfBriefing] = useState(null);
   const [ffNavlog, setFfNavlog] = useState(null);
   const [ffWb, setFfWb] = useState(null);
@@ -165,6 +176,10 @@ export default function FlightDetail() {
               <button onClick={() => { navigator.clipboard?.writeText(itineraryUrl); setItinCopied(true); setTimeout(() => setItinCopied(false), 2000); }}
                 style={{ padding: '6px 12px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>
                 {itinCopied ? 'Copied ✓' : 'Copy link'}
+              </button>
+              <button onClick={sendItinerary}
+                style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                ✉ Send Itinerary
               </button>
               <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--border)', margin: '0 2px' }} />
               <TripSheetActions dispatchId={dispatchId} tripId={leg?.dispatch?.tripId} />

@@ -378,19 +378,23 @@ router.delete('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
 });
 
 // POST /api/scheduling/trips/:lfOid/itinerary/send  body { to } — email the public
-// passenger-itinerary link (same render as the /itinerary/:id page) via the Exjet Gmail.
-router.post('/trips/:lfOid/itinerary/send', requireSchedulingEditor, async (req, res) => {
+// passenger-itinerary link (same render as the /itinerary/:id page) via the Exjet
+// Gmail. Auth-only (like the quote send-link); the :lfOid is the dispatch/itinerary
+// id and need not be a mirrored trip here — the trip number is a best-effort lookup.
+router.post('/trips/:lfOid/itinerary/send', async (req, res) => {
   try {
     const to = (req.body?.to || '').trim();
     if (!to) return res.status(400).json({ error: 'Recipient email required' });
-    const col = tripColumn(req.params.lfOid);
-    const { data: trip, error } = await supabase
-      .from('scheduling_trips').select('trip_number').eq(col, req.params.lfOid).single();
-    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    let tripNumber = null;
+    try {
+      const col = tripColumn(req.params.lfOid);
+      const { data } = await supabase.from('scheduling_trips').select('trip_number').eq(col, req.params.lfOid).maybeSingle();
+      tripNumber = data?.trip_number || null;
+    } catch { /* itinerary still sendable without a local trip record */ }
     const link = `${req.protocol}://${req.get('host')}/itinerary/${req.params.lfOid}`;
     await sendEmail({
       to,
-      subject: `Your Exjet Aviation itinerary${trip.trip_number ? ` — Trip #${trip.trip_number}` : ''}`,
+      subject: `Your Exjet Aviation itinerary${tripNumber ? ` — Trip #${tripNumber}` : ''}`,
       body: `Your flight itinerary is ready.\n\nView it here:\n${link}\n\nThank you for flying with Exjet Aviation.`,
     });
     res.json({ success: true });
