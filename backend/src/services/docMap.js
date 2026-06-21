@@ -5,11 +5,17 @@ export function mapScript(viewModel) {
   const pts = (viewModel.legs || [])
     .filter((l) => l.fromLatLng && l.toLatLng)
     .map((l) => [l.fromLatLng, l.toLatLng]);
+  // Toner basemap (black land, white water) blended with a blue background via
+  // multiply -> black land + dark-blue water. STADIA_API_KEY required for
+  // non-localhost origins (dashboard / PDF renderer).
+  const key = process.env.STADIA_API_KEY;
+  const tileUrl = `https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png${key ? `?api_key=${key}` : ''}`;
   return `
     const segs = ${JSON.stringify(pts)};
     if (segs.length) {
       const map = L.map('map', { zoomControl: false, attributionControl: false });
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+      (function(){ const s = document.createElement('style'); s.textContent = '#map{background:#14365c}.leaflet-tile-pane{mix-blend-mode:multiply}'; document.head.appendChild(s); })();
+      L.tileLayer(${JSON.stringify(tileUrl)}, { maxZoom: 20 }).addTo(map);
       const all = [];
       segs.forEach((s) => {
         L.polyline(s, { color: '#38bdf8', weight: 2, opacity: 0.85 }).addTo(map);

@@ -227,10 +227,13 @@ export default function FleetMap() {
       zoomControl: true,
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap © CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19,
+    // Toner basemap (pure-black land, white water) blended with a blue map
+    // background via mix-blend-mode:multiply (see index.css) -> black land +
+    // dark-blue water. Keyless on localhost; set VITE_STADIA_API_KEY to deploy.
+    const stadiaKey = import.meta.env.VITE_STADIA_API_KEY;
+    L.tileLayer(`https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png${stadiaKey ? `?api_key=${stadiaKey}` : ''}`, {
+      attribution: '© Stadia Maps © Stamen Design © OpenMapTiles © OpenStreetMap',
+      maxZoom: 20,
     }).addTo(map);
 
     mapInstanceRef.current = map;
