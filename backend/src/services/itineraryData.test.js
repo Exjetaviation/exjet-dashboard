@@ -64,3 +64,12 @@ test('mapItineraryLeg counts assigned passengers, not the passengerCount field',
 test('mapItineraryLeg with an empty assigned list reports 0 assigned', () => {
   assert.equal(mapItineraryLeg({ passengerCount: 4, passengers: [] }).pax, 0);
 });
+
+test('mapItineraryLeg lists assigned passenger names (skips entries with no user)', () => {
+  const l = { passengers: [
+    { user: { firstName: 'Emily', lastName: 'Johnson' }, seat: 1 },
+    { user: { firstName: 'Bob', lastName: 'Lee' }, seat: 2 },
+    { seat: 3 },
+  ] };
+  assert.deepEqual(mapItineraryLeg(l).passengerNames, ['Emily Johnson', 'Bob Lee']);
+});
