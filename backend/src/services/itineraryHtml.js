@@ -6,7 +6,10 @@ import { LOGO_DATA_URI, aircraftPhotos } from '../assets/quote/assets.js';
 import { mapScript } from './docMap.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmtDT = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+// Itinerary leg times show Eastern (the operation's time zone) with Zulu beneath.
+const fmtEastern = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }));
+const fmtZulu = (ms) => (ms == null ? '' : new Date(ms).toLocaleString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false }) + 'Z');
+const timeCell = (ms) => (ms == null ? '' : `${esc(fmtEastern(ms))}<br><span class="zulu">${esc(fmtZulu(ms))}</span>`);
 const fmtDay = (iso) => { const d = new Date(iso + 'T12:00:00'); return Number.isNaN(d.getTime()) ? esc(iso) : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); };
 
 function crewCell(label, name) {
@@ -28,9 +31,9 @@ function legBlock(leg, i) {
   return `<div class="leg">
     <div class="leghd"><span class="legno">LEG ${i + 1}</span><span class="legmeta">${meta}</span></div>
     <div class="legroute">
-      <div><div class="apt">${esc(leg.from || '')}</div><div class="aptn">${esc(leg.fromName || '')}</div><div class="aptt">${esc(fmtDT(leg.depTime))}</div></div>
+      <div><div class="apt">${esc(leg.from || '')}</div><div class="aptn">${esc(leg.fromName || '')}</div><div class="aptt">${timeCell(leg.depTime)}</div></div>
       <div class="line"><span class="plane">&#9992;</span></div>
-      <div style="text-align:right"><div class="apt">${esc(leg.to || '')}</div><div class="aptn">${esc(leg.toName || '')}</div><div class="aptt">${esc(fmtDT(leg.arrTime))}</div></div>
+      <div style="text-align:right"><div class="apt">${esc(leg.to || '')}</div><div class="aptn">${esc(leg.toName || '')}</div><div class="aptt">${timeCell(leg.arrTime)}</div></div>
     </div>
     ${crew ? `<div class="crew">${crew}</div>` : ''}
     <div class="fbos">${fboCell('DEPARTURE FBO', leg.depFbo)}${fboCell('ARRIVAL FBO', leg.arrFbo)}</div>
@@ -78,7 +81,8 @@ export function renderItineraryHtml(vm, { print = false, web = false } = {}) {
   .legmeta { font-size:10px; color:#8a98ad; }
   .legroute { display:flex; align-items:center; gap:10px; margin:8px 0; }
   .apt { font-size:18px; font-weight:600; color:#fff; }
-  .aptn { font-size:10px; color:#8a98ad; } .aptt { font-size:10px; color:#8a98ad; margin-top:2px; }
+  .aptn { font-size:10px; color:#8a98ad; } .aptt { font-size:10px; color:#cdd6e3; margin-top:2px; line-height:1.4; }
+  .zulu { font-size:9px; color:#6b7889; }
   .line { flex:1; height:1px; background:linear-gradient(90deg,#38bdf8,#2a3852); position:relative; }
   .plane { position:absolute; right:0; top:-8px; color:#38bdf8; }
   .crew { display:flex; flex-wrap:wrap; gap:8px 18px; margin:6px 0; }
