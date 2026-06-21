@@ -65,13 +65,17 @@ function crewMember(entry, empById) {
   return { name: fullName(entry.user), dob: detail.dob ?? null, phone: detail.phone ?? null };
 }
 
-export function mapReleaseLeg(r, empById = new Map(), paxById = new Map()) {
+export function mapReleaseLeg(r, empById = new Map(), paxById = new Map(), tripManifest = []) {
   const pilots = r?.pilots || [];
+  const paxCount = r?.passengerCount ?? (r?.passengers || []).length ?? null;
   // Per-leg passenger manifest: the leg lists who's aboard (by user id); join to the
-  // trip-level pax details. null when the leg carries no explicit per-leg list.
-  const legManifest = Array.isArray(r?.passengers)
+  // trip-level pax details. LevelFlight only populates the explicit list on some legs,
+  // so a leg that carries passengers (paxCount > 0) but no explicit list falls back to
+  // the full trip manifest — otherwise that leg would show no passengers at all.
+  let legManifest = Array.isArray(r?.passengers)
     ? r.passengers.map((pp) => paxById.get(oid(pp?.user?._id)) || (pp?.user ? { name: fullName(pp.user) } : null)).filter(Boolean)
     : null;
+  if ((!legManifest || !legManifest.length) && paxCount > 0) legManifest = tripManifest;
   const ca = (r?.attendants || []).map((a) => crewMember(a, empById)).filter(Boolean);
   return {
     callSign: r?.callSign || null,
@@ -98,7 +102,7 @@ export function mapReleaseLeg(r, empById = new Map(), paxById = new Map()) {
     arrMetar: r?.weather?.arrival?.raw || null,
     depFbo: mapFbo(r?.departure),
     arrFbo: mapFbo(r?.arrival),
-    pax: r?.passengerCount ?? (r?.passengers || []).length ?? null,
+    pax: paxCount,
     manifest: legManifest,
     crew: {
       pic: crewMember(pilots.find((p) => p.seat === 2) || pilots[0], empById),
@@ -156,7 +160,8 @@ export async function buildCrewTripSheet(dispatchId, deps = {}) {
   const empById = indexEmployees(d.employees);
   const paxById = new Map();
   for (const p of d.pax || []) { const k = oid(p?._id); if (k) paxById.set(k, paxRow(p)); }
-  const legs = d.releases.map((r) => mapReleaseLeg(r, empById, paxById));
+  const tripManifest = mapManifest(d.pax);
+  const legs = d.releases.map((r) => mapReleaseLeg(r, empById, paxById, tripManifest));
   const disp = d.releases[0]?.dispatch || {};
   const cust = disp.client?.customer;
   const totalDist = legs.reduce((s, l) => s + (l.distance || 0), 0);

@@ -29,6 +29,14 @@ test('mapReleaseLeg builds a per-leg manifest from the leg passengers', () => {
   assert.equal(mapReleaseLeg({}).manifest, null);
 });
 
+test('mapReleaseLeg falls back to the trip manifest when a leg carries pax but no list', () => {
+  const trip = [{ name: 'Ada Lovelace' }, { name: 'Grace Hopper' }];
+  // Leg has passengers aboard but no explicit per-leg list -> use the trip manifest.
+  assert.deepEqual(mapReleaseLeg({ passengerCount: 2 }, new Map(), new Map(), trip).manifest, trip);
+  // Positioning leg (no pax) -> still empty.
+  assert.equal(mapReleaseLeg({ passengerCount: 0 }, new Map(), new Map(), trip).manifest, null);
+});
+
 const release = {
   callSign: 'SKYHOP 69',
   departure: { airport: 'KFXE', time: 1000, fbo: { name: 'Banyan', address: { street: '5360 NW 20th Ter', city: 'Fort Lauderdale', state: 'FL' }, phones: ['954-491-3170'], comms: { arinc: '130.8', atg: '130.8' }, crewNote: 'Fuel $6.39' } },
