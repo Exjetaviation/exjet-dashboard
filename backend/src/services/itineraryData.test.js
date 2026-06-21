@@ -65,11 +65,30 @@ test('mapItineraryLeg with an empty assigned list reports 0 assigned', () => {
   assert.equal(mapItineraryLeg({ passengerCount: 4, passengers: [] }).pax, 0);
 });
 
-test('mapItineraryLeg lists assigned passenger names (skips entries with no user)', () => {
+test('mapItineraryLeg lists assigned passenger names, skipping entries with no user', () => {
   const l = { passengers: [
-    { user: { firstName: 'Emily', lastName: 'Johnson' }, seat: 1 },
-    { user: { firstName: 'Bob', lastName: 'Lee' }, seat: 2 },
-    { seat: 3 },
+    { user: { _id: '1', firstName: 'Emily', lastName: 'Johnson' }, seat: 9 },
+    { user: { _id: '2', firstName: 'Bob', lastName: 'Lee' }, seat: 9 },
+    { seat: 9 },
   ] };
-  assert.deepEqual(mapItineraryLeg(l).passengerNames, ['Emily Johnson', 'Bob Lee']);
+  assert.deepEqual(mapItineraryLeg(l).passengers.map((p) => p.name), ['Emily Johnson', 'Bob Lee']);
+});
+
+test('mapItineraryLeg marks the unique-lowest-seat passenger as lead and lists them first', () => {
+  const l = { passengers: [
+    { user: { _id: '1', firstName: 'Emily', lastName: 'Johnson' }, seat: 9 },
+    { user: { _id: '2', firstName: 'Antonela', lastName: 'Roccuzzo' }, seat: 8 },
+    { user: { _id: '3', firstName: 'Bob', lastName: 'Lee' }, seat: 9 },
+  ] };
+  const p = mapItineraryLeg(l).passengers;
+  assert.equal(p[0].name, 'Antonela Roccuzzo'); // lead sorted first
+  assert.deepEqual(p.map((x) => x.lead), [true, false, false]);
+});
+
+test('mapItineraryLeg marks no lead when all seats are equal (toggle off)', () => {
+  const l = { passengers: [
+    { user: { _id: '1', firstName: 'A', lastName: 'X' }, seat: 9 },
+    { user: { _id: '2', firstName: 'C', lastName: 'Y' }, seat: 9 },
+  ] };
+  assert.equal(mapItineraryLeg(l).passengers.some((p) => p.lead), false);
 });

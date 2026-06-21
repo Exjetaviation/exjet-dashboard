@@ -29,7 +29,7 @@ test('renderItineraryHtml includes trip/quote #, crew, fbo, weather, map', () =>
   assert.match(h, /Ava Att/);
   assert.match(h, /Banyan/);
   assert.match(h, /Clear/);
-  assert.match(h, /Jane Doe/);
+  assert.match(h, /Concierge One/); // PREPARED FOR shows the company, not the contact
   assert.match(h, /qplane/); // shared map script present
   assert.match(h, /id="map"/);
 });
