@@ -5,17 +5,21 @@ export function mapScript(viewModel) {
   const pts = (viewModel.legs || [])
     .filter((l) => l.fromLatLng && l.toLatLng)
     .map((l) => [l.fromLatLng, l.toLatLng]);
-  // Toner basemap (black land, white water) blended with a blue background via
-  // multiply -> black land + dark-blue water. STADIA_API_KEY required for
-  // non-localhost origins (dashboard / PDF renderer).
+  // With a Stadia key: Toner basemap recolored to black land + dark-blue water.
+  // Without one (Stadia 401s off localhost): fall back to CARTO's keyless dark
+  // basemap so the doc map always renders.
   const key = process.env.STADIA_API_KEY;
-  const tileUrl = `https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png${key ? `?api_key=${key}` : ''}`;
+  const tileUrl = key
+    ? `https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png?api_key=${key}`
+    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const tileOpts = key ? { maxZoom: 20 } : { subdomains: 'abcd', maxZoom: 19 };
+  const waterStyle = key ? "#map{background:#344d66}.leaflet-tile-pane{filter:invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95)}" : '';
   return `
     const segs = ${JSON.stringify(pts)};
     if (segs.length) {
       const map = L.map('map', { zoomControl: false, attributionControl: false });
-      (function(){ const s = document.createElement('style'); s.textContent = '#map{background:#344d66}.leaflet-tile-pane{filter:invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95)}'; document.head.appendChild(s); })();
-      L.tileLayer(${JSON.stringify(tileUrl)}, { maxZoom: 20 }).addTo(map);
+      ${waterStyle ? `(function(){ const s = document.createElement('style'); s.textContent = ${JSON.stringify(waterStyle)}; document.head.appendChild(s); })();` : ''}
+      L.tileLayer(${JSON.stringify(tileUrl)}, ${JSON.stringify(tileOpts)}).addTo(map);
       const all = [];
       segs.forEach((s) => {
         L.polyline(s, { color: '#38bdf8', weight: 2, opacity: 0.85 }).addTo(map);
