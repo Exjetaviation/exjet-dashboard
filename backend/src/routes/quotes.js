@@ -177,15 +177,18 @@ router.get('/dispatch/:id/pdf', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/quotes/dispatch/:id/send-link  body { to } — email the public quote link.
+// POST /api/quotes/dispatch/:id/send-link  body { to, cc } — email the public quote
+// link. `cc` sends a copy (comma-separate multiple).
 router.post('/dispatch/:id/send-link', async (req, res) => {
   try {
     const to = (req.body?.to || '').trim();
+    const cc = (req.body?.cc || '').trim();
     if (!to) return res.status(400).json({ error: 'Recipient email required' });
     const base = `${req.protocol}://${req.get('host')}`;
     const link = `${base}/quote/${req.params.id}`;
     await sendEmail({
       to,
+      cc: cc || undefined,
       subject: 'Your Exjet Charter Quote',
       body: `Thank you for considering Exjet Aviation.\n\nView your charter quote here:\n${link}\n\nYou can review the itinerary, terms, and request to book directly from that page.`,
     });
