@@ -13,6 +13,10 @@ const uri = (file, mime) => {
 export const LOGO_DATA_URI = uri('logo.png', 'image/png');
 export const WINGS_DATA_URI = uri('wings.png', 'image/png');
 
+// Raw PNG buffer for the email signature logo. Served over HTTP (a hosted URL) —
+// email clients strip data-URI images, so it can't be inlined like the doc logos.
+export const EXJET_EMAIL_PNG = (() => { try { return readFileSync(join(here, 'exjet-email.png')); } catch { return null; } })();
+
 // { tail: { interior, exterior, cabin } } — extend as photos are added.
 export function aircraftPhotos(tail) {
   const t = String(tail || '').toUpperCase();

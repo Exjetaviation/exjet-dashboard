@@ -5,8 +5,16 @@ import express from 'express';
 import { buildItinerary } from '../services/itineraryData.js';
 import { renderItineraryHtml } from '../services/itineraryHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
+import { EXJET_EMAIL_PNG } from '../assets/quote/assets.js';
 
 const router = express.Router();
+
+// GET /itinerary/email-logo.png — the Exjet email-signature logo, served publicly so
+// it renders in sent emails. Declared before /:id so it isn't treated as a dispatch id.
+router.get('/email-logo.png', (req, res) => {
+  if (!EXJET_EMAIL_PNG) return res.status(404).end();
+  res.type('png').set('Cache-Control', 'public, max-age=86400').send(EXJET_EMAIL_PNG);
+});
 
 // GET /itinerary/:id — interactive web passenger itinerary.
 router.get('/:id', async (req, res) => {
