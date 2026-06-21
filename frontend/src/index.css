@@ -46,8 +46,8 @@ body {
    Filters render per-tile (no backdrop needed); markers/routes are in higher
    panes and stay untinted. */
 .leaflet-container { background: var(--bg-primary) !important; }
-/* Black land + screenshot-blue water — ONLY the Fleet Map (Toner basemap).
-   Scoped so the other dashboard maps (FlightTrackMap, TripPathMap on dark_all)
-   aren't inverted/colorized. */
-.exjet-map-wrap .leaflet-container { background: #344d66 !important; }
-.exjet-map-wrap .leaflet-tile-pane { filter: invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95); }
+/* Black land + screenshot-blue water on the Toner basemap. Scoped to maps that
+   opt in with .bluewater-map (Fleet Map, FlightTrackMap, TripPathMap) so other
+   leaflet maps aren't inverted. */
+.bluewater-map.leaflet-container { background: #344d66 !important; }
+.bluewater-map .leaflet-tile-pane { filter: invert(1) brightness(0.245) sepia(1) saturate(2) hue-rotate(175deg) brightness(0.95); }

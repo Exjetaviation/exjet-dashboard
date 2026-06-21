@@ -43,8 +43,11 @@ export default function FlightTrackMap({ track = [], from, to, source, depLabel,
   useEffect(() => {
     if (mapRef.current || !elRef.current) return;
     const map = L.map(elRef.current, { center: [25, -40], zoom: 3, zoomControl: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19,
+    // Toner basemap; the .bluewater-map CSS filter recolors it to black land +
+    // blue water (matching the Fleet Map).
+    const stadiaKey = import.meta.env.VITE_STADIA_API_KEY;
+    L.tileLayer(`https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png${stadiaKey ? `?api_key=${stadiaKey}` : ''}`, {
+      attribution: '© Stadia Maps © Stamen © OpenMapTiles © OpenStreetMap', maxZoom: 20,
     }).addTo(map);
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 0); // settle size inside the layout
@@ -118,7 +121,7 @@ export default function FlightTrackMap({ track = [], from, to, source, depLabel,
 
   return (
     <div style={{ position: 'relative', marginBottom: 20 }}>
-      <div ref={elRef} style={{ height: 320, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} />
+      <div ref={elRef} className="bluewater-map" style={{ height: 320, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} />
       {!track.length && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 14, pointerEvents: 'none' }}>
           No flight path recorded for this flight.

@@ -36,7 +36,8 @@ export default function TripPathMap({ legs = [] }) {
   useEffect(() => {
     if (mapRef.current || !elRef.current) return;
     const map = L.map(elRef.current, { center: [25, -40], zoom: 3, zoomControl: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+    const stadiaKey = import.meta.env.VITE_STADIA_API_KEY;
+    L.tileLayer(`https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png${stadiaKey ? `?api_key=${stadiaKey}` : ''}`, { attribution: '© Stadia Maps © Stamen © OpenMapTiles © OpenStreetMap', maxZoom: 20 }).addTo(map);
     mapRef.current = map;
     setTimeout(() => map.invalidateSize(), 0);
     return () => { map.remove(); mapRef.current = null; };
@@ -93,7 +94,7 @@ export default function TripPathMap({ legs = [] }) {
 
   return (
     <div style={{ position: 'relative', marginBottom: 20 }}>
-      <div ref={elRef} style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} />
+      <div ref={elRef} className="bluewater-map" style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }} />
       {!segs.length && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: 14, pointerEvents: 'none' }}>
           Route map unavailable for this trip.
