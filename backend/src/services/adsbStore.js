@@ -41,6 +41,34 @@ export async function pruneOld(cutoffIso) {
 
 // All positions for one registration in [startIso, endIso], oldest first.
 // Returns [{ lat, lon, t (epoch ms), on_ground }].
+// Recent flight trails from the PERSISTED firehose (survives server restarts, unlike the
+// in-memory trail). Returns { registration: [[lat,lon],...] } for each tail, clipped to the
+// most-recent contiguous segment (split at gaps > gapMs = a separate earlier flight), so the
+// map shows the current flight's path rather than stitching the prior trip onto it.
+export async function queryRecentTrails(sinceIso, gapMs = 30 * 60 * 1000) {
+  const client = getClient();
+  if (!client) return {};
+  try {
+    const { data, error } = await client
+      .from('adsb_positions')
+      .select('registration, lat, lon, t')
+      .gte('t', sinceIso)
+      .order('t', { ascending: true })
+      .limit(8000);
+    if (error) { console.warn('[adsbStore] queryRecentTrails failed (soft):', error.message); return {}; }
+    const byReg = {};
+    for (const r of data || []) (byReg[r.registration] ||= []).push({ lat: r.lat, lon: r.lon, t: Date.parse(r.t) });
+    const out = {};
+    for (const [reg, pts] of Object.entries(byReg)) {
+      let segStart = 0;
+      for (let i = 1; i < pts.length; i++) if (pts[i].t - pts[i - 1].t > gapMs) segStart = i;
+      const seg = pts.slice(segStart);
+      if (seg.length >= 2) out[reg] = seg.map((p) => [p.lat, p.lon]);
+    }
+    return out;
+  } catch (e) { console.warn('[adsbStore] queryRecentTrails error (soft):', e?.message || e); return {}; }
+}
+
 export async function queryTrack(registration, startIso, endIso) {
   const client = getClient();
   if (!client) return [];

@@ -2,7 +2,7 @@ import express from 'express';
 import { getLivePositions, getTrails } from '../services/adsb.js';
 import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
-import { queryTrack } from '../services/adsbStore.js';
+import { queryTrack, queryRecentTrails } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
 import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
 import { getLegActualsInRange } from '../services/legActualsStore.js';
@@ -23,7 +23,17 @@ router.get('/positions', async (req, res) => {
   }
 });
 
-router.get('/trail', (req, res) => res.json({ trails: getTrails() }));
+// Flight trails from the PERSISTED firehose (survives restarts, fuller than the in-memory
+// trail). Falls back to the in-memory trail if Supabase is off / returns nothing.
+router.get('/trail', async (req, res) => {
+  try {
+    const sinceIso = new Date(Date.now() - 12 * 3600000).toISOString();
+    const trails = await queryRecentTrails(sinceIso);
+    res.json({ trails: Object.keys(trails).length ? trails : getTrails() });
+  } catch (e) {
+    res.json({ trails: getTrails() });
+  }
+});
 
 // GET /api/adsb/actuals?from=<ms>&to=<ms> — actual departure/arrival (epoch ms, or null)
 // by leg id, for legs whose SCHEDULED departure falls in the range, with per-field

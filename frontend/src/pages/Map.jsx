@@ -161,7 +161,10 @@ const bearing = (a, b) => {
 // JS global Map, not this component — otherwise it recurses and breaks the hooks.
 export default function FleetMap() {
   const { data, loading } = useApi('/api/levelflight/legs');
-  const [showTrail, setShowTrail] = useState(false);
+  // Persist the trail toggle so it doesn't reset (vanish) on every refresh. Default on.
+  const [showTrail, setShowTrail] = useState(() => {
+    try { return localStorage.getItem('exjet_fleet_trail') !== '0'; } catch { return true; }
+  });
   const { positions: live, trails, updatedAt } = useAdsb(20000, showTrail);
   const navigate = useNavigate();
   const mapRef = useRef(null);
@@ -620,7 +623,7 @@ export default function FleetMap() {
             {isFs ? '⤧ Exit full screen' : '⤢ Full screen'}
           </button>
 
-          <button onClick={() => setShowTrail(s => !s)} style={{ position: 'absolute', top: 12,
+          <button onClick={() => setShowTrail(s => { const n = !s; try { localStorage.setItem('exjet_fleet_trail', n ? '1' : '0'); } catch { /* ignore */ } return n; })} style={{ position: 'absolute', top: 12,
             right: 12, zIndex: 1000, padding: '6px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer',
             border: '1px solid var(--border)',
             background: showTrail ? 'var(--accent)' : 'var(--bg-secondary)',
