@@ -1,19 +1,14 @@
 import { supabase } from '../services/supabase.js';
+import { nextNumber } from './nextNumber.js';
 
-// Pure: the next number = one above the largest numeric value present, but never
-// below `base`. Provisional scheme — the real Quote#/Trip# numbering is decided
-// during the LevelFlight cutoff.
-export const nextNumber = (numbers, base) => {
-  const max = (numbers || [])
-    .map((v) => Number(v))
-    .filter((v) => Number.isFinite(v))
-    .reduce((m, v) => Math.max(m, v), base - 1);
-  return max + 1;
-};
+export { nextNumber };
 
 const QUOTE_BASE = 3000;
 const TRIP_BASE = 26000;
 
+// Full-table read is intentional: quote_number/trip_number are stored as TEXT, so a
+// DB-side ORDER BY would sort lexically ('999' > '3007') and pick the wrong max. We
+// fetch the column and compute the numeric max in nextNumber.
 const fetchColumn = async (column) => {
   const { data, error } = await supabase.from('scheduling_trips').select(column);
   if (error) return []; // soft-fail: degrade to base on error

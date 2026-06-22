@@ -88,7 +88,7 @@ test('totalOverride wins over the computed total', () => {
   const r = recomputeFromInputs({ ...baseInputs, totalOverride: 25000 });
   assert.equal(r.total, 25000);
   assert.equal(r.totalOverride, 25000);
-  assert.ok(r.computedTotal !== 25000);
+  assert.notEqual(r.computedTotal, 25000);
 });
 
 test('default (no fees, no flags) keeps FET on — backward compatible', () => {
