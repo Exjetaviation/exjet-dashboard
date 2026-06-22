@@ -646,8 +646,8 @@ useEffect(() => {
                             <span style={{fontSize:'10px',fontWeight:'600',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 1px rgba(0,0,0,0.35)'}}>{origin}→{dest}</span>
                           </div>;
                         })()}
-                        {/* Live in-flight: plane at the growing leading edge of the actual bar (grows with the now-bar) */}
-                        {actBlk&&isAirborne&&act.actualArr==null&&<div style={{position:'absolute',left:actBlk.left+actBlk.width-8,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.5)-8,zIndex:10,pointerEvents:'none',fontSize:'14px',lineHeight:1,color:'#fff',transform:'rotate(45deg)',textShadow:'0 0 5px rgba(0,0,0,0.85)'}}>✈</div>}
+                        {/* Live in-flight: plane just to the RIGHT of the now-bar, leading the growing actual bar */}
+                        {actBlk&&isAirborne&&act.actualArr==null&&<div style={{position:'absolute',left:nowPx+3,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.5)-11,zIndex:10,pointerEvents:'none',fontSize:'22px',lineHeight:1,color:'#fff',transform:'rotate(45deg)',textShadow:'0 0 6px rgba(0,0,0,0.9)'}}>✈</div>}
                       </React.Fragment>
                     );
                   })}
