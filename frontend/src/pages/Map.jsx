@@ -47,20 +47,18 @@ const getAircraftPositions = (legs) => {
     let currentLeg = null;
 
     if (activeLeg) {
+      // Scheduled to be flying now — but WITHOUT a live ADS-B fix we don't actually
+      // know where it is (it may be delayed on the ground). Do NOT guess a mid-route
+      // position by interpolating dep->arr (that produced the "floating in the middle of
+      // Florida" plane). Park it at the departure airport and mark it as awaiting a
+      // signal; live ADS-B (applied below) overrides this the instant it's tracked.
       const depLoc = activeLeg._calc?.from?.location;
-      const arrLoc = activeLeg._calc?.to?.location;
-      if (depLoc && arrLoc) {
-        const elapsed = now - activeLeg.departure.time;
-        const total = activeLeg.arrival.time - activeLeg.departure.time;
-        const frac = Math.min(Math.max(elapsed / total, 0), 1);
-        position = {
-          lat: depLoc.lat + (arrLoc.lat - depLoc.lat) * frac,
-          lng: depLoc.lng + (arrLoc.lng - depLoc.lng) * frac,
-        };
-        airport = `${activeLeg.departure.airport} → ${activeLeg.arrival.airport}`;
-        statusLabel = 'In Flight';
-        statusColor = '#f59e0b';
-        isFlying = true;
+      if (depLoc) {
+        position = { lat: depLoc.lat, lng: depLoc.lng };
+        airport = activeLeg.departure?.airport;
+        statusLabel = 'Awaiting signal';
+        statusColor = '#94a3b8';
+        isFlying = false;
         currentLeg = activeLeg;
       }
     } else if (lastDeparted) {
@@ -86,6 +84,7 @@ const getAircraftPositions = (legs) => {
       statusLabel,
       statusColor,
       isFlying,
+      isActive: !!activeLeg, // scheduled to be in progress right now (with or without a live fix)
       currentLeg,
       activeLeg: activeLeg || null,
       nextFlight,
@@ -214,6 +213,8 @@ export default function FleetMap() {
     return { ...ac, position: { lat: markerLat, lng: markerLng }, heading, isFlying: isAirborne, source: 'scheduled' };
   });
   const liveCount = aircraft.filter(ac => ac.source === 'adsb').length;
+  // Flights in progress right now: live-airborne, or scheduled to be mid-flight.
+  const activeFlights = aircraft.filter(ac => ac.isFlying || ac.isActive);
 
   // Keep the open detail card in sync with the latest live data instead of the
   // snapshot captured at click time.
@@ -493,6 +494,22 @@ export default function FleetMap() {
 
         {/* Left sidebar: Fleet roster / flight History */}
         <div style={{ width: '220px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
+          {/* Active flights — in progress right now */}
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active flights · {activeFlights.length}</span>
+            {activeFlights.length === 0 ? (
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '6px 2px 0' }}>No flights in progress.</p>
+            ) : activeFlights.map(ac => (
+              <div key={ac.tail} onClick={() => flyTo(ac)}
+                style={{ marginTop: 6, background: selectedTail === ac.tail ? 'rgba(79,142,247,0.12)' : 'var(--bg-card)', border: `1px solid ${selectedTail === ac.tail ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: '8px 10px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{ac.tail}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: ac.statusColor, whiteSpace: 'nowrap' }}>● {ac.statusLabel}</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{ac.currentLeg ? `${ac.currentLeg.departure?.airport} → ${ac.currentLeg.arrival?.airport}` : (ac.airport || '')}</div>
+              </div>
+            ))}
+          </div>
           {/* Aircraft picker (replaces the Fleet tab) */}
           <select
             value={selectedTail || ''}
