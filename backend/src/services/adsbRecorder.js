@@ -6,7 +6,9 @@
 
 import { getLivePositions } from './adsb.js';
 import { savePositions, pruneOld } from './adsbStore.js';
-import { hasMoved, detectTakeoff, normReg } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, normReg, matchActiveLeg } from './adsbTrack.js';
+import { getActiveLegsByTail } from './activeLegs.js';
+import { recordLegActual } from './legActualsStore.js';
 
 // getLivePositions() caches for ~20s, so polling faster just re-reads the same
 // snapshot — match the cache TTL so each tick gets a fresh fix.
@@ -31,6 +33,7 @@ async function tick() {
   catch (e) { console.warn('[adsbRecorder] positions fetch failed:', e?.message || e); return; }
 
   const now = Date.now();
+  const activeLegs = await getActiveLegsByTail(now); // cached ~5min; soft-fails to empty
   const rows = [];
   for (const [reg, p] of Object.entries(positions || {})) {
     if (p?.lat == null || p?.lon == null) continue;
@@ -44,6 +47,20 @@ async function tick() {
       prev ? { onGround: prev.onGround, airborneSince: prev.airborneSince } : null,
       { onGround, t: now },
     );
+
+    // LIVE actual dep/arr: stamp the leg the moment we observe a transition. This is
+    // the reliable source (full stream, no movement gate) — see legActualsStore.js.
+    if (prev && prev.onGround !== onGround) {
+      const tail = normReg(reg);
+      const leg = matchActiveLeg(activeLegs.get(tail) || [], now);
+      if (leg) {
+        if (onGround === false) { // ground -> air = takeoff
+          await recordLegActual(leg.legId, { registration: tail, scheduledDep: leg.depTime, actualDep: now, depSource: 'live' });
+        } else {                  // air -> ground = landing
+          await recordLegActual(leg.legId, { registration: tail, scheduledDep: leg.depTime, actualArr: now, arrSource: 'live' });
+        }
+      }
+    }
 
     if (hasMoved(prev, { lat: p.lat, lon: p.lon }, MOVE_THRESHOLD_DEG)) {
       rows.push({

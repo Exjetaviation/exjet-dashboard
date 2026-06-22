@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMoved, detectTakeoff, clipTrackToLeg, deriveActualTimes, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, clipTrackToLeg, deriveActualTimes, approximateActualTimes, matchActiveLeg, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
 
 test('normReg canonicalizes case, dashes, and spaces', () => {
   assert.equal(normReg('n69fp'), 'N69FP');
@@ -68,6 +68,29 @@ test('deriveActualTimes respects the padded window (ignores out-of-window sample
     { t: 1000, on_ground: true }, { t: 1100, on_ground: false }, { t: 4800, on_ground: true },
   ];
   assert.deepEqual(deriveActualTimes(pts, legW, 500), { actualDep: 1100, actualArr: 4800 });
+});
+
+test('approximateActualTimes uses first/last airborne sample (no transition needed)', () => {
+  const pts = [
+    { t: 1200, on_ground: false }, { t: 3000, on_ground: false }, { t: 4600, on_ground: false },
+  ];
+  assert.deepEqual(approximateActualTimes(pts, legW, 500), { actualDep: 1200, actualArr: 4600 });
+});
+
+test('approximateActualTimes returns nulls when there are no airborne samples', () => {
+  const pts = [{ t: 1000, on_ground: true }, { t: 3000, on_ground: true }];
+  assert.deepEqual(approximateActualTimes(pts, legW, 500), { actualDep: null, actualArr: null });
+});
+
+test('matchActiveLeg picks the leg whose window contains now, preferring latest departure', () => {
+  const legs = [
+    { legId: 'a', depTime: 1000, arrTime: 2000 },
+    { legId: 'b', depTime: 5000, arrTime: 6000 },
+  ];
+  assert.equal(matchActiveLeg(legs, 1500, { preMs: 0, postMs: 0 })?.legId, 'a'); // mid leg a
+  assert.equal(matchActiveLeg(legs, 5200, { preMs: 0, postMs: 0 })?.legId, 'b'); // mid leg b
+  assert.equal(matchActiveLeg(legs, 900, { preMs: 200, postMs: 0 })?.legId, 'a'); // within pre-window
+  assert.equal(matchActiveLeg(legs, 3500, { preMs: 0, postMs: 0 }), null);        // gap between legs
 });
 
 test('monthAnchors covers the window plus the prior month', () => {

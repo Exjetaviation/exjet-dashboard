@@ -35,23 +35,37 @@ actuals so delays remain visible after landing and after a refresh.
 
 Two sources feed the same render:
 
-### A. Persisted actuals (completed legs) — backend
-`flightTrackReconciler.runReconcile` already, per completed leg, queries the tail's
-firehose positions and clips them to the leg window before writing `flight_tracks`.
-We derive actuals from those same positions:
+### A. Persisted actuals — backend (REVISED after review)
+Persist into a dedicated `leg_actuals` table (migration 017; supersedes 016's
+`flight_tracks` columns), with two writers and a source-priority merge
+(`live` > `exact` > `approx`, never downgraded):
 
-- New pure helper `deriveActualTimes(positions, leg, padMs)` →
-  `{ actualDep, actualArr }` (epoch ms or null):
-  - `actualDep` = `t` of the first **ground→air** transition inside `[dep−pad, arr+pad]`.
-  - `actualArr` = `t` of the first **air→ground** transition *after* becoming airborne.
-  - Missing/ambiguous (booted mid-flight, never saw a transition) → null (honest over guessing).
-- Migration: add `actual_dep_time timestamptz`, `actual_arr_time timestamptz` to
-  `flight_tracks`.
-- `flightTrackStore.upsertFlightTrack` persists the two new fields; reconciler computes
-  and passes them.
-- New endpoint `GET /api/adsb/actuals?from=<ms>&to=<ms>` → `{ [legId]: { actualDep,
-  actualArr } }` for `flight_tracks` rows whose `dep_time` falls in range. (`leg_id`
-  is the LevelFlight leg oid = the calendar's `leg._id.$oid`.)
+**Primary — the LIVE recorder (the same engine behind the fleet-map status).**
+`adsbRecorder.tick()` runs `detectTakeoff` on every poll (full stream, no movement
+gate), so it sees the real on-ground→air / air→ground transitions the stored firehose
+drops. On a transition it matches the tail to its current leg (`matchActiveLeg` +
+`activeLegs` cache — the server-side version of the calendar's airborne-leg match) and
+records `actual_dep`/`actual_arr` (source `live`) the moment it happens.
+
+**Backfill — the reconciler (best-effort).** For completed legs with no `leg_actuals`
+row yet, derive from the stored firehose:
+- `deriveActualTimes(positions, leg, pad)` — exact: first ground→air / air→ground
+  transition; null when none observed (honest).
+- `approximateActualTimes(positions, leg, pad)` — fallback: first/last airborne sample
+  (a few min off), for the common case where crowd-sourced ADS-B never reported the
+  ground portion.
+- Source `exact` or `approx` accordingly.
+
+**Endpoint** `GET /api/adsb/actuals?from=<ms>&to=<ms>` → `{ [legId]: { actualDep,
+actualArr, depSource, arrSource } }` for `leg_actuals` rows whose scheduled `dep_time`
+falls in range (`leg_id` = the calendar's `leg._id.$oid`). The calendar can flag
+`approx` segments visually.
+
+> Why not derive everything from `flight_tracks`/the firehose (the original plan)? The
+> firehose only saves a row when the plane *moved* (`hasMoved`), so parked/on-ground
+> samples are dropped and most ground→air transitions don't survive — verified: a
+> backfill over the firehose came up almost empty. The live recorder is the reliable
+> source; the firehose is a fallback only.
 
 ### B. Live actuals (in-progress legs) — frontend, no new backend
 The calendar already has the live feed:
