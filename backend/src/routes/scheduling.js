@@ -470,6 +470,9 @@ router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, r
       landingFee: pick('landingFee'), landings: pick('landings'),
       segmentPerPax: pick('segmentPerPax'), pax: pick('pax'), overnightCost: pick('overnightCost'),
       fetRate: base.fetRate || 0,
+      fees: Array.isArray(b.fees) ? b.fees : (base.fees || []),
+      fetEnabled: b.fetEnabled === undefined ? (base.fetEnabled !== false) : !!b.fetEnabled,
+      totalOverride: b.totalOverride === undefined ? (base.totalOverride ?? null) : b.totalOverride,
     };
     const pricing = { ...base, ...inputs, ...recomputeFromInputs(inputs), manual: true };
     await supabase.from('scheduling_trips').update({ pricing }).eq('id', trip.id);
