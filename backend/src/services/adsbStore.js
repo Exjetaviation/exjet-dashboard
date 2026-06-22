@@ -53,13 +53,14 @@ export async function queryRecentTrails(sinceIso, gapMs = 30 * 60 * 1000) {
       .from('adsb_positions')
       .select('registration, lat, lon, t')
       .gte('t', sinceIso)
-      .order('t', { ascending: true })
-      .limit(8000);
+      .order('t', { ascending: false }) // newest first, so .limit keeps the MOST RECENT rows
+      .limit(8000);                     // (ascending + limit would drop everything past the oldest 8000)
     if (error) { console.warn('[adsbStore] queryRecentTrails failed (soft):', error.message); return {}; }
     const byReg = {};
     for (const r of data || []) (byReg[r.registration] ||= []).push({ lat: r.lat, lon: r.lon, t: Date.parse(r.t) });
     const out = {};
     for (const [reg, pts] of Object.entries(byReg)) {
+      pts.reverse(); // restore chronological order (query returned newest-first) for the gap scan + polyline
       let segStart = 0;
       for (let i = 1; i < pts.length; i++) if (pts[i].t - pts[i - 1].t > gapMs) segStart = i;
       const seg = pts.slice(segStart);
