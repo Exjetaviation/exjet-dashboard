@@ -353,9 +353,18 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
     if (!isValidTransition(cur.status, status)) {
       return res.status(409).json({ error: `Cannot move to ${statusLabel(status)} from ${statusLabel(cur.status)}.` });
     }
+    const extra = {};
+    if (status === 'booked') {
+      extra.booked_by = req.user?.email || null;
+      extra.booked_at = new Date().toISOString();
+      // assign a Trip# once, only if it doesn't already have one
+      const { data: cur2 } = await supabase
+        .from('scheduling_trips').select('trip_number').eq(col, req.params.lfOid).single();
+      if (!cur2?.trip_number) extra.trip_number = String(await nextTripNumber());
+    }
     const { data, error } = await supabase
       .from('scheduling_trips')
-      .update({ status, locally_modified: cur.origin === 'levelflight', modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
+      .update({ status, locally_modified: cur.origin === 'levelflight', modified_at: new Date().toISOString(), modified_by: req.user?.email || null, ...extra })
       .eq(col, req.params.lfOid)
       .select('id, ' + TRIP_COLS).single();
     if (error) {
