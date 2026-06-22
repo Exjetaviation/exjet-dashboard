@@ -70,13 +70,21 @@ export function deriveActualTimes(positions, leg, padMs) {
 // samples in its window — the fallback for when crowd-sourced ADS-B never reported the
 // on-ground portion, so deriveActualTimes found no clean transition. A few minutes off
 // (the plane enters/leaves receiver coverage shortly after takeoff / before landing).
-export function approximateActualTimes(positions, leg, padMs) {
+//
+// GUARD: only trust the endpoints when the airborne samples span at least `minCoverage`
+// of the scheduled duration. A tiny sliver of coverage (e.g. a few samples just after
+// takeoff before the plane leaves receiver range) does NOT bracket the flight, and its
+// "last airborne" would fake a wildly-early arrival — so we return nulls instead.
+export function approximateActualTimes(positions, leg, padMs, { minCoverage = 0.5 } = {}) {
   const lo = leg.depTime - padMs;
   const hi = leg.arrTime + padMs;
   const air = (positions || [])
     .filter((p) => p.t >= lo && p.t <= hi && p.on_ground === false)
     .sort((a, b) => a.t - b.t);
   if (!air.length) return { actualDep: null, actualArr: null };
+  const span = air[air.length - 1].t - air[0].t;
+  const dur = leg.arrTime - leg.depTime;
+  if (dur > 0 && span < minCoverage * dur) return { actualDep: null, actualArr: null };
   return { actualDep: air[0].t, actualArr: air[air.length - 1].t };
 }
 
