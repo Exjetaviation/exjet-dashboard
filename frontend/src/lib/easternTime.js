@@ -41,6 +41,25 @@ export function zuluParts(date) {
   };
 }
 
+// Eastern date label + 24h HHMM clock + zone tag, e.g. { date: 'Jun 20', time: '1430', zone: 'EDT' }.
+// Mirrors zuluParts but in the operation's home zone (DST-aware).
+export function easternParts(date) {
+  if (!date || isNaN(date)) return null;
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: ET, hour12: false,
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  });
+  const p = {};
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
+  const hour = p.hour === '24' ? '00' : p.hour; // Intl may emit '24' at midnight
+  return {
+    date: `${p.month} ${p.day}`,
+    time: `${hour.padStart(2, '0')}${p.minute}`,
+    zone: p.timeZoneName,
+  };
+}
+
 // Eastern wall-clock display with zone tag, e.g. "Jun 20, 2:30 PM EDT".
 export function formatEastern(date) {
   if (!date || isNaN(date)) return null;
