@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAdsb } from '../hooks/useAdsb';
 import { useLegActuals } from '../hooks/useLegActuals';
-import { delaySegments } from '../lib/delaySegments';
 import { useNavigate } from 'react-router-dom';
 import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
 const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
@@ -605,7 +604,6 @@ useEffect(() => {
                     const isHov=hovered?._id?.$oid===leg._id?.$oid;
                     const dest=leg.arrival?.airport||'';
                     const origin=leg.departure?.airport||'';
-                    const mins=leg._calc?._minutes||0;
                     // Live "in the air": this leg is the one the airborne tail is flying
                     // (most-recently-departed leg, tolerating schedule slip — see airborneLegId).
                     const isAirborne=!!leg._id?.$oid&&airborneLegId[ac.tail]===leg._id?.$oid;
@@ -615,34 +613,31 @@ useEffect(() => {
                     // Block colour by flight STATE: completed=blue, in-flight=green, future=grey.
                     const color=legStateColor(leg,isAirborne,act,nowTs);
                     const darker=darken(color);
-                    // Scheduled-vs-actual delay: extend the block to the actual extent and
-                    // tint the late (red) / early (green) portions so it reads as ONE block.
-                    const segs=delaySegments({dep,arr,actualDep:act.actualDep??null,actualArr:act.actualArr??null,depSource:act.depSource??null,arrSource:act.arrSource??null,now:nowTs,onGround:la?.onGround===true,airborne:isAirborne,airborneSinceMs:la?.airborneSinceMs??null});
-                    const extStart=segs.length?Math.min(dep,...segs.map(s=>s.from)):dep;
-                    const extEnd=segs.length?Math.max(arr,...segs.map(s=>s.to)):arr;
-                    const eblk=getBlock(extStart,extEnd)||blk;
+                    // Scheduled flight = transparent outer block (the whole planned span);
+                    // actual flight = solid inner block, same colour, nested inside; trip #
+                    // labels the actual block. No red/green — the offset shows the delay.
+                    const aStart=act.actualDep??(isAirborne?(la?.airborneSinceMs??null):null);
+                    const aEnd=act.actualArr??(isAirborne?nowTs:null);
+                    const actBlk=(aStart!=null&&aEnd!=null&&aEnd>aStart)?getBlock(aStart,aEnd):null;
+                    const tripNo=leg.dispatch?.tripId;
+                    const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
+                    const hov=e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});};
+                    const moveTip=e=>setTipPos({x:e.clientX,y:e.clientY});
                     return(
                       <React.Fragment key={legId||li}>
-                      <div
-                        onPointerDown={e=>e.stopPropagation()}
-                        onClick={e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});}}
-                        onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
-                        onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
-                        onMouseLeave={()=>setHovered(null)}
-                        style={{position:'absolute',left:eblk.left+1,top:FLIGHT_TOP,width:Math.max(eblk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isAirborne?1:(isHov?1:0.85),boxShadow:isAirborne?undefined:(isHov?`0 2px 12px ${color}99`:'none'),border:isAirborne?`2px solid ${darker}`:`1px solid ${color}88`,...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?6:(isHov?5:2),overflow:'hidden',transition:'opacity .1s'}}/>
-                        {segs.map((s,si)=>{
-                          const sb=getBlock(s.from,s.to); if(!sb) return null;
-                          const c=s.kind==='late'?'239,68,68':'34,197,94'; // red late / green early
-                          const radius=s.edge==='dep'?'5px 0 0 5px':'0 5px 5px 0'; // round the OUTER edge, square the inner so it fuses to the block
-                          // Solid fill (approximate ones stay striped to flag the uncertainty).
-                          return <div key={`d${si}`}
-                            style={{position:'absolute',left:sb.left+1,top:FLIGHT_TOP,width:Math.max(sb.width-2,2),height:FLIGHT_H,borderRadius:radius,pointerEvents:'none',zIndex:8,background:s.approx?`repeating-linear-gradient(45deg,rgb(${c}) 0 5px,rgba(${c},0.5) 5px 10px)`:`rgb(${c})`}}/>;
-                        })}
-                        {eblk.width>40&&<div style={{position:'absolute',left:eblk.left+1,top:FLIGHT_TOP,width:Math.max(eblk.width-2,3),height:FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:eblk.width>20?'0 6px':'0 2px'}}>
-                          {eblk.width>60&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0,textShadow:'0 1px 2px rgba(0,0,0,0.45)'}}>{origin}</span>}
-                          {eblk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.85)',whiteSpace:'nowrap',flex:1,textAlign:'center',textShadow:'0 1px 2px rgba(0,0,0,0.45)'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
-                          {eblk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px',textShadow:'0 1px 2px rgba(0,0,0,0.45)'}}>{eblk.width>80&&<span style={{color:'rgba(255,255,255,0.7)',fontSize:'9px'}}>→</span>}{dest}</span>}
-                        </div>}
+                        {/* Scheduled flight — transparent, covers the whole planned span */}
+                        <div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
+                          style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:`${color}33`,border:`1px solid ${color}99`,borderRadius:'5px',cursor:'pointer',boxShadow:isHov?`0 2px 12px ${color}66`:'none',zIndex:isHov?5:2,boxSizing:'border-box'}}/>
+                        {/* Actual flight — solid, same colour, nested inside the scheduled block */}
+                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+3,width:Math.max(actBlk.width-2,3),height:FLIGHT_H-6,background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?7:4,boxSizing:'border-box'}}/>}
+                        {/* Trip # on the actual block (or the scheduled block if not yet flown) */}
+                        {tripNo&&(()=>{
+                          const lb=actBlk||blk; if(lb.width<26) return null;
+                          return <div style={{position:'absolute',left:lb.left+1,top:FLIGHT_TOP,width:Math.max(lb.width-2,3),height:FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:'center',padding:'0 8px',overflow:'hidden'}}>
+                            <span style={{fontSize:'10px',fontWeight:'700',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 2px rgba(0,0,0,0.5)'}}>#{tripNo}{lb.width>110?`  ${origin}→${dest}`:''}</span>
+                          </div>;
+                        })()}
                       </React.Fragment>
                     );
                   })}
