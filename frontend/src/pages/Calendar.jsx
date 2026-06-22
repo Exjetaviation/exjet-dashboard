@@ -628,13 +628,14 @@ useEffect(() => {
                         {/* Scheduled flight — transparent, covers the whole planned span */}
                         <div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
                           style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:`${color}33`,border:`1px solid ${color}99`,borderRadius:'5px',cursor:'pointer',boxShadow:isHov?`0 2px 12px ${color}66`:'none',zIndex:isHov?5:2,boxSizing:'border-box'}}/>
-                        {/* Actual flight — solid, same colour, nested inside the scheduled block */}
+                        {/* Actual flight — thin solid bar, nested low in the scheduled block */}
                         {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
-                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+3,width:Math.max(actBlk.width-2,3),height:FLIGHT_H-6,background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?7:4,boxSizing:'border-box'}}/>}
-                        {/* Trip # on the actual block (or the scheduled block if not yet flown) */}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+FLIGHT_H-21,width:Math.max(actBlk.width-2,3),height:14,background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?7:4,boxSizing:'border-box'}}/>}
+                        {/* Trip # resting on top of the solid bar (centred in the block if not yet flown) */}
                         {tripNo&&(()=>{
                           const lb=actBlk||blk; if(lb.width<26) return null;
-                          return <div style={{position:'absolute',left:lb.left+1,top:FLIGHT_TOP,width:Math.max(lb.width-2,3),height:FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:'center',padding:'0 8px',overflow:'hidden'}}>
+                          const onBar=!!actBlk;
+                          return <div style={{position:'absolute',left:lb.left+1,top:FLIGHT_TOP,width:Math.max(lb.width-2,3),height:onBar?FLIGHT_H-21:FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:onBar?'flex-end':'center',padding:onBar?'0 7px 2px':'0 7px',overflow:'hidden'}}>
                             <span style={{fontSize:'10px',fontWeight:'700',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 2px rgba(0,0,0,0.5)'}}>#{tripNo}{lb.width>110?`  ${origin}→${dest}`:''}</span>
                           </div>;
                         })()}
