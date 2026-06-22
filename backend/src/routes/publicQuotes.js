@@ -19,6 +19,7 @@ router.get('/:id', async (req, res) => {
   try {
     const vm = await buildQuoteVM(req.params.id);
     if (!vm) return res.status(404).type('html').send('<p>Quote not found.</p>');
+    if (!vm.pdfUrl) vm.pdfUrl = `/quote/${req.params.id}/pdf`; // native VM sets this; LF VM doesn't
     res.type('html').send(renderQuoteHtml(vm, { print: false, web: true }));
   } catch (e) { res.status(500).send('Error generating quote'); }
 });
