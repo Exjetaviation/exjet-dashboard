@@ -243,7 +243,7 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
 
     const purpose = (body.purpose || '').trim() || null;          // 'owner' | 'charter' | null
     const company_name = (body.company_name || '').trim() || null;
-    const contact = body.contact && typeof body.contact === 'object' ? body.contact : null;
+    const contact = body.contact && typeof body.contact === 'object' && !Array.isArray(body.contact) ? body.contact : null;
     const quote_number = await nextQuoteNumber();
 
     const status = 'quote';
@@ -345,7 +345,7 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
     if (!isSettableStatus(status)) return res.status(400).json({ error: 'invalid status' });
     const col = tripColumn(req.params.lfOid);
     const { data: cur, error: e0 } = await supabase
-      .from('scheduling_trips').select('status, origin').eq(col, req.params.lfOid).single();
+      .from('scheduling_trips').select('status, origin, trip_number').eq(col, req.params.lfOid).single();
     if (e0) {
       if (isNotFound(e0)) return res.status(404).json({ error: 'Trip not found' });
       throw e0;
@@ -357,10 +357,8 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
     if (status === 'booked') {
       extra.booked_by = req.user?.email || null;
       extra.booked_at = new Date().toISOString();
-      // assign a Trip# once, only if it doesn't already have one
-      const { data: cur2 } = await supabase
-        .from('scheduling_trips').select('trip_number').eq(col, req.params.lfOid).single();
-      if (!cur2?.trip_number) extra.trip_number = String(await nextTripNumber());
+      // assign a Trip# once, only if it doesn't already have one (read from the preflight `cur`)
+      if (!cur.trip_number) extra.trip_number = String(await nextTripNumber());
     }
     const { data, error } = await supabase
       .from('scheduling_trips')
