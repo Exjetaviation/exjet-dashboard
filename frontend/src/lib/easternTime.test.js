@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { easternToUTC, zuluParts } from './easternTime.js';
+import { easternToUTC, zuluParts, easternParts } from './easternTime.js';
 
 test('converts summer Eastern (EDT, UTC-4) to UTC', () => {
   assert.equal(easternToUTC('2026-06-20', '14:30').toISOString(), '2026-06-20T18:30:00.000Z');
@@ -32,4 +32,24 @@ test('zuluParts gives the UTC date and HHMM clock', () => {
 test('zuluParts is null-safe', () => {
   assert.equal(zuluParts(null), null);
   assert.equal(zuluParts(new Date('nope')), null);
+});
+
+test('easternParts gives the Eastern date, HHMM clock and zone (EDT in summer)', () => {
+  // 18:30Z on Jun 20 = 14:30 EDT (UTC-4)
+  assert.deepEqual(easternParts(new Date('2026-06-20T18:30:00.000Z')), { date: 'Jun 20', time: '1430', zone: 'EDT' });
+});
+
+test('easternParts uses EST in winter', () => {
+  // 19:30Z on Jan 15 = 14:30 EST (UTC-5)
+  assert.deepEqual(easternParts(new Date('2026-01-15T19:30:00.000Z')), { date: 'Jan 15', time: '1430', zone: 'EST' });
+});
+
+test('easternParts dates by the Eastern wall clock, not UTC', () => {
+  // 02:00Z on Jun 21 = 22:00 EDT on Jun 20 — date stays Jun 20
+  assert.deepEqual(easternParts(new Date('2026-06-21T02:00:00.000Z')), { date: 'Jun 20', time: '2200', zone: 'EDT' });
+});
+
+test('easternParts is null-safe', () => {
+  assert.equal(easternParts(null), null);
+  assert.equal(easternParts(new Date('nope')), null);
 });

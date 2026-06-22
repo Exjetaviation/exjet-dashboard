@@ -4,6 +4,7 @@ import { useAdsb } from '../hooks/useAdsb';
 import { useLegActuals } from '../hooks/useLegActuals';
 import { useNavigate } from 'react-router-dom';
 import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
+import { easternParts, zuluParts } from '../lib/easternTime';
 const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
 const VIEWS = {
   '12h': { label:'12 hr', colMs:3600000,  cols:12,  baseColW:160, stepMs:43200000    },
@@ -89,6 +90,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const [hoverMode,setHoverMode] = useState('sched'); // 'sched' | 'actual' — which block is hovered
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
+  const [nowHover, setNowHover] = useState(false); // hover the NOW pill to reveal exact EST/UTC time
   const [,forceTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => forceTick(t => t + 1), 60000);
@@ -96,6 +98,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   }, []);
   const bodyRef = useRef(null);
   const hdrRef  = useRef(null);
+  const nowLineRef = useRef(null); // continuous now-line overlay (spans header + body)
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
 
   const cfg = VIEWS[view];
@@ -264,6 +267,15 @@ useEffect(() => {
   const nowTs  = Date.now();
   const nowPx  = ((nowTs-rangeStart)/totalMs)*totalW;
   const showNow= nowPx>=0&&nowPx<=totalW;
+  // Now-bar hover readout: exact Eastern (ops home zone) + UTC/Zulu, e.g. "14:30 EDT · 18:30 UTC".
+  const nowEt  = easternParts(new Date(nowTs));
+  const nowZ   = zuluParts(new Date(nowTs));
+  const hhmmColon = t => `${t.slice(0,2)}:${t.slice(2)}`; // "1430" -> "14:30"
+  const nowDetail = nowEt&&nowZ ? `${hhmmColon(nowEt.time)} ${nowEt.zone} · ${hhmmColon(nowZ.time)} UTC` : '';
+  // On-screen X of the now-line within the calendar card: body's left edge + content offset − scroll.
+  const nowOffsetPx = nowPx - (bodyRef.current?.scrollLeft || 0);
+  const nowLineLeft = (bodyRef.current?.offsetLeft ?? LABEL_W) + nowOffsetPx;
+  const nowInView   = showNow && nowOffsetPx >= 0 && nowOffsetPx <= (bodyRef.current?.clientWidth ?? Infinity);
 
   // For each tail ADS-B reports airborne, find the leg it's actually flying:
   // the most-recently-departed leg, tolerating schedule slip (up to 6h past the
@@ -354,7 +366,7 @@ useEffect(() => {
       </div>
 
       {/* CALENDAR */}
-      <div style={{border:'1px solid var(--border)',borderRadius:'12px',background:'var(--bg-card)',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%',boxSizing:'border-box'}}>
+      <div style={{border:'1px solid var(--border)',borderRadius:'12px',background:'var(--bg-card)',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%',boxSizing:'border-box',position:'relative'}}>
 
         {/* HEADER */}
         <div style={{display:'flex',borderBottom:'2px solid var(--border)',flexShrink:0}}>
@@ -390,6 +402,7 @@ useEffect(() => {
                     </div>
                   );
                 })}
+                {/* Now line is drawn once over the whole card (header + body) — see the overlay near the card's end */}
               </div>
             </div>
           </div>
@@ -412,6 +425,13 @@ useEffect(() => {
               const lbl=document.getElementById('lbl-col');
               if(lbl)lbl.scrollTop=e.target.scrollTop;
               if(didRestoreScroll.current) localStorage.setItem('exjet.calendar.scroll', String(e.target.scrollLeft));
+              // Track the continuous now-line as the body scrolls (no React re-render).
+              if(nowLineRef.current){
+                const off=nowPx-e.target.scrollLeft;
+                const vis=showNow&&off>=0&&off<=e.target.clientWidth;
+                nowLineRef.current.style.display=vis?'block':'none';
+                nowLineRef.current.style.left=(e.target.offsetLeft+off)+'px';
+              }
             }}
             style={{flex:1,minWidth:0,overflowX:'scroll',overflowY:'auto',cursor:'grab'}}>
             <div style={{width:totalW,position:'relative'}}>
@@ -430,12 +450,7 @@ useEffect(() => {
                     <div key={col.i} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:colW,background:'rgba(79,142,247,0.05)',pointerEvents:'none'}}/>
                   ))}
 
-                  {/* Now line */}
-                  {showNow&&(
-                    <div style={{position:'absolute',left:nowPx,top:0,bottom:0,width:2,background:'var(--danger)',boxShadow:'0 0 6px rgba(239,68,68,0.5)',zIndex:4,pointerEvents:'none'}}>
-                      {rowIdx===0&&<div style={{position:'absolute',top:4,left:4,background:'var(--danger)',borderRadius:'3px',padding:'2px 5px',fontSize:'9px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap'}}>NOW</div>}
-                    </div>
-                  )}
+                  {/* Now line is drawn ONCE across the whole body (one solid line, no per-row gaps) — see below */}
 
                   {/* Ground time blocks */}
                   {(()=>{
@@ -668,6 +683,21 @@ useEffect(() => {
             </div>
           </div>
         </div>
+
+        {/* Now line — ONE element over the whole card (header + body) so it's a single solid line with
+            no header/body seam. Positioned imperatively on scroll (left = LABEL_W + nowPx − scrollLeft). */}
+        {!loading&&showNow&&(
+          <div ref={nowLineRef} style={{position:'absolute',top:0,bottom:0,width:2,left:nowLineLeft,display:nowInView?'block':'none',background:'var(--danger)',boxShadow:'0 0 6px rgba(239,68,68,0.5)',zIndex:7,pointerEvents:'none'}}>
+            {/* NOW pill sits just BELOW the times so it never covers the hour labels; hover reveals the exact time */}
+            <div
+              onMouseEnter={()=>setNowHover(true)}
+              onMouseLeave={()=>setNowHover(false)}
+              title={nowDetail}
+              style={{position:'absolute',top:HDR_H+4,left:5,background:'var(--danger)',borderRadius:'3px',padding:'2px 6px',fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',boxShadow:'0 1px 3px rgba(0,0,0,0.4)',pointerEvents:'auto',cursor:'default'}}>
+              {nowHover&&nowDetail ? nowDetail : 'NOW'}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* TOOLTIP */}
