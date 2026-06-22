@@ -9,7 +9,7 @@
 
 import * as lf from './levelflight.js';
 import { queryTrack } from './adsbStore.js';
-import { clipTrackToLeg, deriveActualTimes, approximateActualTimes, monthAnchors, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
+import { clipTrackToLeg, deriveActualTimes, approximateActualTimes, crewActualsFromLeg, monthAnchors, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
 import { getStoredLegIds, upsertFlightTrack } from './flightTrackStore.js';
 import { recordLegActual, getLegIdsWithActuals } from './legActualsStore.js';
 
@@ -129,6 +129,36 @@ export async function backfillActuals({ days = 13 } = {}) {
   return { updated };
 }
 
+// Record CREW-ENTERED block times (leg.block OUT/IN from the postFlight module) as the
+// authoritative actual dep/arr — they override any ADS-B-derived value (source 'crew',
+// top priority). Runs over a window each pass to catch times entered late, after the
+// flight. Idempotent. leg.block rides along in getScheduledLegs, so no extra fetch beyond
+// the one getScheduledLegs call set here.
+export async function recordCrewBlockTimes({ days = 10 } = {}) {
+  const now = Date.now();
+  const windowStart = now - days * 86400000;
+  let recorded = 0;
+  try {
+    const anchors = monthAnchors(windowStart, now);
+    const results = await Promise.all(anchors.map((ts) => lf.getScheduledLegs(ts).catch(() => ({ legs: [] }))));
+    const seen = new Set();
+    for (const leg of results.flatMap((r) => r?.legs || [])) {
+      const c = crewActualsFromLeg(leg);
+      if (!c || seen.has(c.legId)) continue;
+      seen.add(c.legId);
+      const ok = await recordLegActual(c.legId, {
+        registration: c.tail, scheduledDep: c.scheduledDep,
+        actualDep: c.actualDep, depSource: 'crew', actualArr: c.actualArr, arrSource: 'crew',
+      });
+      if (ok) recorded++;
+    }
+  } catch (e) {
+    console.warn('[flightTrackReconciler] recordCrewBlockTimes error (soft):', e?.message || e);
+  }
+  console.log(`[flightTrackReconciler] crew block times days=${days} recorded=${recorded}`);
+  return { recorded };
+}
+
 export function startReconciler() {
   if (started) return;
   started = true;
@@ -136,6 +166,11 @@ export function startReconciler() {
   runReconcile({ days: 90 }).catch(() => {});
   // Fill actuals for legs that completed before this feature (firehose window only).
   backfillActuals({ days: 13 }).catch(() => {});
-  setInterval(() => { runReconcile({ days: RECONCILE_LOOKBACK_DAYS }).catch(() => {}); }, HOURLY_MS);
+  // Pull crew-entered block times (authoritative) on boot, then hourly with the reconcile.
+  recordCrewBlockTimes({ days: 10 }).catch(() => {});
+  setInterval(() => {
+    runReconcile({ days: RECONCILE_LOOKBACK_DAYS }).catch(() => {});
+    recordCrewBlockTimes({ days: 10 }).catch(() => {});
+  }, HOURLY_MS);
   console.log('[flightTrackReconciler] started (90d backfill on boot, hourly', RECONCILE_LOOKBACK_DAYS, 'day pass)');
 }

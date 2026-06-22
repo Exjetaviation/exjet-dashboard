@@ -88,6 +88,25 @@ export function approximateActualTimes(positions, leg, padMs, { minCoverage = 0.
   return { actualDep: air[0].t, actualArr: air[air.length - 1].t };
 }
 
+// Crew-entered actual block times from a raw LevelFlight leg, when logged post-flight
+// (the postFlight module). leg.block = { out (block-out/gate), off (wheels-up),
+// on (wheels-down), in (block-in/gate) }, all epoch ms. We use OUT -> actual departure
+// and IN -> actual arrival (gate-to-gate), the same basis as LF's scheduled
+// departure/arrival times. Returns null when no block times are entered yet.
+export function crewActualsFromLeg(leg) {
+  const b = leg?.block;
+  if (!b || (b.out == null && b.in == null)) return null;
+  const legId = leg?._id?.$oid;
+  if (!legId) return null;
+  return {
+    legId,
+    tail: legTail(leg),
+    scheduledDep: leg?.departure?.time ?? null,
+    actualDep: b.out ?? null,
+    actualArr: b.in ?? null,
+  };
+}
+
 // Match a live takeoff/landing observed at `now` to the tail's scheduled leg: the leg
 // whose [depTime - preMs, arrTime + postMs] window contains `now`, preferring the most
 // recent departure (mirrors the calendar's airborne-leg match). null if none.

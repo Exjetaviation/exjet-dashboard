@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMoved, detectTakeoff, clipTrackToLeg, deriveActualTimes, approximateActualTimes, matchActiveLeg, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, clipTrackToLeg, deriveActualTimes, approximateActualTimes, matchActiveLeg, crewActualsFromLeg, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
 
 test('normReg canonicalizes case, dashes, and spaces', () => {
   assert.equal(normReg('n69fp'), 'N69FP');
@@ -86,6 +86,18 @@ test('approximateActualTimes rejects sparse coverage (sliver that does not brack
   // airborne only for 200ms of a 4000ms leg -> last-airborne is NOT the arrival.
   const pts = [{ t: 1100, on_ground: false }, { t: 1300, on_ground: false }];
   assert.deepEqual(approximateActualTimes(pts, legW, 500), { actualDep: null, actualArr: null });
+});
+
+test('crewActualsFromLeg maps leg.block OUT->dep and IN->arr', () => {
+  const leg = { _id: { $oid: 'L1' }, departure: { time: 1000 }, dispatch: { aircraft: { tailNumber: 'N-69FP' } }, block: { out: 950, off: 1010, on: 5000, in: 5100 } };
+  const c = crewActualsFromLeg(leg);
+  assert.equal(c.legId, 'L1'); assert.equal(c.actualDep, 950); assert.equal(c.actualArr, 5100);
+  assert.equal(c.tail, 'N69FP'); assert.equal(c.scheduledDep, 1000);
+});
+
+test('crewActualsFromLeg returns null when no block times entered', () => {
+  assert.equal(crewActualsFromLeg({ _id: { $oid: 'L1' }, departure: { time: 1000 } }), null);
+  assert.equal(crewActualsFromLeg({ _id: { $oid: 'L1' }, block: {} }), null);
 });
 
 test('matchActiveLeg picks the leg whose window contains now, preferring latest departure', () => {
