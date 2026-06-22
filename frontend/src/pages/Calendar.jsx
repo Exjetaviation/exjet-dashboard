@@ -633,12 +633,16 @@ useEffect(() => {
                           style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?7:4,boxSizing:'border-box'}}/>}
                         {/* Trip # resting on top of the solid bar (centred in the block if not yet flown) */}
                         {tripNo&&(()=>{
-                          const lb=actBlk||blk; if(lb.width<26) return null;
+                          const lb=actBlk||blk; if(lb.width<24) return null;
                           const onBar=!!actBlk;
-                          return <div style={{position:'absolute',left:lb.left+1,top:FLIGHT_TOP,width:Math.max(lb.width-2,3),height:onBar?FLIGHT_TOP+Math.round(FLIGHT_H*0.2):FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:onBar?'flex-end':'center',padding:onBar?'0 7px 1px':'0 7px',overflow:'hidden'}}>
-                            <span style={{fontSize:'10px',fontWeight:'700',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 2px rgba(0,0,0,0.5)'}}>#{tripNo}{lb.width>110?`  ${origin}→${dest}`:''}</span>
+                          return <div style={{position:'absolute',left:lb.left+1,top:FLIGHT_TOP,width:Math.max(lb.width-2,3),height:onBar?Math.round(FLIGHT_H*0.2):FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:onBar?'flex-end':'center',padding:onBar?'0 7px 1px':'0 7px',overflow:'hidden'}}>
+                            <span style={{fontSize:'10px',fontWeight:'700',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 2px rgba(0,0,0,0.5)'}}>#{tripNo}</span>
                           </div>;
                         })()}
+                        {/* Route centred inside the solid actual bar */}
+                        {actBlk&&actBlk.width>40&&<div style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),zIndex:9,pointerEvents:'none',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',padding:'0 4px'}}>
+                          <span style={{fontSize:'10px',fontWeight:'600',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 1px rgba(0,0,0,0.35)'}}>{origin}→{dest}</span>
+                        </div>}
                       </React.Fragment>
                     );
                   })}
