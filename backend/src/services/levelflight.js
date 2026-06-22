@@ -204,3 +204,7 @@ export const getDispatchList = async (page = 1) => {
   const res = await client.post('/api/dispatch/list', { page });
   return res.data; // { success, message, dispatches, page }
 };
+
+// FBOs for an airport: GET /api/airport/fbo/{ICAO} → { success, message, fbos: { "<id>": {...} } }
+export const getAirportFbos = async (icao) =>
+  (await (await lf()).get(`/api/airport/fbo/${encodeURIComponent(icao)}`)).data;
