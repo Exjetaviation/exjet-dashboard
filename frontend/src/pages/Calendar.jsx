@@ -621,17 +621,19 @@ useEffect(() => {
                     const aEnd=act.actualArr??(isAirborne?nowTs:null);
                     const actBlk=(aStart!=null&&aEnd!=null&&aEnd>aStart)?getBlock(aStart,aEnd):null;
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
+                    // hov/hovA fire on BOTH enter and move, so the tooltip mode always tracks
+                    // whichever block is under the cursor (switch through them freely).
                     const hov=e=>{setHovered(leg);setHoverMode('sched');setTipPos({x:e.clientX,y:e.clientY});};
                     const hovA=e=>{setHovered(leg);setHoverMode('actual');setTipPos({x:e.clientX,y:e.clientY});};
-                    const moveTip=e=>setTipPos({x:e.clientX,y:e.clientY});
                     return(
                       <React.Fragment key={legId||li}>
                         {/* Scheduled flight — transparent, covers the whole planned span */}
-                        <div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
+                        <div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={hov} onMouseLeave={()=>setHovered(null)}
                           style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:`${color}33`,border:`1px solid ${color}99`,borderRadius:'5px',cursor:'pointer',boxShadow:isHov?`0 2px 12px ${color}66`:'none',zIndex:isHov?5:2,boxSizing:'border-box'}}/>
-                        {/* Actual flight — solid bar at 60% height, vertically centred */}
-                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hovA} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
-                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?7:4,boxSizing:'border-box'}}/>}
+                        {/* Actual flight — solid bar at 60% height, vertically centred. Always ABOVE
+                            the scheduled block (even when hovered) so it can be hovered directly. */}
+                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hovA} onMouseMove={hovA} onMouseLeave={()=>setHovered(null)}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isHov?8:(isAirborne?7:4),boxSizing:'border-box'}}/>}
                         {/* Route, centred in the solid actual bar (or the scheduled block if not yet flown) */}
                         {(()=>{
                           const lb=actBlk||blk; if(lb.width<40) return null;
