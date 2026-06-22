@@ -629,18 +629,20 @@ useEffect(() => {
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
                         onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                         onMouseLeave={()=>setHovered(null)}
-                        style={{position:'absolute',left:eblk.left+1,top:FLIGHT_TOP,width:Math.max(eblk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isAirborne?1:(isHov?1:0.85),boxShadow:isAirborne?undefined:(isHov?`0 2px 12px ${color}99`:'none'),border:isAirborne?`2px solid ${darker}`:`1px solid ${color}88`,...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?6:(isHov?5:2),display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:eblk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
-                        {eblk.width>60&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.8)',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0}}>{origin}</span>}
-                        {eblk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
-                        {eblk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{eblk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
-                      </div>
+                        style={{position:'absolute',left:eblk.left+1,top:FLIGHT_TOP,width:Math.max(eblk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isAirborne?1:(isHov?1:0.85),boxShadow:isAirborne?undefined:(isHov?`0 2px 12px ${color}99`:'none'),border:isAirborne?`2px solid ${darker}`:`1px solid ${color}88`,...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?6:(isHov?5:2),overflow:'hidden',transition:'opacity .1s'}}/>
                         {segs.map((s,si)=>{
                           const sb=getBlock(s.from,s.to); if(!sb) return null;
                           const c=s.kind==='late'?'239,68,68':'34,197,94'; // red late / green early
                           const radius=s.edge==='dep'?'5px 0 0 5px':'0 5px 5px 0'; // round the OUTER edge, square the inner so it fuses to the block
+                          // Solid fill (approximate ones stay striped to flag the uncertainty).
                           return <div key={`d${si}`}
-                            style={{position:'absolute',left:sb.left+1,top:FLIGHT_TOP,width:Math.max(sb.width-2,2),height:FLIGHT_H,borderRadius:radius,pointerEvents:'none',zIndex:8,background:s.approx?`repeating-linear-gradient(45deg,rgba(${c},0.6) 0 5px,rgba(${c},0.3) 5px 10px)`:`rgba(${c},0.55)`}}/>;
+                            style={{position:'absolute',left:sb.left+1,top:FLIGHT_TOP,width:Math.max(sb.width-2,2),height:FLIGHT_H,borderRadius:radius,pointerEvents:'none',zIndex:8,background:s.approx?`repeating-linear-gradient(45deg,rgb(${c}) 0 5px,rgba(${c},0.5) 5px 10px)`:`rgb(${c})`}}/>;
                         })}
+                        {eblk.width>40&&<div style={{position:'absolute',left:eblk.left+1,top:FLIGHT_TOP,width:Math.max(eblk.width-2,3),height:FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:eblk.width>20?'0 6px':'0 2px'}}>
+                          {eblk.width>60&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0,textShadow:'0 1px 2px rgba(0,0,0,0.45)'}}>{origin}</span>}
+                          {eblk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.85)',whiteSpace:'nowrap',flex:1,textAlign:'center',textShadow:'0 1px 2px rgba(0,0,0,0.45)'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
+                          {eblk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px',textShadow:'0 1px 2px rgba(0,0,0,0.45)'}}>{eblk.width>80&&<span style={{color:'rgba(255,255,255,0.7)',fontSize:'9px'}}>→</span>}{dest}</span>}
+                        </div>}
                       </React.Fragment>
                     );
                   })}
