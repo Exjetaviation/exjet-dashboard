@@ -5,6 +5,8 @@ import { apiFetch } from '../lib/api';
 const FIELDS = [
   { key: 'aircraft_tail',        label: 'Tail Number',                  type: 'text',   placeholder: 'N69FP' },
   { key: 'aircraft_type',        label: 'Aircraft Type',                type: 'text',   placeholder: 'Gulfstream GIV SP' },
+  { key: 'label',   label: 'Rate Name',  type: 'text',   placeholder: 'N69FP CHARTER', note: 'Shown on the trip as the Rate' },
+  { key: 'purpose', label: 'Purpose',    type: 'select', options: ['', 'owner', 'charter'], note: 'owner vs charter — selected automatically by the trip Purpose' },
   { key: 'hourly_rate',          label: 'Hourly Rate ($)',               type: 'number', placeholder: '9000', note: 'Flight-time rate; surcharge / FA / crew / landings are separate' },
   { key: 'surcharge_per_hr',     label: 'Fuel Surcharge ($/flight hr)',  type: 'number', placeholder: '1800', note: 'Charged per flight hour (LevelFlight model)' },
   { key: 'positioning_rate',     label: 'Positioning Rate ($/hr)',       type: 'number', placeholder: '4500' },
@@ -141,7 +143,8 @@ export default function RateCards() {
             <div key={card.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--accent)' }}>{card.aircraft_tail}</span>
+                  <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--accent)' }}>{card.label || card.aircraft_tail}</span>
+                  {card.purpose && <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>{card.purpose}</span>}
                   {card.aircraft_type && <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{card.aircraft_type}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -205,19 +208,23 @@ export default function RateCards() {
                     {f.label}
                     {f.note && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', opacity: 0.7, marginLeft: '6px' }}>({f.note})</span>}
                   </label>
-                  <input
-                    type={f.type}
-                    value={form[f.key] ?? ''}
-                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                    placeholder={f.placeholder}
-                    step={f.key === 'fet_rate' ? '0.001' : '1'}
-                    style={{
-                      width: '100%', padding: '8px 12px', fontSize: '13px',
-                      background: 'var(--bg-card)', border: '1px solid var(--border)',
-                      borderRadius: '8px', color: 'var(--text-primary)',
-                      outline: 'none', boxSizing: 'border-box',
-                    }}
-                  />
+                  {f.type === 'select' ? (
+                    <select
+                      value={form[f.key] ?? ''}
+                      onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}>
+                      {f.options.map(o => <option key={o} value={o}>{o === '' ? '— default —' : o}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type={f.type}
+                      value={form[f.key] ?? ''}
+                      onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      placeholder={f.placeholder}
+                      step={f.key === 'fet_rate' ? '0.001' : '1'}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  )}
                 </div>
               ))}
             </div>
