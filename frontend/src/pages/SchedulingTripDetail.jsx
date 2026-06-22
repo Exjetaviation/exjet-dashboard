@@ -8,6 +8,8 @@ import { useApi } from '../hooks/useApi';
 import TripTabs from '../components/trip/TripTabs';
 import TripInfoCard from '../components/trip/TripInfoCard';
 import TripActionsRail from '../components/trip/TripActionsRail';
+import { recomputeInputs } from '../lib/feesMath';
+import { FEE_CODES } from '../lib/feeCatalog';
 
 
 const FLEET = ['N408JS', 'N69FP'];
@@ -21,20 +23,6 @@ const inp = { padding: '7px 10px', fontSize: 13, background: 'var(--bg-secondary
 const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
 
-// Reprice from editable RATE inputs (LevelFlight-style). PARTIAL mirror of the backend recomputeFromInputs — does not yet include ad-hoc fees / FET toggle / total override (reconciled in Phase C).
-const recomputeInputs = (i) => {
-  const n = (v) => Number(v) || 0;
-  const flightCost = Math.round(n(i.hourlyRate) * n(i.hours));
-  const surcharge = Math.round(n(i.surchargePerHr) * n(i.hours));
-  const faCost = Math.round(n(i.faFee) * n(i.faCount));
-  const crewCost = Math.round(n(i.crewFee) * n(i.crewCount));
-  const landingCost = Math.round(n(i.landingFee) * n(i.landings));
-  const overnightCost = Math.round(n(i.overnightCost));
-  const segmentFee = Math.round(n(i.segmentPerPax) * n(i.pax));
-  const fetBase = flightCost + surcharge + landingCost + faCost + crewCost + overnightCost;
-  const fetAmount = Math.round(fetBase * (Number(i.fetRate) || 0));
-  return { flightCost, surcharge, faCost, crewCost, landingCost, overnightCost, segmentFee, fetAmount, total: Math.round(fetBase + segmentFee + fetAmount) };
-};
 const HIDE = new Set(['aircraft']);
 const ROLE_COLOR = { PIC: '#f59e0b', SIC: '#4f8ef7', Cabin: '#22c55e' };
 
@@ -188,6 +176,9 @@ export default function SchedulingTripDetail() {
       landingFee: per(p.landingFee, p.landingCost, p.landings), landings: p.landings || 0,
       segmentPerPax: per(p.segmentPerPax, p.segmentFee, p.pax), pax: p.pax || 0,
       overnightCost: p.overnightCost || 0, fetRate: p.fetRate || 0,
+      fees: Array.isArray(p.fees) ? p.fees.map((f) => ({ ...f })) : [],
+      fetEnabled: p.fetEnabled !== false,
+      totalOverride: p.totalOverride ?? null,
     });
   };
   const savePrice = async () => {
@@ -200,6 +191,13 @@ export default function SchedulingTripDetail() {
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
+
+  const updateFee = (idx, field, value) =>
+    setPriceEdit((d) => ({ ...d, fees: d.fees.map((f, i) => (i === idx ? { ...f, [field]: value } : f)) }));
+  const addFee = () =>
+    setPriceEdit((d) => ({ ...d, fees: [...(d.fees || []), { code: FEE_CODES[0], description: '', amount: 0, taxable: true }] }));
+  const removeFee = (idx) =>
+    setPriceEdit((d) => ({ ...d, fees: d.fees.filter((_, i) => i !== idx) }));
 
   // Legs: prefer the mirror response; fall back to router state during the first paint.
   const legsForView = legs.length ? legs : (stateTrip?.legs || []);
@@ -467,6 +465,32 @@ export default function SchedulingTripDetail() {
                       <tr><td style={{ padding: '4px 0' }}>Landings · {ni('landingFee')} × {ni('landings', 46)}</td><td style={{ textAlign: 'right' }}>{usd(live.landingCost)}</td></tr>
                       <tr><td style={{ padding: '4px 0' }}>Overnight · {ni('overnightCost')}</td><td style={{ textAlign: 'right' }}>{usd(live.overnightCost)}</td></tr>
                       <tr><td style={{ padding: '4px 0' }}>Segment · {ni('segmentPerPax')}/pax × {ni('pax', 46)}</td><td style={{ textAlign: 'right' }}>{usd(live.segmentFee)}</td></tr>
+                      <tr><td colSpan={2} style={{ paddingTop: 10, fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '.04em' }}>AD-HOC FEES</td></tr>
+                      {(priceEdit.fees || []).map((f, i) => (
+                        <tr key={i}>
+                          <td style={{ padding: '3px 0' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <select value={f.code || ''} onChange={(e) => updateFee(i, 'code', e.target.value)}
+                                style={{ ...inp, padding: '4px 6px', fontSize: 12 }}>
+                                {FEE_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <input value={f.description || ''} onChange={(e) => updateFee(i, 'description', e.target.value)} placeholder="Description"
+                                style={{ ...inp, padding: '4px 6px', fontSize: 12, flex: '1 1 120px' }} />
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-secondary)' }}>
+                                <input type="checkbox" checked={!!f.taxable} onChange={(e) => updateFee(i, 'taxable', e.target.checked)} /> Taxable
+                              </label>
+                              <button onClick={() => removeFee(i)} style={{ padding: '2px 7px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--danger)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>✕</button>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input type="number" value={f.amount} onChange={(e) => updateFee(i, 'amount', e.target.value)}
+                              style={{ width: 78, textAlign: 'right', padding: '2px 5px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 5 }} />
+                          </td>
+                        </tr>
+                      ))}
+                      <tr><td colSpan={2} style={{ padding: '4px 0' }}>
+                        <button onClick={addFee} style={{ padding: '4px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ New Fee</button>
+                      </td></tr>
                     </>
                   ) : (
                     <>
@@ -477,10 +501,36 @@ export default function SchedulingTripDetail() {
                       {p.crewCost > 0 && <tr><td>Crew ({p.crewCount})</td><td style={{ textAlign: 'right' }}>{usd(p.crewCost)}</td></tr>}
                       {p.overnightCost > 0 && <tr><td>Overnights ({p.billableNights})</td><td style={{ textAlign: 'right' }}>{usd(p.overnightCost)}</td></tr>}
                       {p.segmentFee > 0 && <tr><td>Segment fees</td><td style={{ textAlign: 'right' }}>{usd(p.segmentFee)}</td></tr>}
+                      {Array.isArray(p.fees) && p.fees.length > 0 && p.fees.map((f, i) => (
+                        <tr key={`vf${i}`}><td>{f.code}{f.description ? ` · ${f.description}` : ''}{f.taxable ? '' : ' (non-tax)'}</td><td style={{ textAlign: 'right' }}>{usd(Number(f.amount) || 0)}</td></tr>
+                      ))}
                     </>
                   )}
-                  <tr><td>FET ({Math.round(fetRate * 1000) / 10}%)</td><td style={{ textAlign: 'right' }}>{usd(live.fetAmount)}</td></tr>
-                  <tr><td style={{ paddingTop: 6, fontWeight: 700, color: 'var(--text-primary)' }}>Total</td><td style={{ paddingTop: 6, textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{usd(live.total)}</td></tr>
+                  <tr>
+                    <td>{editing ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input type="checkbox" checked={priceEdit.fetEnabled !== false}
+                          onChange={(e) => setPriceEdit((d) => ({ ...d, fetEnabled: e.target.checked }))} />
+                        FET ({Math.round(fetRate * 1000) / 10}%)
+                      </label>
+                    ) : `FET (${Math.round(fetRate * 1000) / 10}%)`}</td>
+                    <td style={{ textAlign: 'right' }}>{usd(live.fetAmount)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ paddingTop: 6, fontWeight: 700, color: 'var(--text-primary)' }}>Total{!editing && p.totalOverride != null ? ' · adjusted' : ''}</td>
+                    <td style={{ paddingTop: 6, textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {editing ? (
+                        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <input type="number" value={priceEdit.totalOverride ?? ''} placeholder={String(live.computedTotal)}
+                            onChange={(e) => setPriceEdit((d) => ({ ...d, totalOverride: e.target.value === '' ? null : e.target.value }))}
+                            style={{ width: 96, textAlign: 'right', padding: '2px 5px', fontSize: 13, fontWeight: 700, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 5 }} />
+                          {priceEdit.totalOverride != null && priceEdit.totalOverride !== '' &&
+                            <button title="Clear override" onClick={() => setPriceEdit((d) => ({ ...d, totalOverride: null }))}
+                              style={{ padding: '2px 7px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>↺</button>}
+                        </span>
+                      ) : usd(live.total)}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
               {editing && <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>Adjust any charge — FET and total update automatically. "Re-price" reverts to the rate-card calculation.</p>}
