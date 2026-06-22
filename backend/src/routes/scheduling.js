@@ -274,7 +274,7 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
   try {
     const col = tripColumn(req.params.lfOid);
     const { data: trip, error } = await supabase
-      .from('scheduling_trips').select('id, origin, trip_number, status').eq(col, req.params.lfOid).single();
+      .from('scheduling_trips').select('id, origin, trip_number, status, purpose').eq(col, req.params.lfOid).single();
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
     if (trip.origin !== 'native') return res.status(400).json({ error: 'Only trips created here can have their details edited.' });
 
@@ -293,7 +293,7 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
     if (ie) throw ie;
 
     await supabase.from('scheduling_trips').update({ modified_at: new Date().toISOString(), modified_by: req.user?.email || null }).eq('id', trip.id);
-    await priceAndStore(trip.id, aircraft_tail, inputLegs);
+    await priceAndStore(trip.id, aircraft_tail, inputLegs, trip.purpose);
     res.json({ ok: true });
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid/details:', e.message);
@@ -449,7 +449,7 @@ router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => 
   try {
     const col = tripColumn(req.params.lfOid);
     const { data: trip, error } = await supabase
-      .from('scheduling_trips').select('id, lf_oid, status').eq(col, req.params.lfOid).single();
+      .from('scheduling_trips').select('id, lf_oid, status, purpose').eq(col, req.params.lfOid).single();
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
     const { data: legs, error: le } = await supabase
       .from('scheduling_legs').select('dep_icao, arr_icao, lf_synced_snapshot').eq('trip_id', trip.id).order('seq');
@@ -464,7 +464,7 @@ router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => 
         pax: l.lf_synced_snapshot?.passengerCount || 0,
         isPositioning: !!l.lf_synced_snapshot?.isPositioning,
       })),
-      nights,
+      nights, purpose: trip.purpose,
     });
     await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', trip.id);
     res.json({ pricing });
