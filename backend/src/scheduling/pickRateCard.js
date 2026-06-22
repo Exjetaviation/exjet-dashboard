@@ -5,7 +5,7 @@ export const selectRateCard = (cards, purpose) => {
   if (!list.length) return null;
   return (
     list.find((c) => c.purpose === purpose) ||
-    list.find((c) => c.purpose == null || c.purpose === '') ||
+    list.find((c) => c.purpose == null || c.purpose === '') || // == null matches both null and undefined
     list[0]
   );
 };

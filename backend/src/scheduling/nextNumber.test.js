@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nextNumber } from './numbering.js';
+import { nextNumber } from './nextNumber.js';
 
 test('nextNumber: empty list returns the base', () => {
   assert.equal(nextNumber([], 3000), 3000);
