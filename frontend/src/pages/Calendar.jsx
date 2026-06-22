@@ -103,9 +103,9 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const getRangeStart = useCallback(() => {
     const now = new Date();
     if (view === '12h') {
-      const d = new Date(now); d.setMinutes(0,0,0);
-      d.setHours(d.getHours() < 12 ? 0 : 12); // start of the current 12-hour block (00:00 or 12:00)
-      return d.getTime() + offset * 43200000;
+      // 24h window CENTERED on now: now sits in the middle, 12h scrollable either side.
+      const d = new Date(now); d.setMinutes(0,0,0); // floor to the hour (stable grid)
+      return d.getTime() - 12 * 3600000 + offset * 43200000;
     }
     if (view === 'day') {
       const d = new Date(now); d.setHours(0,0,0,0);
@@ -137,8 +137,9 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   // Day view only: extra hourly columns past midnight to fully contain overnight
   // flights (0 on a normal day -> identical to before). These render but are NOT
   // counted in the fit, so the focused day stays full-size and the tail scrolls.
-  const dayExtraCols = (view === 'day' || view === '12h') ? overnightExtraCols(legs, rangeStart, cfg.colMs) : 0;
-  const effectiveCols = fitCols + dayExtraCols;
+  const dayExtraCols = view === 'day' ? overnightExtraCols(legs, rangeStart, cfg.colMs) : 0;
+  // 12h view: render a full 24h (scrollable) while only fitCols (12) fill the viewport.
+  const effectiveCols = view === '12h' ? 24 : fitCols + dayExtraCols;
 
   const colW    = Math.max(8, Math.round(cfg.baseColW * zoom));
   const totalMs = effectiveCols * cfg.colMs;
@@ -195,11 +196,22 @@ useEffect(() => {
     const el = bodyRef.current; if (!el) return;
     const s = localStorage.getItem('exjet.calendar.scroll');
     const t = setTimeout(() => {
-      if (s !== null && !isNaN(+s)) el.scrollLeft = +s;
+      // 12h view centers the now-bar instead of restoring the saved scroll (handled below).
+      if (view !== '12h' && s !== null && !isNaN(+s)) el.scrollLeft = +s;
       didRestoreScroll.current = true;
     }, 160);
     return () => clearTimeout(t);
   }, [loading]);
+
+  // 12h view: keep the now-bar centered — scroll to the middle of the 24h range when the
+  // view/offset/layout changes (re-runs once autoFit settles totalW; not on the 60s tick,
+  // so the user's manual scroll is preserved between changes).
+  useEffect(() => {
+    if (view !== '12h') return undefined;
+    const el = bodyRef.current; if (!el) return undefined;
+    const t = setTimeout(() => { el.scrollLeft = Math.max(0, totalW / 2 - el.clientWidth / 2); }, 80);
+    return () => clearTimeout(t);
+  }, [view, offset, totalW]);
 
   const onPD = useCallback(e => {
     const el=bodyRef.current; if(!el) return;
