@@ -4,7 +4,8 @@ import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
 import { queryTrack } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
-import { getFlightTrack, getFlightTracksByLegIds, getActualsInRange } from '../services/flightTrackStore.js';
+import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
+import { getLegActualsInRange } from '../services/legActualsStore.js';
 
 const router = express.Router();
 
@@ -25,20 +26,23 @@ router.get('/positions', async (req, res) => {
 router.get('/trail', (req, res) => res.json({ trails: getTrails() }));
 
 // GET /api/adsb/actuals?from=<ms>&to=<ms> — actual departure/arrival (epoch ms, or null)
-// by leg id, for completed legs whose SCHEDULED departure falls in the range. Backs the
-// calendar's scheduled-vs-actual delay overlay. Soft-fails to { actuals: {} }.
+// by leg id, for legs whose SCHEDULED departure falls in the range, with per-field
+// source ('live' | 'exact' | 'approx'). Backs the calendar's scheduled-vs-actual delay
+// overlay (the calendar can flag 'approx' visually). Soft-fails to { actuals: {} }.
 router.get('/actuals', async (req, res) => {
   try {
     const now = Date.now();
     const to = Number(req.query.to) || now;
     let from = Number(req.query.from) || (to - 31 * 86400000); // default ~1 month back
     if (to - from > 400 * 86400000) from = to - 400 * 86400000; // clamp absurd spans
-    const rows = await getActualsInRange(new Date(from).toISOString(), new Date(to).toISOString());
+    const rows = await getLegActualsInRange(new Date(from).toISOString(), new Date(to).toISOString());
     const actuals = {};
     for (const r of rows) {
       actuals[r.leg_id] = {
         actualDep: r.actual_dep_time ? Date.parse(r.actual_dep_time) : null,
         actualArr: r.actual_arr_time ? Date.parse(r.actual_arr_time) : null,
+        depSource: r.dep_source || null,
+        arrSource: r.arr_source || null,
       };
     }
     res.json({ actuals });

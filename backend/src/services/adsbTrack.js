@@ -66,6 +66,34 @@ export function deriveActualTimes(positions, leg, padMs) {
   return { actualDep, actualArr };
 }
 
+// Approximate dep/arr (epoch ms, or null) for a leg from the FIRST and LAST airborne
+// samples in its window — the fallback for when crowd-sourced ADS-B never reported the
+// on-ground portion, so deriveActualTimes found no clean transition. A few minutes off
+// (the plane enters/leaves receiver coverage shortly after takeoff / before landing).
+export function approximateActualTimes(positions, leg, padMs) {
+  const lo = leg.depTime - padMs;
+  const hi = leg.arrTime + padMs;
+  const air = (positions || [])
+    .filter((p) => p.t >= lo && p.t <= hi && p.on_ground === false)
+    .sort((a, b) => a.t - b.t);
+  if (!air.length) return { actualDep: null, actualArr: null };
+  return { actualDep: air[0].t, actualArr: air[air.length - 1].t };
+}
+
+// Match a live takeoff/landing observed at `now` to the tail's scheduled leg: the leg
+// whose [depTime - preMs, arrTime + postMs] window contains `now`, preferring the most
+// recent departure (mirrors the calendar's airborne-leg match). null if none.
+export function matchActiveLeg(legs, now, { preMs = 2 * 3600000, postMs = 6 * 3600000 } = {}) {
+  let best = null;
+  for (const l of legs || []) {
+    if (l?.depTime == null || l?.arrTime == null) continue;
+    if (now >= l.depTime - preMs && now <= l.arrTime + postMs) {
+      if (!best || l.depTime > best.depTime) best = l;
+    }
+  }
+  return best;
+}
+
 // Months (UTC, 1st of month) spanning [startMs, endMs], plus the prior month, as
 // anchor timestamps for LevelFlight's scheduledLegs queries. Moved here from
 // routes/adsb.js so the reconciler can reuse it.
