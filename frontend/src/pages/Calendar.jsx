@@ -5,19 +5,27 @@ import { useLegActuals } from '../hooks/useLegActuals';
 import { delaySegments } from '../lib/delaySegments';
 import { useNavigate } from 'react-router-dom';
 import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
-
-const STATUS_COLORS = [
-  '#4f8ef7','#22c55e','#a855f7','#f59e0b','#ef4444',
-  '#06b6d4','#f97316','#84cc16','#ec4899','#8b5cf6',
-  '#14b8a6','#f43f5e','#3b82f6','#10b981','#6366f1',
-];
 const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
 const VIEWS = {
+  '12h': { label:'12 hr', colMs:3600000,  cols:12,  baseColW:160, stepMs:43200000    },
   day:   { label:'Day',   colMs:3600000,  cols:24,  baseColW:80,  stepMs:86400000    },
   week:  { label:'Week',  colMs:86400000, cols:7,   baseColW:150, stepMs:604800000   },
   month: { label:'Month', colMs:86400000, cols:31,  baseColW:40,  stepMs:2592000000  },
   year:  { label:'Year',  colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000 },
 };
+
+// Block colour by flight STATE (uses actuals when known): completed/landed = blue,
+// in-flight = green, future/not-yet-departed = grey.
+const STATE_COLORS = { completed:'#4f8ef7', inflight:'#22c55e', future:'#64748b' };
+function legStateColor(leg, isAirborne, act, now) {
+  const dep = leg?.departure?.time, arr = leg?.arrival?.time;
+  const effDep = act?.actualDep ?? dep, effArr = act?.actualArr ?? arr;
+  if (isAirborne) return STATE_COLORS.inflight;                                   // ADS-B says airborne
+  if (effArr != null && effArr <= now) return STATE_COLORS.completed;            // landed
+  if (effDep != null && effDep > now) return STATE_COLORS.future;                // not departed
+  if (effDep != null && effArr != null && effDep <= now && now < effArr) return STATE_COLORS.inflight; // mid-flight by clock
+  return STATE_COLORS.future;
+}
 // Row geometry — derived top-down so every row is uniform and nothing floats:
 //   ┌───────────────────────────┐  y=0
 //   │  flight area (legs/duty)  │
@@ -94,6 +102,11 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
 
   const getRangeStart = useCallback(() => {
     const now = new Date();
+    if (view === '12h') {
+      const d = new Date(now); d.setMinutes(0,0,0);
+      d.setHours(d.getHours() < 12 ? 0 : 12); // start of the current 12-hour block (00:00 or 12:00)
+      return d.getTime() + offset * 43200000;
+    }
     if (view === 'day') {
       const d = new Date(now); d.setHours(0,0,0,0);
       return d.getTime() + offset * 86400000;
@@ -124,7 +137,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   // Day view only: extra hourly columns past midnight to fully contain overnight
   // flights (0 on a normal day -> identical to before). These render but are NOT
   // counted in the fit, so the focused day stays full-size and the tail scrolls.
-  const dayExtraCols = view === 'day' ? overnightExtraCols(legs, rangeStart, cfg.colMs) : 0;
+  const dayExtraCols = (view === 'day' || view === '12h') ? overnightExtraCols(legs, rangeStart, cfg.colMs) : 0;
   const effectiveCols = fitCols + dayExtraCols;
 
   const colW    = Math.max(8, Math.round(cfg.baseColW * zoom));
@@ -207,12 +220,6 @@ useEffect(() => {
 
   const dutyTimes = dutyData?.dutyTimes||[];
 
-  const tripColorMap={}; let colorIdx=0;
-  legs.forEach(leg => {
-    const id=String(leg.dispatch?.tripId||leg._id?.$oid);
-    if (!tripColorMap[id]) { tripColorMap[id]=STATUS_COLORS[colorIdx%STATUS_COLORS.length]; colorIdx++; }
-  });
-
   const acMap={};
   legs.forEach(leg => {
     const tail=leg.dispatch?.aircraft?.tailNumber; if(!tail) return;
@@ -271,8 +278,8 @@ useEffect(() => {
     const isToday=floorDay(ts)===floorDay(Date.now());
     const isMonthStart=d.getDate()===1;
     let label='';
-    const isDayStart = view==='day' && i>0 && d.getHours()===0; // interior midnight
-    if (view==='day') {
+    const isDayStart = (view==='day'||view==='12h') && i>0 && d.getHours()===0; // interior midnight
+    if (view==='day'||view==='12h') {
       if (isDayStart) {
         label=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); // e.g. "Wed, Jun 18"
       } else {
@@ -350,7 +357,7 @@ useEffect(() => {
                     ? new Date(col.d.getFullYear(), col.d.getMonth()+1, 0).getDate()
                     : 0;
                   // Non-Day views drill down on click: Year -> Month, Week/Month -> Day.
-                  const drillTarget = view==='year' ? 'month' : view==='day' ? null : 'day';
+                  const drillTarget = view==='year' ? 'month' : (view==='day'||view==='12h') ? null : 'day';
                   const baseBg = col.isToday?'rgba(79,142,247,0.12)':'transparent';
                   return (
                     <div key={col.i}
@@ -595,8 +602,6 @@ useEffect(() => {
                   {ac.legs.map((leg,li)=>{
                     const dep=leg.departure?.time, arr=leg.arrival?.time;
                     const blk=getBlock(dep,arr); if(!blk) return null;
-                    const tripId=String(leg.dispatch?.tripId||leg._id?.$oid);
-                    const color=tripColorMap[tripId]||'#4f8ef7';
                     const isHov=hovered?._id?.$oid===leg._id?.$oid;
                     const dest=leg.arrival?.airport||'';
                     const origin=leg.departure?.airport||'';
@@ -604,12 +609,14 @@ useEffect(() => {
                     // Live "in the air": this leg is the one the airborne tail is flying
                     // (most-recently-departed leg, tolerating schedule slip — see airborneLegId).
                     const isAirborne=!!leg._id?.$oid&&airborneLegId[ac.tail]===leg._id?.$oid;
-                    const darker=darken(color);
-                    // Scheduled-vs-actual delay: extend the block to the actual extent and
-                    // tint the late (red) / early (green) portions so it reads as ONE block.
                     const legId=leg._id?.$oid;
                     const act=(legId&&actuals[legId])||{};
                     const la=live[ac.tail];
+                    // Block colour by flight STATE: completed=blue, in-flight=green, future=grey.
+                    const color=legStateColor(leg,isAirborne,act,nowTs);
+                    const darker=darken(color);
+                    // Scheduled-vs-actual delay: extend the block to the actual extent and
+                    // tint the late (red) / early (green) portions so it reads as ONE block.
                     const segs=delaySegments({dep,arr,actualDep:act.actualDep??null,actualArr:act.actualArr??null,depSource:act.depSource??null,arrSource:act.arrSource??null,now:nowTs,onGround:la?.onGround===true,airborne:isAirborne,airborneSinceMs:la?.airborneSinceMs??null});
                     const extStart=segs.length?Math.min(dep,...segs.map(s=>s.from)):dep;
                     const extEnd=segs.length?Math.max(arr,...segs.map(s=>s.to)):arr;
@@ -692,7 +699,7 @@ useEffect(() => {
           ):(
             <>
               <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
-                <div style={{width:'10px',height:'10px',borderRadius:'2px',background:tripColorMap[String(hovered.dispatch?.tripId||hovered._id?.$oid)],flexShrink:0}}/>
+                <div style={{width:'10px',height:'10px',borderRadius:'2px',background:legStateColor(hovered,Object.values(airborneLegId).includes(hovered._id?.$oid),actuals[hovered._id?.$oid],nowTs),flexShrink:0}}/>
                 <p style={{fontSize:'14px',fontWeight:'700',color:'var(--text-primary)',margin:0}}>{hovered.departure?.airport} → {hovered.arrival?.airport}</p>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
