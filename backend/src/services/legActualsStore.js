@@ -7,9 +7,10 @@
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 
-// Source precedence: a live recorder reading beats a reconciler-derived one, which
-// beats an approximate one. recordLegActual won't downgrade an existing value.
-const PRIORITY = { live: 3, exact: 2, approx: 1 };
+// Source precedence: pilot-entered block times (crew) are authoritative and win over
+// everything; then a live recorder reading, a reconciler-derived exact transition, and
+// finally an approximate one. recordLegActual won't downgrade an existing value.
+const PRIORITY = { crew: 4, live: 3, exact: 2, approx: 1 };
 const prio = (s) => PRIORITY[s] || 0;
 
 let _client = null;
