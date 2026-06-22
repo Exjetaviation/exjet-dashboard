@@ -86,6 +86,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   useEffect(() => { localStorage.setItem('exjet.calendar.autoFit', String(autoFit)); }, [autoFit]);
   const didRestoreScroll = useRef(false);
   const [hovered,setHovered]   = useState(null);
+  const [hoverMode,setHoverMode] = useState('sched'); // 'sched' | 'actual' — which block is hovered
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
   const [,forceTick] = useState(0);
@@ -620,7 +621,8 @@ useEffect(() => {
                     const aEnd=act.actualArr??(isAirborne?nowTs:null);
                     const actBlk=(aStart!=null&&aEnd!=null&&aEnd>aStart)?getBlock(aStart,aEnd):null;
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
-                    const hov=e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});};
+                    const hov=e=>{setHovered(leg);setHoverMode('sched');setTipPos({x:e.clientX,y:e.clientY});};
+                    const hovA=e=>{setHovered(leg);setHoverMode('actual');setTipPos({x:e.clientX,y:e.clientY});};
                     const moveTip=e=>setTipPos({x:e.clientX,y:e.clientY});
                     return(
                       <React.Fragment key={legId||li}>
@@ -628,7 +630,7 @@ useEffect(() => {
                         <div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
                           style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:`${color}33`,border:`1px solid ${color}99`,borderRadius:'5px',cursor:'pointer',boxShadow:isHov?`0 2px 12px ${color}66`:'none',zIndex:isHov?5:2,boxSizing:'border-box'}}/>
                         {/* Actual flight — solid bar at 60% height, vertically centred */}
-                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
+                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hovA} onMouseMove={moveTip} onMouseLeave={()=>setHovered(null)}
                           style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?7:4,boxSizing:'border-box'}}/>}
                         {/* Route, centred in the solid actual bar (or the scheduled block if not yet flown) */}
                         {(()=>{
@@ -703,29 +705,32 @@ useEffect(() => {
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>✈ {hovered.dispatch?.aircraft?.tailNumber} · Trip #{hovered.dispatch?.tripId}</p>
                 {(()=>{
                   const dep=hovered.departure?.time, arr=hovered.arrival?.time;
+                  const a=actuals[hovered._id?.$oid]||{};
+                  const hasActual=a.actualDep!=null||a.actualArr!=null;
+                  // Hovering the actual (solid) block shows actual times; the scheduled
+                  // (transparent) block — or no actuals — shows scheduled times.
+                  if(hoverMode==='actual'&&hasActual){
+                    const line=(label,act,sch,src)=>{
+                      if(act==null) return <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{label}: —</p>;
+                      const m=sch!=null?Math.round((act-sch)/60000):null;
+                      const col=m>=5?'#ef4444':(m<=-5?'#22c55e':'var(--text-secondary)');
+                      const lbl=m==null?'':(Math.abs(m)<5?' · on time':(m>0?` · ${m} min late`:` · ${-m} min early`));
+                      const srcLbl=src==='crew'?' · pilot':src==='approx'?' · ADS-B est':src?' · ADS-B':'';
+                      return <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{label}: {fmtTime(act)} ET<span style={{color:col,fontWeight:'600'}}>{lbl}</span><span style={{color:'var(--text-secondary)',opacity:.7}}>{srcLbl}</span></p>;
+                    };
+                    return (<>
+                      <p style={{fontSize:'11px',fontWeight:'700',color:'#9ec1f5',letterSpacing:'.5px',margin:'2px 0 0'}}>ACTUAL FLIGHT</p>
+                      {line('Dep',a.actualDep,dep,a.depSource)}
+                      {line('Arr',a.actualArr,arr,a.arrSource)}
+                    </>);
+                  }
                   const fromTz=hovered._calc?.from?.timezone, toTz=hovered._calc?.to?.timezone;
                   const depLocal=fmtLocal(dep,fromTz), arrLocal=fmtLocal(arr,toTz);
                   return (<>
+                    <p style={{fontSize:'11px',fontWeight:'700',color:'var(--text-secondary)',letterSpacing:'.5px',margin:'2px 0 0'}}>SCHEDULED</p>
                     <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Dep {hovered.departure?.airport}: {fmtTime(dep)} ET{depLocal&&fromTz!==ET?` · ${depLocal} local`:''}</p>
                     <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Arr {hovered.arrival?.airport}: {fmtTime(arr)} ET{arrLocal&&toTz!==ET?` · ${arrLocal} local`:''}</p>
                   </>);
-                })()}
-                {(()=>{
-                  const a=actuals[hovered._id?.$oid]; if(!a||(a.actualDep==null&&a.actualArr==null)) return null;
-                  const dep=hovered.departure?.time, arr=hovered.arrival?.time;
-                  const line=(label,act,sch,src)=>{
-                    if(act==null) return null;
-                    const m=sch!=null?Math.round((act-sch)/60000):null;
-                    const col=m>=5?'#ef4444':(m<=-5?'#22c55e':'var(--text-secondary)');
-                    const lbl=m==null?'':(Math.abs(m)<5?' · on time':(m>0?` · ${m} min late`:` · ${-m} min early`));
-                    const srcLbl=src==='crew'?' · pilot':src==='approx'?' · ADS-B est':src?' · ADS-B':'';
-                    return <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{label}: {fmtTime(act)} ET<span style={{color:col,fontWeight:'600'}}>{lbl}</span><span style={{color:'var(--text-secondary)',opacity:.7}}>{srcLbl}</span></p>;
-                  };
-                  return (<div style={{paddingTop:'7px',marginTop:'5px',borderTop:'1px dashed var(--border)',display:'flex',flexDirection:'column',gap:'4px'}}>
-                    <p style={{fontSize:'11px',fontWeight:'700',color:'var(--text-secondary)',letterSpacing:'.5px',margin:0}}>ACTUAL</p>
-                    {line('Dep',a.actualDep,dep,a.depSource)}
-                    {line('Arr',a.actualArr,arr,a.arrSource)}
-                  </div>);
                 })()}
                 {hovered._calc?._minutes>0&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{Math.floor(hovered._calc._minutes/60)}h {hovered._calc._minutes%60}m · {hovered._calc?.distance?.value||'—'} nm</p>}
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.dispatch?.client?.company?.name||'No client'}</p>
