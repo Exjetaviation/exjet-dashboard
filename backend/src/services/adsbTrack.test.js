@@ -82,6 +82,12 @@ test('approximateActualTimes returns nulls when there are no airborne samples', 
   assert.deepEqual(approximateActualTimes(pts, legW, 500), { actualDep: null, actualArr: null });
 });
 
+test('approximateActualTimes rejects sparse coverage (sliver that does not bracket the leg)', () => {
+  // airborne only for 200ms of a 4000ms leg -> last-airborne is NOT the arrival.
+  const pts = [{ t: 1100, on_ground: false }, { t: 1300, on_ground: false }];
+  assert.deepEqual(approximateActualTimes(pts, legW, 500), { actualDep: null, actualArr: null });
+});
+
 test('matchActiveLeg picks the leg whose window contains now, preferring latest departure', () => {
   const legs = [
     { legId: 'a', depTime: 1000, arrTime: 2000 },
