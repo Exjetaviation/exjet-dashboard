@@ -647,7 +647,7 @@ useEffect(() => {
                           </div>;
                         })()}
                         {/* Live in-flight: plane just to the RIGHT of the now-bar, leading the growing actual bar */}
-                        {actBlk&&isAirborne&&act.actualArr==null&&<div style={{position:'absolute',left:nowPx+3,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.5)-11,zIndex:10,pointerEvents:'none',fontSize:'22px',lineHeight:1,color:'#fff',transform:'rotate(45deg)',textShadow:'0 0 6px rgba(0,0,0,0.9)'}}>✈</div>}
+                        {actBlk&&isAirborne&&act.actualArr==null&&<div style={{position:'absolute',left:nowPx+3,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.5)-11,zIndex:10,pointerEvents:'none',fontSize:'22px',lineHeight:1,color:'#22c55e',textShadow:'0 0 6px rgba(0,0,0,0.9)'}}>✈</div>}
                       </React.Fragment>
                     );
                   })}
