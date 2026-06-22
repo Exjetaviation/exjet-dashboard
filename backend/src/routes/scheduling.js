@@ -13,6 +13,7 @@ import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { documentAlerts } from '../scheduling/docExpiry.js';
 import { rankPeople } from '../scheduling/peopleSearch.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
+import { nextQuoteNumber, nextTripNumber } from '../scheduling/numbering.js';
 import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
@@ -150,7 +151,7 @@ router.get('/quotes', async (req, res) => {
   }
 });
 
-const TRIP_COLS = 'lf_oid, trip_number, status, locally_modified, upstream_changed, lf_synced_snapshot, origin, pricing';
+const TRIP_COLS = 'lf_oid, trip_number, quote_number, status, purpose, rate_name, company_name, contact, checklist, booked_by, booked_at, locally_modified, upstream_changed, lf_synced_snapshot, origin, pricing';
 
 // PostgREST returns code PGRST116 from .single() when no row matched.
 function isNotFound(error) {
@@ -172,6 +173,14 @@ function shapeTrip(row) {
     lf_oid: row.lf_oid,
     origin: row.origin,
     pricing: row.pricing,
+    quote_number: row.quote_number,
+    purpose: row.purpose,
+    rate_name: row.rate_name,
+    company_name: row.company_name,
+    contact: row.contact,
+    checklist: row.checklist || null,
+    booked_by: row.booked_by,
+    booked_at: row.booked_at,
     trip_number: row.trip_number,
     status: row.status,
     status_label: statusLabel(row.status),
@@ -209,12 +218,12 @@ async function buildNativeLegRows(tripId, ctx, inputLegs) {
 }
 
 // Price a native trip from its input legs (best-effort) and persist the breakdown.
-async function priceAndStore(tripId, aircraft_tail, inputLegs) {
+async function priceAndStore(tripId, aircraft_tail, inputLegs, purpose = null) {
   try {
     const pricing = await priceQuoteLegs({
       tail: aircraft_tail, aircraftType: null,
       legs: inputLegs.map((l) => ({ dep_icao: (l.dep_icao || '').trim().toUpperCase(), arr_icao: (l.arr_icao || '').trim().toUpperCase(), pax: Number(l.pax) || 0, isPositioning: !!l.positioning })),
-      nights: 0,
+      nights: 0, purpose,
     });
     await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', tripId);
   } catch (pe) { console.warn('[scheduling price] failed:', pe?.message || pe); }
@@ -232,10 +241,15 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     const inputLegs = Array.isArray(body.legs) ? body.legs : [];
     if (!inputLegs.length) return res.status(400).json({ error: 'A trip needs at least one leg.' });
 
+    const purpose = (body.purpose || '').trim() || null;          // 'owner' | 'charter' | null
+    const company_name = (body.company_name || '').trim() || null;
+    const contact = body.contact && typeof body.contact === 'object' ? body.contact : null;
+    const quote_number = await nextQuoteNumber();
+
     const status = 'quote';
     const { data: trip, error: e1 } = await supabase
       .from('scheduling_trips')
-      .insert({ origin: 'native', status, trip_number, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
+      .insert({ origin: 'native', status, trip_number, quote_number: String(quote_number), purpose, company_name, contact, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
       .select('id, ' + TRIP_COLS).single();
     if (e1) throw e1;
 
@@ -244,7 +258,7 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     const { error: e2 } = await supabase.from('scheduling_legs').insert(legRows);
     if (e2) throw e2;
 
-    await priceAndStore(trip.id, aircraft_tail, inputLegs);
+    await priceAndStore(trip.id, aircraft_tail, inputLegs, purpose);
 
     res.status(201).json({ id: trip.id, trip: shapeTrip(trip) });
   } catch (e) {
