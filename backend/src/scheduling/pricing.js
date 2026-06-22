@@ -87,7 +87,7 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
     segmentPerPax: rateCard.segment_fee_per_pax || 0, pax: legs.reduce((s, l) => s + (l.pax || 0), 0), segmentFee,
     fetBase: Math.round(fetBase), fetRate: rateCard.fet_rate || 0, fetAmount,
     total,
-    rateName: rateCard.rate_name || rateCard.aircraft_tail,
+    rateName: rateCard.label || rateCard.rate_name || rateCard.aircraft_tail,
     tail: rateCard.aircraft_tail,
   };
 };
