@@ -8,3 +8,4 @@ backend/manuals/
 .DS_Store
 **/.DS_Store
 .superpowers/
+backend/scripts/.fbo-import-checkpoint.json
