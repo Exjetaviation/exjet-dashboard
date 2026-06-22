@@ -4,6 +4,7 @@ import { greatCircleNm } from './distance.js';
 import { flightTimeForLeg } from './flightTime.js';
 import { getPerfProfile } from './perfCalibrate.js';
 import { priceTrip } from './pricing.js';
+import { selectRateCard } from './pickRateCard.js';
 
 const UNKNOWN_AIRPORT_MIN = 150; // fallback flight time when an airport has no coords
 
@@ -39,9 +40,10 @@ export async function legMinutes(aircraftType, legs) {
   });
 }
 
-export async function priceQuoteLegs({ tail, aircraftType, legs, nights = 0 }) {
-  const { data: rateCard } = await supabase
-    .from('rate_cards').select('*').eq('aircraft_tail', tail).maybeSingle();
+export async function priceQuoteLegs({ tail, aircraftType, legs, nights = 0, purpose = null }) {
+  const { data: cards } = await supabase
+    .from('rate_cards').select('*').eq('aircraft_tail', tail);
+  const rateCard = selectRateCard(cards, purpose);
   if (!rateCard) return { error: `No rate card for ${tail || 'aircraft'}.` };
 
   const [profile, historyAvg] = await Promise.all([getPerfProfile(aircraftType), loadHistoryAvg()]);
