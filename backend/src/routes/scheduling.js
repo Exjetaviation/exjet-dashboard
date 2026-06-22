@@ -540,6 +540,29 @@ router.patch('/trips/:lfOid/crew', requireSchedulingEditor, async (req, res) => 
   }
 });
 
+// PATCH /api/scheduling/trips/:lfOid/checklist — persist the dispatch checklist booleans.
+router.patch('/trips/:lfOid/checklist', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, checklist').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const b = req.body || {};
+    const bool = (k, prev) => (typeof b[k] === 'boolean' ? b[k] : !!prev);
+    const prev = trip.checklist || {};
+    const checklist = {
+      contractReceived: bool('contractReceived', prev.contractReceived),
+      paymentReceived: bool('paymentReceived', prev.paymentReceived),
+      paymentProcessed: bool('paymentProcessed', prev.paymentProcessed),
+    };
+    await supabase.from('scheduling_trips').update({ checklist }).eq('id', trip.id);
+    res.json({ checklist });
+  } catch (e) {
+    console.error('PATCH /api/scheduling/trips/:lfOid/checklist:', e.message);
+    res.status(500).json({ error: 'Failed to save checklist' });
+  }
+});
+
 const PERSON_COLS = 'id, first_name, middle_name, last_name, dob, gender, nationality, citizenship, weight_lbs, email, phone, passport_number, passport_country, passport_expiry, green_card_number, green_card_expiry, visa_number, visa_expiry, known_traveler_number, redress_number, notes, origin, lf_oid, created_at, updated_at';
 
 // Leg departure times are epoch ms for native legs but ISO strings for mirrored
