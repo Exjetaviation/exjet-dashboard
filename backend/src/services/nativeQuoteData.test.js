@@ -15,6 +15,7 @@ test('mapNativeQuoteLeg: builds the quote VM leg shape', () => {
   assert.equal(m.depTime, Date.parse('2026-07-01T12:00:00Z'));
   assert.ok(Array.isArray(m.fromLatLng) && m.fromLatLng.length === 2);
   assert.ok(Array.isArray(m.toLatLng) && m.toLatLng.length === 2);
+  assert.ok(m.fromLatLng[0] > 0 && m.fromLatLng[1] < 0, 'KFXE coords must be [lat>0, lng<0] — guards against a lat/lng swap');
 });
 
 test('mapNativeQuoteLeg: unknown airport → null name/coords, still maps codes', () => {
