@@ -18,6 +18,7 @@ import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
 import * as lf from '../services/levelflight.js';
+import { fetchAirportFbos, listFbos, upsertFbos } from '../services/fbos.js';
 import { sendEmail } from '../services/gmail.js';
 import { buildItinerary } from '../services/itineraryData.js';
 import { renderItineraryHtml } from '../services/itineraryHtml.js';
@@ -75,6 +76,23 @@ router.get('/leg-estimate', async (req, res) => {
   } catch (e) {
     console.error('GET /api/scheduling/leg-estimate:', e.message);
     res.status(500).json({ error: 'Failed to estimate' });
+  }
+});
+
+// GET /api/scheduling/airport/:icao/fbos — FBOs from our directory; lazily fetch +
+// cache from LevelFlight on the first request for an airport we haven't imported.
+router.get('/airport/:icao/fbos', async (req, res) => {
+  try {
+    const icao = (req.params.icao || '').trim().toUpperCase();
+    let fbos = await listFbos(icao);
+    if (!fbos.length) {
+      const rows = await fetchAirportFbos(icao).catch(() => []);
+      if (rows.length) { await upsertFbos(rows).catch(() => {}); fbos = rows; }
+    }
+    res.json({ icao, fbos });
+  } catch (e) {
+    console.error('GET /api/scheduling/airport/:icao/fbos:', e.message);
+    res.status(500).json({ error: 'Failed to load FBOs' });
   }
 });
 
