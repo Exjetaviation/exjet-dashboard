@@ -18,8 +18,7 @@ const inp = { padding: '7px 10px', fontSize: 13, background: 'var(--bg-secondary
 const ACTION_COLOR = { book: '#a855f7', release: '#3b82f6', cancel: '#ef4444' };
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
 
-// Reprice from editable RATE inputs (LevelFlight-style: edit the hourly rate / fees,
-// not the dollar totals). Mirrors the backend recomputeFromInputs.
+// Reprice from editable RATE inputs (LevelFlight-style). PARTIAL mirror of the backend recomputeFromInputs — does not yet include ad-hoc fees / FET toggle / total override (reconciled in Phase C).
 const recomputeInputs = (i) => {
   const n = (v) => Number(v) || 0;
   const flightCost = Math.round(n(i.hourlyRate) * n(i.hours));

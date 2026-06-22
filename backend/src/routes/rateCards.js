@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase.from('rate_cards').select('*').order('aircraft_tail');
+    const { data, error } = await supabase.from('rate_cards').select('*').order('aircraft_tail').order('purpose', { nullsFirst: true });
     if (error) throw error;
     res.json(data);
   } catch (err) {

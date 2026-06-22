@@ -12,10 +12,10 @@ export const calcLeg = (mins, rateCard, { isPositioning = false } = {}) => {
   return { hrs: Math.round(hrs * 100) / 100, mins, cost: Math.round(cost) };
 };
 
-// Recompute the full breakdown from editable RATE inputs (per-quote overrides:
-// hourly rate, surcharge/hr, FA/crew fees + counts, hours, pax, …). Editing a
-// rate — not a dollar total — reprices the quote, LevelFlight-style. Federal
-// segment fee stays outside the FET base (same rule as priceTrip).
+// Recompute the full breakdown from editable RATE inputs plus ad-hoc Fees.
+// Taxable ad-hoc fees join the FET base; non-taxable fees are added after FET.
+// `fetEnabled === false` disables FET (owner trips). `totalOverride` (when set)
+// wins over the computed total (LevelFlight's editable TOTAL PRICE).
 export const recomputeFromInputs = (i) => {
   const n = (v) => Number(v) || 0;
   const flightCost = Math.round(n(i.hourlyRate) * n(i.hours));
@@ -25,9 +25,26 @@ export const recomputeFromInputs = (i) => {
   const landingCost = Math.round(n(i.landingFee) * n(i.landings));
   const overnightCost = Math.round(n(i.overnightCost));
   const segmentFee = Math.round(n(i.segmentPerPax) * n(i.pax));
-  const fetBase = flightCost + surcharge + landingCost + faCost + crewCost + overnightCost;
-  const fetAmount = Math.round(fetBase * n(i.fetRate));
-  return { flightCost, surcharge, faCost, crewCost, landingCost, overnightCost, segmentFee, fetBase: Math.round(fetBase), fetAmount, total: Math.round(fetBase + segmentFee + fetAmount) };
+
+  const fees = Array.isArray(i.fees) ? i.fees : [];
+  const feesTaxable = Math.round(fees.filter((f) => f.taxable).reduce((s, f) => s + n(f.amount), 0));
+  const feesNonTaxable = Math.round(fees.filter((f) => !f.taxable).reduce((s, f) => s + n(f.amount), 0));
+
+  const fetBase = flightCost + surcharge + landingCost + faCost + crewCost + overnightCost + feesTaxable;
+  const fetEnabled = i.fetEnabled !== false;            // default ON; explicit false disables
+  const fetAmount = fetEnabled ? Math.round(fetBase * n(i.fetRate)) : 0;
+  const computedTotal = Math.round(fetBase + segmentFee + fetAmount + feesNonTaxable);
+
+  const hasOverride = i.totalOverride !== null && i.totalOverride !== undefined && i.totalOverride !== '';
+  const totalOverride = hasOverride ? Math.round(n(i.totalOverride)) : null;
+
+  return {
+    flightCost, surcharge, faCost, crewCost, landingCost, overnightCost, segmentFee,
+    fees, feesTaxable, feesNonTaxable,
+    fetEnabled, fetBase: Math.round(fetBase), fetAmount,
+    computedTotal, totalOverride,
+    total: hasOverride ? totalOverride : computedTotal,
+  };
 };
 
 // legs: [{ from, to, mins, pax, isPositioning }]
@@ -70,7 +87,7 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
     segmentPerPax: rateCard.segment_fee_per_pax || 0, pax: legs.reduce((s, l) => s + (l.pax || 0), 0), segmentFee,
     fetBase: Math.round(fetBase), fetRate: rateCard.fet_rate || 0, fetAmount,
     total,
-    rateName: rateCard.rate_name || rateCard.aircraft_tail,
+    rateName: rateCard.label || rateCard.rate_name || rateCard.aircraft_tail,
     tail: rateCard.aircraft_tail,
   };
 };
