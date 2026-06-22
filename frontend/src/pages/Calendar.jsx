@@ -617,7 +617,11 @@ useEffect(() => {
                     // Scheduled flight = transparent outer block (the whole planned span);
                     // actual flight = solid inner block, same colour, nested inside; trip #
                     // labels the actual block. No red/green — the offset shows the delay.
-                    const aStart=act.actualDep??(isAirborne?(la?.airborneSinceMs??null):null);
+                    // Actual-flight bar. Start = recorded actual_dep, else the live wheels-up
+                    // time, else (airborne but we picked it up mid-air with no wheels-up) the
+                    // scheduled departure as a placeholder — so the bar still appears the moment
+                    // ADS-B confirms the flight is airborne, and grows with the now-bar.
+                    const aStart=act.actualDep??(isAirborne?(la?.airborneSinceMs??dep):null);
                     const aEnd=act.actualArr??(isAirborne?nowTs:null);
                     const actBlk=(aStart!=null&&aEnd!=null&&aEnd>aStart)?getBlock(aStart,aEnd):null;
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
@@ -727,6 +731,17 @@ useEffect(() => {
                       {line('Dep',a.actualDep,dep,a.depSource)}
                       {line('Arr',a.actualArr,arr,a.arrSource)}
                     </>);
+                  }
+                  if(hoverMode==='actual'){
+                    // Airborne live but no recorded actual yet (we picked it up mid-air).
+                    const lp=live[hovered.dispatch?.aircraft?.tailNumber];
+                    if(lp&&lp.onGround===false){
+                      return (<>
+                        <p style={{fontSize:'11px',fontWeight:'700',color:'#9ec1f5',letterSpacing:'.5px',margin:'2px 0 0'}}>ACTUAL · LIVE</p>
+                        <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Airborne now{lp.altitudeFt!=null?` · ${lp.altitudeFt.toLocaleString()} ft`:''}{lp.groundSpeedKt!=null?` · ${Math.round(lp.groundSpeedKt)} kt`:''}</p>
+                        <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Exact departure time pending</p>
+                      </>);
+                    }
                   }
                   const fromTz=hovered._calc?.from?.timezone, toTz=hovered._calc?.to?.timezone;
                   const depLocal=fmtLocal(dep,fromTz), arrLocal=fmtLocal(arr,toTz);
