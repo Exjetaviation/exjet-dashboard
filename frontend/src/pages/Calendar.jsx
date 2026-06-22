@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAdsb } from '../hooks/useAdsb';
+import { useLegActuals } from '../hooks/useLegActuals';
+import { delaySegments } from '../lib/delaySegments';
 import { useNavigate } from 'react-router-dom';
 import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
 
@@ -129,6 +131,10 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const totalMs = effectiveCols * cfg.colMs;
   const totalW  = effectiveCols * colW;
   const rangeEnd = rangeStart + totalMs;
+
+  // Persisted actual dep/arr for legs in view (settled delays); live in-progress
+  // delays come from the ADS-B feed below.
+  const { actuals } = useLegActuals(rangeStart, rangeEnd);
 
   const getBlock = (dep,arr) => {
     if (!dep||!arr||arr<rangeStart||dep>rangeEnd) return null;
@@ -596,8 +602,20 @@ useEffect(() => {
                     // (most-recently-departed leg, tolerating schedule slip — see airborneLegId).
                     const isAirborne=!!leg._id?.$oid&&airborneLegId[ac.tail]===leg._id?.$oid;
                     const darker=darken(color);
+                    // Scheduled-vs-actual delay overlay: red (late) / green (early) segments.
+                    const legId=leg._id?.$oid;
+                    const act=(legId&&actuals[legId])||{};
+                    const la=live[ac.tail];
+                    const segs=delaySegments({dep,arr,actualDep:act.actualDep??null,actualArr:act.actualArr??null,depSource:act.depSource??null,arrSource:act.arrSource??null,now:nowTs,onGround:la?.onGround===true,airborne:isAirborne,airborneSinceMs:la?.airborneSinceMs??null});
                     return(
-                      <div key={leg._id?.$oid||li}
+                      <React.Fragment key={legId||li}>
+                        {segs.map((s,si)=>{
+                          const sb=getBlock(s.from,s.to); if(!sb) return null;
+                          const c=s.kind==='late'?'239,68,68':'34,197,94'; // red late / green early
+                          return <div key={`d${si}`}
+                            style={{position:'absolute',left:sb.left+1,top:FLIGHT_TOP,width:Math.max(sb.width-2,2),height:FLIGHT_H,borderRadius:'5px',pointerEvents:'none',zIndex:7,border:`1px solid rgba(${c},0.85)`,background:s.approx?`repeating-linear-gradient(45deg,rgba(${c},0.55) 0 5px,rgba(${c},0.22) 5px 10px)`:`rgba(${c},0.5)`}}/>;
+                        })}
+                      <div
                         onPointerDown={e=>e.stopPropagation()}
                         onClick={e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});}}
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
@@ -608,6 +626,7 @@ useEffect(() => {
                         {blk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
                         {blk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{blk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
                       </div>
+                      </React.Fragment>
                     );
                   })}
                 </div>
