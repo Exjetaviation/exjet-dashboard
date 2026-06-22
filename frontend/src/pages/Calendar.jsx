@@ -423,7 +423,10 @@ useEffect(() => {
                     const sorted=[...ac.legs].filter(l=>l.departure?.time&&l.arrival?.time).sort((a,b)=>a.departure.time-b.departure.time);
                     return sorted.slice(0,-1).map((leg,i)=>{
                       const next=sorted[i+1];
-                      const gStart=leg.arrival.time, gEnd=next.departure.time;
+                      // Ground time reflects ACTUAL arrival/departure when known (a late
+                      // arrival or late next-departure shifts/shrinks the time on the ground).
+                      const aPrev=actuals[leg._id?.$oid]||{}, aNext=actuals[next._id?.$oid]||{};
+                      const gStart=aPrev.actualArr??leg.arrival.time, gEnd=aNext.actualDep??next.departure.time;
                       if(gEnd-gStart<600000) return null;
                       const blk=getBlock(gStart,gEnd); if(!blk) return null;
                       const airport=leg.arrival?.airport||'?';
@@ -602,30 +605,35 @@ useEffect(() => {
                     // (most-recently-departed leg, tolerating schedule slip — see airborneLegId).
                     const isAirborne=!!leg._id?.$oid&&airborneLegId[ac.tail]===leg._id?.$oid;
                     const darker=darken(color);
-                    // Scheduled-vs-actual delay overlay: red (late) / green (early) segments.
+                    // Scheduled-vs-actual delay: extend the block to the actual extent and
+                    // tint the late (red) / early (green) portions so it reads as ONE block.
                     const legId=leg._id?.$oid;
                     const act=(legId&&actuals[legId])||{};
                     const la=live[ac.tail];
                     const segs=delaySegments({dep,arr,actualDep:act.actualDep??null,actualArr:act.actualArr??null,depSource:act.depSource??null,arrSource:act.arrSource??null,now:nowTs,onGround:la?.onGround===true,airborne:isAirborne,airborneSinceMs:la?.airborneSinceMs??null});
+                    const extStart=segs.length?Math.min(dep,...segs.map(s=>s.from)):dep;
+                    const extEnd=segs.length?Math.max(arr,...segs.map(s=>s.to)):arr;
+                    const eblk=getBlock(extStart,extEnd)||blk;
                     return(
                       <React.Fragment key={legId||li}>
-                        {segs.map((s,si)=>{
-                          const sb=getBlock(s.from,s.to); if(!sb) return null;
-                          const c=s.kind==='late'?'239,68,68':'34,197,94'; // red late / green early
-                          return <div key={`d${si}`}
-                            style={{position:'absolute',left:sb.left+1,top:FLIGHT_TOP,width:Math.max(sb.width-2,2),height:FLIGHT_H,borderRadius:'5px',pointerEvents:'none',zIndex:7,border:`1px solid rgba(${c},0.85)`,background:s.approx?`repeating-linear-gradient(45deg,rgba(${c},0.55) 0 5px,rgba(${c},0.22) 5px 10px)`:`rgba(${c},0.5)`}}/>;
-                        })}
                       <div
                         onPointerDown={e=>e.stopPropagation()}
                         onClick={e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});}}
                         onMouseEnter={e=>{setHovered(leg);setTipPos({x:e.clientX,y:e.clientY});}}
                         onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                         onMouseLeave={()=>setHovered(null)}
-                        style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isAirborne?1:(isHov?1:0.85),boxShadow:isAirborne?undefined:(isHov?`0 2px 12px ${color}99`:'none'),border:isAirborne?`2px solid ${darker}`:`1px solid ${color}88`,...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?6:(isHov?5:2),display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:blk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
-                        {blk.width>60&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.8)',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0}}>{origin}</span>}
-                        {blk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
-                        {blk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{blk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
+                        style={{position:'absolute',left:eblk.left+1,top:FLIGHT_TOP,width:Math.max(eblk.width-2,3),height:FLIGHT_H,background:color,borderRadius:'5px',cursor:'pointer',opacity:isAirborne?1:(isHov?1:0.85),boxShadow:isAirborne?undefined:(isHov?`0 2px 12px ${color}99`:'none'),border:isAirborne?`2px solid ${darker}`:`1px solid ${color}88`,...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isAirborne?6:(isHov?5:2),display:'flex',alignItems:'center',justifyContent:'space-between',overflow:'hidden',padding:eblk.width>20?'0 6px':'0 2px',transition:'opacity .1s'}}>
+                        {eblk.width>60&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.8)',fontWeight:'500',whiteSpace:'nowrap',flexShrink:0}}>{origin}</span>}
+                        {eblk.width>100&&<span style={{fontSize:'10px',color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap',flex:1,textAlign:'center'}}>{Math.floor(mins/60)}h{mins%60>0?`${mins%60}m`:''}</span>}
+                        {eblk.width>40&&<span style={{fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:'2px'}}>{eblk.width>80&&<span style={{color:'rgba(255,255,255,0.6)',fontSize:'9px'}}>→</span>}{dest}</span>}
                       </div>
+                        {segs.map((s,si)=>{
+                          const sb=getBlock(s.from,s.to); if(!sb) return null;
+                          const c=s.kind==='late'?'239,68,68':'34,197,94'; // red late / green early
+                          const radius=s.edge==='dep'?'5px 0 0 5px':'0 5px 5px 0'; // round the OUTER edge, square the inner so it fuses to the block
+                          return <div key={`d${si}`}
+                            style={{position:'absolute',left:sb.left+1,top:FLIGHT_TOP,width:Math.max(sb.width-2,2),height:FLIGHT_H,borderRadius:radius,pointerEvents:'none',zIndex:8,background:s.approx?`repeating-linear-gradient(45deg,rgba(${c},0.6) 0 5px,rgba(${c},0.3) 5px 10px)`:`rgba(${c},0.55)`}}/>;
+                        })}
                       </React.Fragment>
                     );
                   })}
@@ -697,6 +705,23 @@ useEffect(() => {
                     <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Dep {hovered.departure?.airport}: {fmtTime(dep)} ET{depLocal&&fromTz!==ET?` · ${depLocal} local`:''}</p>
                     <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Arr {hovered.arrival?.airport}: {fmtTime(arr)} ET{arrLocal&&toTz!==ET?` · ${arrLocal} local`:''}</p>
                   </>);
+                })()}
+                {(()=>{
+                  const a=actuals[hovered._id?.$oid]; if(!a||(a.actualDep==null&&a.actualArr==null)) return null;
+                  const dep=hovered.departure?.time, arr=hovered.arrival?.time;
+                  const line=(label,act,sch,src)=>{
+                    if(act==null) return null;
+                    const m=sch!=null?Math.round((act-sch)/60000):null;
+                    const col=m>=5?'#ef4444':(m<=-5?'#22c55e':'var(--text-secondary)');
+                    const lbl=m==null?'':(Math.abs(m)<5?' · on time':(m>0?` · ${m} min late`:` · ${-m} min early`));
+                    const srcLbl=src==='crew'?' · pilot':src==='approx'?' · ADS-B est':src?' · ADS-B':'';
+                    return <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{label}: {fmtTime(act)} ET<span style={{color:col,fontWeight:'600'}}>{lbl}</span><span style={{color:'var(--text-secondary)',opacity:.7}}>{srcLbl}</span></p>;
+                  };
+                  return (<div style={{paddingTop:'7px',marginTop:'5px',borderTop:'1px dashed var(--border)',display:'flex',flexDirection:'column',gap:'4px'}}>
+                    <p style={{fontSize:'11px',fontWeight:'700',color:'var(--text-secondary)',letterSpacing:'.5px',margin:0}}>ACTUAL</p>
+                    {line('Dep',a.actualDep,dep,a.depSource)}
+                    {line('Arr',a.actualArr,arr,a.arrSource)}
+                  </div>);
                 })()}
                 {hovered._calc?._minutes>0&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{Math.floor(hovered._calc._minutes/60)}h {hovered._calc._minutes%60}m · {hovered._calc?.distance?.value||'—'} nm</p>}
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.dispatch?.client?.company?.name||'No client'}</p>
