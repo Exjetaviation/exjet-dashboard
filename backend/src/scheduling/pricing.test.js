@@ -59,3 +59,40 @@ test('recomputeFromInputs reprices from rate inputs (edit hourly rate, not total
   assert.equal(t.segmentFee, 42);
   assert.equal(t.total, 27175);
 });
+
+const baseInputs = {
+  hourlyRate: 8500, hours: 2, surchargePerHr: 1800, faFee: 700, faCount: 1,
+  crewFee: 0, crewCount: 0, landingFee: 0, landings: 2,
+  segmentPerPax: 0, pax: 4, overnightCost: 1500, fetRate: 0.075,
+};
+
+test('taxable ad-hoc fee is added to the FET base', () => {
+  const r = recomputeFromInputs({ ...baseInputs, fees: [{ amount: 1000, taxable: true }] });
+  assert.equal(r.fetBase, 23800);
+  assert.equal(r.fetAmount, Math.round(23800 * 0.075));
+});
+
+test('non-taxable fee is excluded from FET base but included in total', () => {
+  const r = recomputeFromInputs({ ...baseInputs, fees: [{ amount: 1000, taxable: false }] });
+  assert.equal(r.fetBase, 22800);
+  assert.equal(r.total, r.computedTotal);
+  assert.equal(r.total, 22800 + r.fetAmount + 1000);
+});
+
+test('FET toggle off zeroes the FET amount', () => {
+  const r = recomputeFromInputs({ ...baseInputs, fetEnabled: false });
+  assert.equal(r.fetAmount, 0);
+});
+
+test('totalOverride wins over the computed total', () => {
+  const r = recomputeFromInputs({ ...baseInputs, totalOverride: 25000 });
+  assert.equal(r.total, 25000);
+  assert.equal(r.totalOverride, 25000);
+  assert.notEqual(r.computedTotal, 25000);
+});
+
+test('default (no fees, no flags) keeps FET on — backward compatible', () => {
+  const r = recomputeFromInputs(baseInputs);
+  assert.equal(r.fetAmount, Math.round(r.fetBase * 0.075));
+  assert.equal(r.totalOverride, null);
+});

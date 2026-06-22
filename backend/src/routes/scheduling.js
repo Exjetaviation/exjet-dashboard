@@ -13,6 +13,7 @@ import { syncNativeLegStatus } from '../scheduling/nativeLegStatus.js';
 import { documentAlerts } from '../scheduling/docExpiry.js';
 import { rankPeople } from '../scheduling/peopleSearch.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
+import { nextQuoteNumber, nextTripNumber } from '../scheduling/numbering.js';
 import { recomputeFromInputs } from '../scheduling/pricing.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
@@ -150,7 +151,7 @@ router.get('/quotes', async (req, res) => {
   }
 });
 
-const TRIP_COLS = 'lf_oid, trip_number, status, locally_modified, upstream_changed, lf_synced_snapshot, origin, pricing';
+const TRIP_COLS = 'lf_oid, trip_number, quote_number, status, purpose, rate_name, company_name, contact, checklist, booked_by, booked_at, locally_modified, upstream_changed, lf_synced_snapshot, origin, pricing';
 
 // PostgREST returns code PGRST116 from .single() when no row matched.
 function isNotFound(error) {
@@ -172,6 +173,14 @@ function shapeTrip(row) {
     lf_oid: row.lf_oid,
     origin: row.origin,
     pricing: row.pricing,
+    quote_number: row.quote_number,
+    purpose: row.purpose,
+    rate_name: row.rate_name,
+    company_name: row.company_name,
+    contact: row.contact,
+    checklist: row.checklist || null,
+    booked_by: row.booked_by,
+    booked_at: row.booked_at,
     trip_number: row.trip_number,
     status: row.status,
     status_label: statusLabel(row.status),
@@ -209,12 +218,12 @@ async function buildNativeLegRows(tripId, ctx, inputLegs) {
 }
 
 // Price a native trip from its input legs (best-effort) and persist the breakdown.
-async function priceAndStore(tripId, aircraft_tail, inputLegs) {
+async function priceAndStore(tripId, aircraft_tail, inputLegs, purpose = null) {
   try {
     const pricing = await priceQuoteLegs({
       tail: aircraft_tail, aircraftType: null,
       legs: inputLegs.map((l) => ({ dep_icao: (l.dep_icao || '').trim().toUpperCase(), arr_icao: (l.arr_icao || '').trim().toUpperCase(), pax: Number(l.pax) || 0, isPositioning: !!l.positioning })),
-      nights: 0,
+      nights: 0, purpose,
     });
     await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', tripId);
   } catch (pe) { console.warn('[scheduling price] failed:', pe?.message || pe); }
@@ -232,10 +241,15 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     const inputLegs = Array.isArray(body.legs) ? body.legs : [];
     if (!inputLegs.length) return res.status(400).json({ error: 'A trip needs at least one leg.' });
 
+    const purpose = (body.purpose || '').trim() || null;          // 'owner' | 'charter' | null
+    const company_name = (body.company_name || '').trim() || null;
+    const contact = body.contact && typeof body.contact === 'object' && !Array.isArray(body.contact) ? body.contact : null;
+    const quote_number = await nextQuoteNumber();
+
     const status = 'quote';
     const { data: trip, error: e1 } = await supabase
       .from('scheduling_trips')
-      .insert({ origin: 'native', status, trip_number, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
+      .insert({ origin: 'native', status, trip_number, quote_number: String(quote_number), purpose, company_name, contact, modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
       .select('id, ' + TRIP_COLS).single();
     if (e1) throw e1;
 
@@ -244,7 +258,7 @@ router.post('/trips', requireSchedulingEditor, async (req, res) => {
     const { error: e2 } = await supabase.from('scheduling_legs').insert(legRows);
     if (e2) throw e2;
 
-    await priceAndStore(trip.id, aircraft_tail, inputLegs);
+    await priceAndStore(trip.id, aircraft_tail, inputLegs, purpose);
 
     res.status(201).json({ id: trip.id, trip: shapeTrip(trip) });
   } catch (e) {
@@ -260,7 +274,7 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
   try {
     const col = tripColumn(req.params.lfOid);
     const { data: trip, error } = await supabase
-      .from('scheduling_trips').select('id, origin, trip_number, status').eq(col, req.params.lfOid).single();
+      .from('scheduling_trips').select('id, origin, trip_number, status, purpose').eq(col, req.params.lfOid).single();
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
     if (trip.origin !== 'native') return res.status(400).json({ error: 'Only trips created here can have their details edited.' });
 
@@ -279,7 +293,7 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
     if (ie) throw ie;
 
     await supabase.from('scheduling_trips').update({ modified_at: new Date().toISOString(), modified_by: req.user?.email || null }).eq('id', trip.id);
-    await priceAndStore(trip.id, aircraft_tail, inputLegs);
+    await priceAndStore(trip.id, aircraft_tail, inputLegs, trip.purpose);
     res.json({ ok: true });
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid/details:', e.message);
@@ -331,7 +345,7 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
     if (!isSettableStatus(status)) return res.status(400).json({ error: 'invalid status' });
     const col = tripColumn(req.params.lfOid);
     const { data: cur, error: e0 } = await supabase
-      .from('scheduling_trips').select('status, origin').eq(col, req.params.lfOid).single();
+      .from('scheduling_trips').select('status, origin, trip_number').eq(col, req.params.lfOid).single();
     if (e0) {
       if (isNotFound(e0)) return res.status(404).json({ error: 'Trip not found' });
       throw e0;
@@ -339,9 +353,16 @@ router.patch('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
     if (!isValidTransition(cur.status, status)) {
       return res.status(409).json({ error: `Cannot move to ${statusLabel(status)} from ${statusLabel(cur.status)}.` });
     }
+    const extra = {};
+    if (status === 'booked') {
+      extra.booked_by = req.user?.email || null;
+      extra.booked_at = new Date().toISOString();
+      // assign a Trip# once, only if it doesn't already have one (read from the preflight `cur`)
+      if (!cur.trip_number) extra.trip_number = String(await nextTripNumber());
+    }
     const { data, error } = await supabase
       .from('scheduling_trips')
-      .update({ status, locally_modified: cur.origin === 'levelflight', modified_at: new Date().toISOString(), modified_by: req.user?.email || null })
+      .update({ status, locally_modified: cur.origin === 'levelflight', modified_at: new Date().toISOString(), modified_by: req.user?.email || null, ...extra })
       .eq(col, req.params.lfOid)
       .select('id, ' + TRIP_COLS).single();
     if (error) {
@@ -428,7 +449,7 @@ router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => 
   try {
     const col = tripColumn(req.params.lfOid);
     const { data: trip, error } = await supabase
-      .from('scheduling_trips').select('id, lf_oid, status').eq(col, req.params.lfOid).single();
+      .from('scheduling_trips').select('id, lf_oid, status, purpose').eq(col, req.params.lfOid).single();
     if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
     const { data: legs, error: le } = await supabase
       .from('scheduling_legs').select('dep_icao, arr_icao, lf_synced_snapshot').eq('trip_id', trip.id).order('seq');
@@ -443,7 +464,7 @@ router.post('/trips/:lfOid/price', requireSchedulingEditor, async (req, res) => 
         pax: l.lf_synced_snapshot?.passengerCount || 0,
         isPositioning: !!l.lf_synced_snapshot?.isPositioning,
       })),
-      nights,
+      nights, purpose: trip.purpose,
     });
     await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', trip.id);
     res.json({ pricing });
@@ -470,6 +491,9 @@ router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, r
       landingFee: pick('landingFee'), landings: pick('landings'),
       segmentPerPax: pick('segmentPerPax'), pax: pick('pax'), overnightCost: pick('overnightCost'),
       fetRate: base.fetRate || 0,
+      fees: Array.isArray(b.fees) ? b.fees : (base.fees || []),
+      fetEnabled: b.fetEnabled === undefined ? (base.fetEnabled !== false) : !!b.fetEnabled,
+      totalOverride: b.totalOverride === undefined ? (base.totalOverride ?? null) : b.totalOverride,
     };
     const pricing = { ...base, ...inputs, ...recomputeFromInputs(inputs), manual: true };
     await supabase.from('scheduling_trips').update({ pricing }).eq('id', trip.id);
@@ -511,6 +535,29 @@ router.patch('/trips/:lfOid/crew', requireSchedulingEditor, async (req, res) => 
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid/crew:', e.message);
     res.status(500).json({ error: 'Failed to assign crew' });
+  }
+});
+
+// PATCH /api/scheduling/trips/:lfOid/checklist — persist the dispatch checklist booleans.
+router.patch('/trips/:lfOid/checklist', requireSchedulingEditor, async (req, res) => {
+  try {
+    const col = tripColumn(req.params.lfOid);
+    const { data: trip, error } = await supabase
+      .from('scheduling_trips').select('id, checklist').eq(col, req.params.lfOid).single();
+    if (error) { if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' }); throw error; }
+    const b = req.body || {};
+    const bool = (k, prev) => (typeof b[k] === 'boolean' ? b[k] : !!prev);
+    const prev = trip.checklist || {};
+    const checklist = {
+      contractReceived: bool('contractReceived', prev.contractReceived),
+      paymentReceived: bool('paymentReceived', prev.paymentReceived),
+      paymentProcessed: bool('paymentProcessed', prev.paymentProcessed),
+    };
+    await supabase.from('scheduling_trips').update({ checklist }).eq('id', trip.id);
+    res.json({ checklist });
+  } catch (e) {
+    console.error('PATCH /api/scheduling/trips/:lfOid/checklist:', e.message);
+    res.status(500).json({ error: 'Failed to save checklist' });
   }
 });
 
