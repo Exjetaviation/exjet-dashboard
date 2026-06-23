@@ -27,3 +27,12 @@ test('defaults: disabled, 60s interval, empty lists', () => {
   assert.equal(cfg.intervalMs, 60000);
   assert.deepEqual(cfg.opsMembers, []);
 });
+
+test('enabled flag accepts common truthy spellings, rejects others', () => {
+  for (const v of ['on', 'ON', 'On', 'true', 'TRUE', '1', 'yes', ' on ']) {
+    assert.equal(parseSlackConfig({ SLACK_TRIP_CHANNELS: v }).enabled, true, `expected ${JSON.stringify(v)} -> enabled`);
+  }
+  for (const v of ['off', 'false', '0', '', 'enabled']) {
+    assert.equal(parseSlackConfig({ SLACK_TRIP_CHANNELS: v }).enabled, false, `expected ${JSON.stringify(v)} -> disabled`);
+  }
+});
