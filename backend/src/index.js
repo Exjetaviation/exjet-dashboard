@@ -18,6 +18,7 @@ import { startRecorder } from './services/adsbRecorder.js';
 import { startReconciler } from './services/flightTrackReconciler.js';
 import schedulingRoutes from './routes/scheduling.js';
 import { startSyncWorker } from './scheduling/syncWorker.js';
+import { startSlackWatcher } from './slack/slackWatcher.js';
 
 // Load QB refresh token from Supabase on startup
 (async () => {
@@ -74,4 +75,5 @@ app.listen(PORT, () => {
   startRecorder();
   startReconciler();
   startSyncWorker();
+  startSlackWatcher();
 });
