@@ -675,6 +675,14 @@ export default function SchedulingTripDetail() {
 
         <Section title="Documents">
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
+              <a href={`${API_BASE}/quote/${id}`} target="_blank" rel="noopener noreferrer"
+                style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none' }}>View Quote ↗</a>
+              <a href={`${API_BASE}/quote/${id}/pdf`} target="_blank" rel="noopener noreferrer"
+                style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Quote PDF ↗</a>
+              <button onClick={() => navigator.clipboard?.writeText(`${API_BASE}/quote/${id}`)}
+                style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Copy client link</button>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <select value={docType} onChange={(e) => setDocType(e.target.value)} style={{ ...inp }}>
                 <option value="contract">Contract</option>
