@@ -93,15 +93,19 @@ function LegRow({ leg, i, total, onUpdate, onRemove }) {
 export default function SchedulingNewTrip() {
   const navigate = useNavigate();
   const [tail, setTail] = useState(FLEET[0]);
-  const [customer, setCustomer] = useState('');
   const [tripNumber, setTripNumber] = useState('');
   const [legs, setLegs] = useState([blankLeg()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [addingClient, setAddingClient] = useState(false);
   // Clients we've worked with, derived from the mirror (companies on synced trips).
   const { data: legsData } = useApi('/api/scheduling/legs');
   const clients = distinctClients(legsData?.legs || []);
+  const { data: rateCards } = useApi('/api/rate-cards');
+  const fleet = [...new Set((Array.isArray(rateCards) ? rateCards : []).map((c) => c.aircraft_tail).filter(Boolean))];
+  const FLEET_OPTIONS = fleet.length ? fleet : FLEET;
+  const [purpose, setPurpose] = useState('charter');
+  const [company, setCompany] = useState('');
+  const [contact, setContact] = useState({ name: '', email: '', phone: '' });
 
   const updateLeg = (i, field, value) => setLegs((ls) => ls.map((l, idx) => {
     if (idx === i) return { ...l, [field]: value };
@@ -121,9 +125,15 @@ export default function SchedulingNewTrip() {
     if (!cleaned.length) { setError('Add at least one leg with a From and To airport.'); return; }
     setBusy(true);
     try {
+      const hasContact = contact.name || contact.email || contact.phone;
       const r = await apiFetch('/api/scheduling/trips', {
         method: 'POST',
-        body: JSON.stringify({ aircraft_tail: tail, customer_name: customer, trip_number: tripNumber, legs: cleaned }),
+        body: JSON.stringify({
+          aircraft_tail: tail, purpose,
+          customer_name: company, company_name: company,
+          contact: hasContact ? contact : null,
+          trip_number: tripNumber, legs: cleaned,
+        }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `Create failed (${r.status})`);
@@ -144,33 +154,32 @@ export default function SchedulingNewTrip() {
       )}
 
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 160px' }}>
+        <div style={{ flex: '1 1 150px' }}>
           <label style={labelStyle}>Aircraft</label>
           <select value={tail} onChange={(e) => setTail(e.target.value)} style={inputStyle}>
-            {FLEET.map((t) => <option key={t} value={t}>{t}</option>)}
+            {FLEET_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-        <div style={{ flex: '2 1 240px' }}>
-          <label style={labelStyle}>Customer</label>
-          {addingClient ? (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="New client name" autoFocus style={inputStyle} />
-              <button type="button" onClick={() => { setAddingClient(false); setCustomer(''); }} title="Choose an existing client"
-                style={{ flexShrink: 0, padding: '0 10px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>↩</button>
-            </div>
-          ) : (
-            <select value={customer}
-              onChange={(e) => { if (e.target.value === '__new__') { setAddingClient(true); setCustomer(''); } else setCustomer(e.target.value); }}
-              style={inputStyle}>
-              <option value="">Select a client…</option>
-              {clients.map((c) => <option key={c.name} value={c.name}>{c.name}{c.wholesale ? ' · wholesale' : ''}</option>)}
-              <option value="__new__">+ Add new client…</option>
-            </select>
-          )}
+        <div style={{ flex: '1 1 140px' }}>
+          <label style={labelStyle}>Purpose</label>
+          <select value={purpose} onChange={(e) => setPurpose(e.target.value)} style={inputStyle}>
+            <option value="charter">Charter</option>
+            <option value="owner">Owner</option>
+          </select>
+        </div>
+        <div style={{ flex: '2 1 220px' }}>
+          <label style={labelStyle}>Company</label>
+          <input list="nq-clients" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or client" style={inputStyle} />
+          <datalist id="nq-clients">{clients.map((c) => <option key={c.name} value={c.name} />)}</datalist>
         </div>
         <div style={{ flex: '1 1 140px' }}>
           <label style={labelStyle}>Trip # (optional)</label>
           <input value={tripNumber} onChange={(e) => setTripNumber(e.target.value)} placeholder="auto" style={inputStyle} />
+        </div>
+        <div style={{ flex: '1 1 100%', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 180px' }}><label style={labelStyle}>Contact name</label><input value={contact.name} onChange={(e) => setContact((c) => ({ ...c, name: e.target.value }))} placeholder="Jane Smith" style={inputStyle} /></div>
+          <div style={{ flex: '1 1 180px' }}><label style={labelStyle}>Contact email</label><input value={contact.email} onChange={(e) => setContact((c) => ({ ...c, email: e.target.value }))} placeholder="jane@company.com" style={inputStyle} /></div>
+          <div style={{ flex: '1 1 140px' }}><label style={labelStyle}>Contact phone</label><input value={contact.phone} onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value }))} placeholder="(305) 555-0100" style={inputStyle} /></div>
         </div>
       </div>
 
