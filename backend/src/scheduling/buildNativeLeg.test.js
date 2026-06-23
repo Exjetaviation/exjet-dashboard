@@ -35,3 +35,16 @@ test('buildNativeLegSnapshot carries pax and positioning for re-pricing', () => 
   assert.equal(snap.passengerCount, 3);
   assert.equal(snap.isPositioning, true);
 });
+
+test('buildNativeLegSnapshot carries dep/arr FBO when provided', () => {
+  const fbo = { fbo_id: '1039', name: 'BANYAN AIR SERVICE', address: { city: 'FORT LAUDERDALE' }, phones: ['800-200-2031'], comms: { arinc: '129.85' }, crewNote: null };
+  const snap = buildNativeLegSnapshot({ dep_icao: 'KFXE', arr_icao: 'KTEB', dep_fbo: fbo, arr_fbo: null }, { id: 't1' });
+  assert.deepEqual(snap.departure.fbo, fbo);
+  assert.equal(snap.arrival.fbo, null);
+});
+
+test('buildNativeLegSnapshot fbo defaults to null', () => {
+  const snap = buildNativeLegSnapshot({ dep_icao: 'KFXE', arr_icao: 'KTEB' }, { id: 't1' });
+  assert.equal(snap.departure.fbo, null);
+  assert.equal(snap.arrival.fbo, null);
+});
