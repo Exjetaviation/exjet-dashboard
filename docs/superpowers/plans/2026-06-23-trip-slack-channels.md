@@ -29,7 +29,7 @@
 - `backend/src/services/slackOverrideStore.js` — soft-fail read of `slack_user_overrides`.
 - `backend/src/services/tripCrewStore.js` — soft-fail read of leg snapshots for a dispatch.
 - `backend/src/slack/slackWatcher.js` — opt-in boot + interval; composes real adapters.
-- `backend/migrations/018_slack_trip_channels.sql` — the two tables.
+- `backend/migrations/020_slack_trip_channels.sql` — the two tables.
 
 **Modify:**
 - `backend/src/index.js` — call `startSlackWatcher()` alongside the other workers.
@@ -44,14 +44,14 @@ node --test backend/src/slack/*.test.js backend/src/services/*.test.js
 ## Task 1: Migration — `trip_slack_channels` + `slack_user_overrides`
 
 **Files:**
-- Create: `backend/migrations/018_slack_trip_channels.sql`
+- Create: `backend/migrations/020_slack_trip_channels.sql`
 
 Migrations are applied MANUALLY in the Supabase SQL editor (no runner). This task only writes and commits the SQL; the user applies it during rollout (Task 12). Stores soft-fail until it's applied.
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 018_slack_trip_channels.sql
+-- 020_slack_trip_channels.sql
 -- Auto-provisioned Slack channels per LevelFlight trip (ops + accounting),
 -- plus a manual LF-email -> Slack-user override map for crew whose emails differ.
 
@@ -77,7 +77,7 @@ create table if not exists slack_user_overrides (
 - [ ] **Step 2: Commit**
 
 ```bash
-git add backend/migrations/018_slack_trip_channels.sql
+git add backend/migrations/020_slack_trip_channels.sql
 git commit -m "feat(slack): migration 018 — trip_slack_channels + slack_user_overrides"
 ```
 
@@ -1226,7 +1226,7 @@ git commit -m "feat(slack): opt-in trip-channel watcher, wired into server boot"
 
 This subsystem is dark until `SLACK_TRIP_CHANNELS=on`. Verify in order:
 
-- [ ] **Step 1: Apply migration 018.** Paste `backend/migrations/018_slack_trip_channels.sql` into the Supabase SQL editor and run it. Confirm both tables exist.
+- [ ] **Step 1: Apply migration 020.** Paste `backend/migrations/020_slack_trip_channels.sql` into the Supabase SQL editor and run it. Confirm both tables exist.
 
 - [ ] **Step 2: Create the Slack app + bot token.** Scopes: `groups:write`, `channels:manage`, `chat:write`, `users:read.email`. Install to the workspace; copy the bot token (`xoxb-…`). Invite the bot to the workspace. Set env on Railway: `SLACK_BOT_TOKEN`.
 
