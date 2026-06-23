@@ -11,12 +11,23 @@
 
 const oid = (v) => (v && typeof v === 'object' ? v.$oid : v) || null;
 
+// The dollar total exactly as LevelFlight bills it. `price.total` is LF's
+// authoritative final figure and reflects a MANUAL OVERRIDE/rework when set;
+// `breakdown.override` is that override. `breakdown.calculatedTotal` is only the
+// auto-computed number and goes STALE when a quote is reworked, so it must be the
+// LAST resort — never the first (that was the "stuck on the old price" bug).
+export function quoteTotal(price) {
+  if (!price) return null;
+  const b = price.breakdown || {};
+  if (price.total != null) return price.total;
+  if (b.override != null && b.override !== 0) return b.override;
+  return b.calculatedTotal ?? null;
+}
+
 export function mapDispatchToQuote(d) {
   const dispatchId = oid(d?._id);
   const internal = d?._internal || {};
-  const total = internal?.price?.breakdown?.calculatedTotal
-    ?? internal?.price?.total
-    ?? null;
+  const total = quoteTotal(internal?.price);
 
   const depTime = internal?.order ?? null;
   const arrTime = internal?.end ?? null;

@@ -13,6 +13,8 @@ export default function Quotes() {
   const [html, setHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState('date'); // 'date' | 'quote'
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
@@ -31,22 +33,46 @@ export default function Quotes() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing preview to selected quote
     if (!sel) { setHtml(''); return; }
     let on = true; setPreviewLoading(true);
-    apiFetch(`/api/quotes/dispatch/${sel}/preview`).then((r) => r.text()).then((t) => { if (on) { setHtml(t); setPreviewLoading(false); } }).catch(() => { if (on) { setHtml('<p style="color:#fff;padding:20px">Preview failed</p>'); setPreviewLoading(false); } });
+    // reloadKey busts both the effect (re-runs for the same selection) and any browser cache of the GET.
+    apiFetch(`/api/quotes/dispatch/${sel}/preview?r=${reloadKey}`).then((r) => r.text()).then((t) => { if (on) { setHtml(t); setPreviewLoading(false); } }).catch(() => { if (on) { setHtml('<p style="color:#fff;padding:20px">Preview failed</p>'); setPreviewLoading(false); } });
     return () => { on = false; };
-  }, [sel]);
+  }, [sel, reloadKey]);
 
   const downloadPdf = async () => {
     if (!sel) return;
     setPdfBusy(true);
     try {
       const r = await apiFetch(`/api/quotes/dispatch/${sel}/pdf`);
+      // Don't save error responses as a .pdf (that's what makes a "damaged" file) —
+      // surface the reason instead. A real PDF comes back as application/pdf.
+      const ct = r.headers.get('content-type') || '';
+      if (!r.ok || !ct.includes('pdf')) {
+        let msg = `PDF failed (HTTP ${r.status})`;
+        try { const j = await r.json(); if (j?.error) msg += `: ${j.error}`; } catch { /* non-JSON body */ }
+        setEmailMsg(msg);
+        setPdfBusy(false);
+        return;
+      }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const qn = rows.find((q) => q.dispatchId === sel)?.quoteNumber;
       const a = document.createElement('a'); a.href = url; a.download = `exjet-quote-${qn || sel}.pdf`;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    } catch { /* ignore */ }
+    } catch (e) { setEmailMsg(`PDF failed: ${e?.message || 'network error'}`); }
     setPdfBusy(false);
+  };
+
+  // Re-pull fresh prices from LevelFlight: bypass the server's 5-min list cache so
+  // the sidebar totals update, then force-reload the open preview so its TOTAL updates.
+  const rescan = async () => {
+    setRescanning(true);
+    try {
+      const r = await apiFetch('/api/quotes/list?refresh=1');
+      const j = await r.json();
+      setRows(j.quotes || []);
+    } catch { /* ignore */ }
+    setReloadKey((k) => k + 1);
+    setRescanning(false);
   };
 
   const copyLink = () => {
@@ -118,6 +144,9 @@ export default function Quotes() {
               <div style={{ display: 'flex', gap: 8, padding: 10, borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={downloadPdf} disabled={pdfBusy} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
                   {pdfBusy ? 'Generating…' : 'Download PDF'}
+                </button>
+                <button onClick={rescan} disabled={rescanning} title="Re-pull the latest price from LevelFlight" style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: rescanning ? 'default' : 'pointer' }}>
+                  {rescanning ? 'Rescanning…' : 'Rescan price'}
                 </button>
                 <button onClick={copyLink} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Copy client link</button>
                 <button onClick={() => { setEmailOpen((o) => !o); setEmailMsg(''); }} style={{ padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Email link</button>

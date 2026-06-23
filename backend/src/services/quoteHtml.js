@@ -67,11 +67,13 @@ export function renderQuoteHtml(vm, { print = false, web = false } = {}) {
   .sign { display:flex; gap:24px; padding:18px 30px 10px; } .sign div { flex:1; } .sign .ln { height:1px; background:#33425c; } .sign .lbl { font-size:10px; color:#8a98ad; margin-top:5px; }
   .webbar { display:flex; justify-content:flex-end; padding:10px 30px 0; }
   .webbtn { font-size:12px; padding:8px 14px; border-radius:8px; background:#1a2436; border:1px solid #8893a5; color:#e8edf4; text-decoration:none; }
+  .pdfdl { display:block; text-align:center; margin:-14px 30px 24px; font-size:12px; color:#9fb0c6; text-decoration:none; }
+  .pdfdl:hover { color:#e8edf4; }
   .cta { margin:8px 30px 26px; padding:14px; text-align:center; border-radius:9px; background:linear-gradient(90deg,#cfd6e0,#aab4c2); color:#0b1018; font-weight:700; letter-spacing:3px; font-size:13px; text-decoration:none; display:block; }
   ${print ? '.terms{break-before:page;} .terms summary span:last-child{display:none;} .leg,.total,.sign,.hero{break-inside:avoid;page-break-inside:avoid;} .sec{break-after:avoid;page-break-after:avoid;}' : ''}
 </style></head>
 <body><div class="page">
-  ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}">Download PDF</a></div>` : ''}
+  ${web && vm.pdfUrl ? `<div class="webbar"><a class="webbtn" href="${esc(vm.pdfUrl)}" target="_blank" rel="noopener">Download PDF</a></div>` : ''}
   <div class="hdr">
     <div>${LOGO_DATA_URI ? `<img class="logo" src="${LOGO_DATA_URI}" alt="Exjet">` : '<div class="tail">EXJET</div>'}
       <div class="addr">4250 Execuair Street, Suite G · Orlando, FL 32827<br>+1 (407) 677-7792</div></div>
@@ -91,6 +93,7 @@ export function renderQuoteHtml(vm, { print = false, web = false } = {}) {
   <div class="total"><span class="l">TOTAL</span><span class="v">${money(vm.total)}</span></div>
   <div class="sign"><div><div class="ln"></div><div class="lbl">Accepted by</div></div><div><div class="ln"></div><div class="lbl">Print name</div></div><div style="flex:0 0 130px"><div class="ln"></div><div class="lbl">Date</div></div></div>
   ${vm.acceptUrl ? `<a class="cta" href="${esc(vm.acceptUrl)}">REQUEST TO BOOK &#8594;</a>` : '<div class="cta" style="opacity:.5">BOOKING LINK UNAVAILABLE</div>'}
+  ${web && vm.pdfUrl ? `<a class="pdfdl" href="${esc(vm.pdfUrl)}" target="_blank" rel="noopener">&#8681; Download PDF</a>` : ''}
   <div class="terms"><details ${print ? 'open' : ''}><summary><span>TERMS &amp; CONDITIONS</span><span style="float:right;color:#8893a5">tap to expand &#9662;</span></summary><div class="body">${QUOTE_TERMS_HTML}</div></details></div>
 </div>
 <script>${mapScript(vm)}</script>

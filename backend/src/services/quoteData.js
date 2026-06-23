@@ -2,7 +2,7 @@
 // public client routes). The per-dispatch flightLog returns FULL legs (airports,
 // times, distance, EFT, inline _calc.from/to.location coords).
 import { getTripLog } from './levelflight.js';
-import { mapLegDetail } from './quoteMap.js';
+import { mapLegDetail, quoteTotal } from './quoteMap.js';
 
 export const ACCEPT_BASE = 'https://api.levelflight.com/client';
 
@@ -18,7 +18,7 @@ export async function buildViewModel(dispatchId) {
     tail: ac?.tailNumber ?? null,
     aircraftType: ac?.type?.name ?? null,
     maxPax: ac?.paxSeats ?? null,
-    total: internal?.price?.breakdown?.calculatedTotal ?? internal?.price?.total ?? null,
+    total: quoteTotal(internal?.price),
     amenities: ['Flight Attendant', 'WIFI'],
     preparedOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     acceptUrl: `${ACCEPT_BASE}/${dispatchId}/accept`,

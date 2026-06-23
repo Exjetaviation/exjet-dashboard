@@ -21,7 +21,11 @@ export async function renderQuotePdf(html, { waitForMapReady = true } = {}) {
       await page.waitForFunction('window.__mapReady === true', { timeout: 15000 })
         .catch(() => console.warn('[quotePdf] map not ready before print (rendering without it)'));
     }
-    return await page.pdf({ format: 'Letter', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
+    // puppeteer-core's page.pdf() returns a Uint8Array, NOT a Buffer. Express's
+    // res.send() serializes a non-Buffer object as JSON, producing a corrupt
+    // "damaged" PDF. Wrap in Buffer so every caller sends real binary.
+    const bytes = await page.pdf({ format: 'Letter', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
+    return Buffer.from(bytes);
   } finally {
     await browser.close();
   }

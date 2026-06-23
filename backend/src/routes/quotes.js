@@ -125,8 +125,8 @@ router.delete('/:id', async (req, res) => {
 // LevelFlight has ~1000 dispatches, so paginate fully but don't refetch per request.
 let _listCache = { at: 0, data: null };
 const LIST_TTL_MS = 5 * 60 * 1000;
-async function getAllDispatches() {
-  if (_listCache.data && Date.now() - _listCache.at < LIST_TTL_MS) return _listCache.data;
+async function getAllDispatches(force = false) {
+  if (!force && _listCache.data && Date.now() - _listCache.at < LIST_TTL_MS) return _listCache.data;
   const all = [];
   const CHUNK = 8;
   let page = 1, done = false;
@@ -145,9 +145,10 @@ async function getAllDispatches() {
 }
 
 // GET /api/quotes/list — all LevelFlight quotes as summary rows (all pages).
+// ?refresh=1 bypasses the 5-min cache to re-pull fresh prices from LevelFlight.
 router.get('/list', async (req, res) => {
   try {
-    const dispatches = await getAllDispatches();
+    const dispatches = await getAllDispatches(req.query.refresh === '1');
     const rows = dispatches.map((d) => {
       const q = mapDispatchToQuote(d);
       const first = q.legs[0] || {}; const last = q.legs[q.legs.length - 1] || {};
