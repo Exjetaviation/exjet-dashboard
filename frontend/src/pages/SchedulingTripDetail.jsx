@@ -8,6 +8,7 @@ import { useApi } from '../hooks/useApi';
 import TripTabs from '../components/trip/TripTabs';
 import TripInfoCard from '../components/trip/TripInfoCard';
 import TripActionsRail from '../components/trip/TripActionsRail';
+import FboPicker from '../components/trip/FboPicker';
 import { recomputeInputs } from '../lib/feesMath';
 import { FEE_CODES } from '../lib/feeCatalog';
 
@@ -299,6 +300,7 @@ export default function SchedulingTripDetail() {
     legs: (legsForView.length ? legsForView : [{}]).map((l) => ({
       dep_icao: l.departure?.airport || '', arr_icao: l.arrival?.airport || '',
       dep_time: toLocalInput(l.departure?.time), pax: l.passengerCount || '', positioning: !!l.isPositioning,
+      dep_fbo: l.departure?.fbo || null, arr_fbo: l.arrival?.fbo || null,
     })),
   });
   const updateEditLeg = (i, field, v) => setDetailsEdit((d) => ({ ...d, legs: d.legs.map((l, idx) => (idx === i ? { ...l, [field]: v } : l)) }));
@@ -401,6 +403,8 @@ export default function SchedulingTripDetail() {
                 <div style={{ flex: '1 1 180px' }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Departure</label><input type="datetime-local" value={l.dep_time} onChange={(e) => updateEditLeg(i, 'dep_time', e.target.value)} style={{ ...inp, width: '100%' }} /></div>
                 <div style={{ flex: '0 1 64px' }}><label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Pax</label><input type="number" min="0" value={l.pax} onChange={(e) => updateEditLeg(i, 'pax', e.target.value)} placeholder="0" style={{ ...inp, width: '100%' }} /></div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-secondary)', paddingBottom: 8 }}><input type="checkbox" checked={l.positioning} onChange={(e) => updateEditLeg(i, 'positioning', e.target.checked)} /> Ferry</label>
+                <FboPicker label="Dep FBO" icao={l.dep_icao} value={l.dep_fbo} onChange={(fbo) => updateEditLeg(i, 'dep_fbo', fbo)} />
+                <FboPicker label="Arr FBO" icao={l.arr_icao} value={l.arr_fbo} onChange={(fbo) => updateEditLeg(i, 'arr_fbo', fbo)} />
                 <button onClick={() => removeEditLeg(i)} disabled={detailsEdit.legs.length === 1} title="Remove leg" style={{ padding: '7px 9px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: detailsEdit.legs.length === 1 ? 'default' : 'pointer' }}>✕</button>
               </div>
             ))}
