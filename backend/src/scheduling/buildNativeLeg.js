@@ -10,14 +10,14 @@ function toMs(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-// leg:  { dep_icao, arr_icao, dep_time, arr_time, seq }
+// leg:  { dep_icao, arr_icao, dep_time, arr_time, seq, dep_fbo, arr_fbo }
 // trip: { id, trip_number, status, aircraft_tail, customer_name }
 export function buildNativeLegSnapshot(leg = {}, trip = {}) {
   const status = trip.status ?? 'quote';
   return {
     _id: { $oid: `${trip.id}:${leg.seq ?? 0}` },
-    departure: { airport: leg.dep_icao || null, time: toMs(leg.dep_time) },
-    arrival: { airport: leg.arr_icao || null, time: toMs(leg.arr_time) },
+    departure: { airport: leg.dep_icao || null, time: toMs(leg.dep_time), fbo: leg.dep_fbo || null },
+    arrival: { airport: leg.arr_icao || null, time: toMs(leg.arr_time), fbo: leg.arr_fbo || null },
     dispatch: {
       _id: { $oid: trip.id ?? null },
       tripId: trip.trip_number ?? null,
