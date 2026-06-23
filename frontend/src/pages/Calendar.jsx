@@ -28,13 +28,13 @@ function legStateColor(leg, isAirborne, act, now) {
 }
 // Row geometry — derived top-down so every row is uniform and nothing floats:
 //   ┌───────────────────────────┐  y=0
-//   │  flight area (legs/duty)  │
-//   ├───────────────────────────┤  y=MX_BASE_TOP
-//   │  maintenance strip (16px) │
-//   └───────────────────────────┘  y=ROW_H  (bottom-anchored)
+//   │ ······· (13px gap) ······· │
+//   │  maintenance band (38px)  │  ← same extent as the actual-flight bar (60% of row, centered)
+//   │ ······· (13px gap) ······· │
+//   └───────────────────────────┘  y=ROW_H
 const ROW_H=64, HDR_H=48, LABEL_W=120;
-const MX_AREA_H=16;                            // maintenance strip height (original compact strip)
-const MX_BASE_TOP=ROW_H-MX_AREA_H;             // 48 — strip is the bottom MX_AREA_H of the row
+const MX_AREA_H=Math.round(ROW_H*0.6);         // 38 — matches the actual-flight bar height (60% of row)
+const MX_BASE_TOP=Math.round(ROW_H*0.2);       // 13 — matches the actual-flight bar top (centered, 13px gaps)
 const MX_LANE_GAP=1;
 const MX_MIN_LANE_H=5;                         // floor; thinner lanes collapse into +N more
 const MX_MAX_VISIBLE_LANES=Math.max(1, Math.floor((MX_AREA_H+MX_LANE_GAP)/(MX_MIN_LANE_H+MX_LANE_GAP)));
@@ -250,6 +250,12 @@ useEffect(() => {
   const maintMaxLanes = {};
   maintEvents.forEach(ev => {
     if (!ev?.aircraft_tail || ev.start_time == null || ev.end_time == null) return;
+    // Only lane-assign orders that actually fall in the visible window (mirror getBlock's
+    // range test). An off-window order (e.g. a past or long-running open one) must NOT
+    // inflate the lane count — that was the bug: a lone visible order on a tail with another
+    // off-screen order got squished to half-height and pinned to the top lane instead of
+    // occupying the full centered band.
+    if (ev.end_time < rangeStart || ev.start_time > rangeEnd) return;
     (maintByTail[ev.aircraft_tail] ||= []).push(ev);
   });
   Object.keys(maintByTail).forEach(tail => {
@@ -488,8 +494,8 @@ useEffect(() => {
                     if (items.length === 0) return null;
                     const totalLanes   = maintMaxLanes[ac.tail] || 1;
                     const visibleLanes = Math.min(totalLanes, MX_MAX_VISIBLE_LANES);
-                    // Every case divides the full strip evenly. 1 lane = full 32px block,
-                    // anchored to the row's bottom edge via MX_BASE_TOP = ROW_H - MX_AREA_H.
+                    // Every case divides the full band evenly. 1 lane = a block the same size as the
+                    // actual-flight bar — 60% of the row, centered (MX_BASE_TOP = round(ROW_H*0.2)).
                     const laneH        = (MX_AREA_H - (visibleLanes - 1) * MX_LANE_GAP) / visibleLanes;
                     // Always show the title; scale font down so it still fits in thin stacked lanes.
                     const fontSize     = laneH >= 14 ? 10 : laneH >= 11 ? 9 : laneH >= 8 ? 8 : 7;
@@ -526,7 +532,7 @@ useEffect(() => {
 
                       return (
                         <div key={`mx-${mi}`} {...handlers}
-                          style={{ position: 'absolute', left: blk.left, top, width: blk.width, height: laneH, background: bgColor, borderLeft: `2px solid ${borderColor}`, borderRight: `2px solid ${borderColor}`, zIndex: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', lineHeight: 1 }}>
+                          style={{ position: 'absolute', left: blk.left, top, width: blk.width, height: laneH, background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '5px', boxSizing: 'border-box', zIndex: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', lineHeight: 1 }}>
                           {showText && blk.width > 40 && (
                             <span style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: borderColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', display: 'block', maxWidth: '100%' }}>
                               {isDown ? '⛔' : '🔧'} {blk.width > 80 ? ev.title : ''}
