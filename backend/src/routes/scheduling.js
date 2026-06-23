@@ -21,6 +21,7 @@ import * as lf from '../services/levelflight.js';
 import { fetchAirportFbos, listFbos, upsertFbos } from '../services/fbos.js';
 import { sendEmail } from '../services/gmail.js';
 import { buildItinerary } from '../services/itineraryData.js';
+import { buildNativeItineraryVM } from '../services/nativeItineraryData.js';
 import { renderItineraryHtml } from '../services/itineraryHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
 import { buildItineraryEmail } from '../services/itineraryEmail.js';
@@ -182,6 +183,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function tripColumn(param) {
   return UUID_RE.test(param) ? 'id' : 'lf_oid';
 }
+const buildItinVM = (id) => (UUID_RE.test(id) ? buildNativeItineraryVM(id) : buildItinerary(id));
 
 // Shape a scheduling_trips row for the API (adds labels + the LF-original status).
 function shapeTrip(row) {
@@ -451,7 +453,7 @@ router.delete('/trips/:lfOid', requireSchedulingEditor, async (req, res) => {
 // it before sending. :lfOid is the dispatch/itinerary id.
 router.get('/trips/:lfOid/itinerary/email-preview', async (req, res) => {
   try {
-    const vm = await buildItinerary(req.params.lfOid);
+    const vm = await buildItinVM(req.params.lfOid);
     if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
     const base = `${req.protocol}://${req.get('host')}`;
     res.json(buildItineraryEmail(vm, { recipientName: req.query.name, link: `${base}/itinerary/${req.params.lfOid}`, logoUrl: `${base}/itinerary/email-logo.png` }));
@@ -469,7 +471,7 @@ router.post('/trips/:lfOid/itinerary/send', async (req, res) => {
     const to = (req.body?.to || '').trim();
     const cc = (req.body?.cc || '').trim();
     if (!to) return res.status(400).json({ error: 'Recipient email required' });
-    const vm = await buildItinerary(req.params.lfOid);
+    const vm = await buildItinVM(req.params.lfOid);
     if (!vm) return res.status(404).json({ error: 'No itinerary available for this trip.' });
     const base = `${req.protocol}://${req.get('host')}`;
     const { subject, html } = buildItineraryEmail(vm, { recipientName: req.body?.recipientName, link: `${base}/itinerary/${req.params.lfOid}`, logoUrl: `${base}/itinerary/email-logo.png` });
