@@ -25,6 +25,18 @@ export async function getProvisionedOids() {
   } catch (e) { console.warn('[slackChannelStore] getProvisionedOids (soft):', e?.message || e); return new Set(); }
 }
 
+// Set of trip NUMBERS that already have channels — channels are one-per-trip-number
+// (a number can map to several dispatch oids, e.g. after delete+recreate).
+export async function getProvisionedTripIds() {
+  const client = getClient();
+  if (!client) return new Set();
+  try {
+    const { data, error } = await client.from('trip_slack_channels').select('trip_id');
+    if (error) { console.warn('[slackChannelStore] getProvisionedTripIds (soft):', error.message); return new Set(); }
+    return new Set((data || []).map((r) => r.trip_id).filter(Boolean).map(String));
+  } catch (e) { console.warn('[slackChannelStore] getProvisionedTripIds (soft):', e?.message || e); return new Set(); }
+}
+
 // Insert/replace a provisioned-trip row.
 export async function recordChannels({ oid, tripId, opsChannelId, acctChannelId, invitedSlackIds, firstDepAt, status }) {
   const client = getClient();
