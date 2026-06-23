@@ -24,6 +24,7 @@ export default function TripActionsRail({ meta, id, busy, onAction, onRevert, on
       <a href={`${API_BASE}/itinerary/${id}`} target="_blank" rel="noopener noreferrer" style={linkBtn}>View Passenger Itinerary ↗</a>
       <button onClick={onSendItinerary} disabled={busy} style={{ ...btn, background: 'var(--accent)' }}>✉ Send Itinerary</button>
       {released && <a href={`/scheduling/trips/${id}/sheet`} target="_blank" rel="noopener noreferrer" style={linkBtn}>View Crew Trip Sheet ↗</a>}
+      {released && <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>Closes automatically once the flight is complete.</p>}
     </div>
   );
 }
