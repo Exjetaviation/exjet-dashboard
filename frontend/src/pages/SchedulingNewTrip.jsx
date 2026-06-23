@@ -5,12 +5,13 @@ import { useApi } from '../hooks/useApi';
 import { distinctClients } from '../lib/schedulingAggregate';
 import AirportInput from '../components/AirportInput';
 import { easternToUTC, zuluParts } from '../lib/easternTime';
+import FboPicker from '../components/trip/FboPicker';
 
 // Known fleet for the aircraft picker (adjust as the fleet changes).
 const FLEET = ['N408JS', 'N69FP'];
 // Departure date + clock time are captured separately in local Eastern time, then
 // converted to a single UTC instant for the estimate + the create payload.
-const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_date: '', dep_clock: '', pax: '', positioning: false });
+const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_date: '', dep_clock: '', pax: '', positioning: false, dep_fbo: null, arr_fbo: null });
 const legDepUTC = (l) => easternToUTC(l.dep_date, l.dep_clock);
 const legDepIso = (l) => { const d = legDepUTC(l); return d ? d.toISOString() : ''; };
 
@@ -85,6 +86,10 @@ function LegRow({ leg, i, total, onUpdate, onRemove }) {
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', marginTop: 22 }}><input type="checkbox" checked={leg.positioning} onChange={(e) => onUpdate(i, 'positioning', e.target.checked)} /> Ferry</label>
       <button onClick={() => onRemove(i)} disabled={total === 1} title="Remove leg"
         style={{ marginTop: 20, padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: total === 1 ? 'default' : 'pointer' }}>✕</button>
+      <div style={{ flexBasis: '100%', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+        <FboPicker label="Dep FBO" icao={leg.dep_icao} value={leg.dep_fbo} onChange={(fbo) => onUpdate(i, 'dep_fbo', fbo)} />
+        <FboPicker label="Arr FBO" icao={leg.arr_icao} value={leg.arr_fbo} onChange={(fbo) => onUpdate(i, 'arr_fbo', fbo)} />
+      </div>
       <div style={{ flexBasis: '100%', minHeight: 14 }}><LegSummary est={est} loading={loading} /></div>
     </div>
   );
@@ -121,7 +126,7 @@ export default function SchedulingNewTrip() {
     setError(null);
     const cleaned = legs
       .filter((l) => l.dep_icao.trim() && l.arr_icao.trim())
-      .map((l) => ({ dep_icao: l.dep_icao.trim(), arr_icao: l.arr_icao.trim(), dep_time: legDepIso(l), pax: l.pax, positioning: l.positioning }));
+      .map((l) => ({ dep_icao: l.dep_icao.trim(), arr_icao: l.arr_icao.trim(), dep_time: legDepIso(l), pax: l.pax, positioning: l.positioning, dep_fbo: l.dep_fbo || null, arr_fbo: l.arr_fbo || null }));
     if (!cleaned.length) { setError('Add at least one leg with a From and To airport.'); return; }
     setBusy(true);
     try {
