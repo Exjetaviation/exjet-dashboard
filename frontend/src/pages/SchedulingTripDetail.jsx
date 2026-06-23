@@ -323,6 +323,24 @@ export default function SchedulingTripDetail() {
     setBusy(false);
   };
 
+  const CHECKLIST_ITEMS = [
+    { key: 'contractReceived', label: 'Contract received' },
+    { key: 'paymentReceived', label: 'Payment received' },
+    { key: 'paymentProcessed', label: 'Payment processed' },
+  ];
+  const toggleChecklist = async (key) => {
+    const cur = meta?.checklist || {};
+    const next = { ...cur, [key]: !cur[key] };
+    setMeta((m) => ({ ...m, checklist: next })); // optimistic
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${id}/checklist`, { method: 'PATCH', body: JSON.stringify({ [key]: next[key] }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
+      const j = await r.json();
+      setMeta((m) => ({ ...m, checklist: j.checklist }));
+    } catch (e) { setError(e.message); await load(); }
+  };
+
   const startCrewEdit = () => setCrewEdit({ pic: crewKey(curCrew.pic), sic: crewKey(curCrew.sic), fa: crewKey(curCrew.fa) });
   const saveCrew = async () => {
     setBusy(true); setError(null);
@@ -440,7 +458,7 @@ export default function SchedulingTripDetail() {
           return (
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(live.total)}{p.manual && !editing ? ' · adjusted' : ''}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(live.total)}{!editing && p.totalOverride != null ? ' · adjusted' : ''}</span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {editing ? (
                     <>
@@ -517,7 +535,7 @@ export default function SchedulingTripDetail() {
                           onChange={(e) => setPriceEdit((d) => ({ ...d, fetEnabled: e.target.checked }))} />
                         FET ({Math.round(fetRate * 1000) / 10}%)
                       </label>
-                    ) : `FET (${Math.round(fetRate * 1000) / 10}%)`}</td>
+                    ) : (p.fetEnabled === false ? 'FET (off)' : `FET (${Math.round(fetRate * 1000) / 10}%)`)}</td>
                     <td style={{ textAlign: 'right' }}>{usd(live.fetAmount)}</td>
                   </tr>
                   <tr>
@@ -646,18 +664,25 @@ export default function SchedulingTripDetail() {
       {tab === 'docs' && (<>
         <Section title="Trip Checklist">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {['Contract', 'Payment received', 'Processed'].map((item) => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-primary)' }}>
-                <span style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid var(--border)', display: 'inline-block', flexShrink: 0 }} />
-                {item}
-              </div>
+            {CHECKLIST_ITEMS.map((it) => (
+              <label key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!(meta?.checklist || {})[it.key]} onChange={() => toggleChecklist(it.key)} />
+                {it.label}
+              </label>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10 }}>Display-only — wired to the live trip checklist later.</p>
         </Section>
 
         <Section title="Documents">
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
+              <a href={`${API_BASE}/quote/${id}`} target="_blank" rel="noopener noreferrer"
+                style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none' }}>View Quote ↗</a>
+              <a href={`${API_BASE}/quote/${id}/pdf`} target="_blank" rel="noopener noreferrer"
+                style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Quote PDF ↗</a>
+              <button onClick={() => navigator.clipboard?.writeText(`${API_BASE}/quote/${id}`)}
+                style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Copy client link</button>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <select value={docType} onChange={(e) => setDocType(e.target.value)} style={{ ...inp }}>
                 <option value="contract">Contract</option>
