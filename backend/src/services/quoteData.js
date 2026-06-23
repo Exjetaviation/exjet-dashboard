@@ -12,6 +12,12 @@ export async function buildViewModel(dispatchId) {
   if (!dispatch) return null;
   const ac = tl?.aircraft || dispatch?.aircraft || {};
   const internal = dispatch?._internal || {};
+  // Show only revenue legs (passengers on board), like the LevelFlight quote —
+  // hide empty positioning/ferry legs (passengerCount 0). Fall back to all legs
+  // if none are flagged, so a data gap never yields a blank itinerary.
+  const allLegs = dispatch?.legs || [];
+  const paxLegs = allLegs.filter((l) => Number(l?.passengerCount) > 0);
+  const legs = (paxLegs.length ? paxLegs : allLegs).map(mapLegDetail);
   return {
     dispatchId,
     quoteNumber: dispatch?.quoteId != null ? String(dispatch.quoteId) : null,
@@ -22,6 +28,6 @@ export async function buildViewModel(dispatchId) {
     amenities: ['Flight Attendant', 'WIFI'],
     preparedOn: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     acceptUrl: `${ACCEPT_BASE}/${dispatchId}/accept`,
-    legs: (dispatch?.legs || []).map(mapLegDetail),
+    legs,
   };
 }
