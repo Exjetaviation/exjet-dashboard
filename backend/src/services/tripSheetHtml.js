@@ -53,7 +53,7 @@ function legBlock(leg, i, n) {
     ${crew ? `<div class="crew">${crew}</div>` : ''}
     <div class="fbos">${fboCell('DEPARTURE FBO', leg.depFbo)}${fboCell('ARRIVAL FBO', leg.arrFbo)}</div>
     ${(leg.manifest && leg.manifest.length) ? `<div class="legpax"><div class="legpaxh">PASSENGERS (${leg.manifest.length})</div><table class="tbl tbl-in"><thead><tr><th>Name</th><th>Weight</th><th>DOB</th><th>Passport</th></tr></thead><tbody>${leg.manifest.map((p) => `<tr${p.lead ? ' class="leadrow"' : ''}><td>${esc(p.name || '')}${p.lead ? ' <span class="leadtag">LEAD</span>' : ''}</td><td>${p.weight != null ? esc(p.weight) + ' lbs' : ''}</td><td>${esc(fmtDate(p.dob))}</td><td>${esc(p.passport || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
-    ${(leg.crewNote || leg.releasedBy) ? `<div class="relnote">${leg.crewNote ? `<span class="cl">CREW NOTE</span> ${esc(leg.crewNote)} ` : ''}${leg.releasedBy ? `<span class="cl">RELEASED BY</span> ${esc(leg.releasedBy)}${leg.releasedAt ? ' · ' + esc(fmtZ(leg.releasedAt)) : ''}` : ''}</div>` : ''}
+    ${(leg.crewNote || leg.releasedBy) ? `<div class="relnote">${leg.crewNote ? `<span class="cl">CREW NOTE</span> ${esc(leg.crewNote)} ` : ''}${leg.releasedBy ? `<span class="cl">RELEASED BY</span> ${esc(leg.releasedBy)}${leg.releasedAt ? ' · ' + esc(zuluTime(leg.releasedAt)) : ''}` : ''}</div>` : ''}
   </div>`;
 }
 
