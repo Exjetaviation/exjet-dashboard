@@ -18,6 +18,8 @@ const legDepIso = (l) => { const d = legDepUTC(l); return d ? d.toISOString() : 
 const labelStyle = { fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
 const inputStyle = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' };
 
+const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
+
 // Live distance + flight time for a leg, fetched (debounced) once both airports are
 // in. `depIso` is an absolute UTC instant, so the estimate's arrival time is correct
 // regardless of the browser's timezone.
@@ -95,6 +97,30 @@ function LegRow({ leg, i, total, onUpdate, onRemove }) {
   );
 }
 
+function useQuotePreview(tail, purpose, legs) {
+  const [pricing, setPricing] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const cleaned = legs
+    .filter((l) => (l.dep_icao || '').trim() && (l.arr_icao || '').trim())
+    .map((l) => ({ dep_icao: l.dep_icao.trim(), arr_icao: l.arr_icao.trim(), pax: Number(l.pax) || 0, positioning: !!l.positioning }));
+  const key = JSON.stringify({ tail, purpose, cleaned });
+  useEffect(() => {
+    if (!tail || !cleaned.length) { setPricing(null); return; }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await apiFetch('/api/scheduling/quote-preview', { method: 'POST', body: JSON.stringify({ aircraft_tail: tail, purpose, legs: cleaned }) });
+        const j = await r.json();
+        setPricing(r.ok ? j.pricing : null);
+      } catch { setPricing(null); }
+      setLoading(false);
+    }, 500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return { pricing, loading };
+}
+
 export default function SchedulingNewTrip() {
   const navigate = useNavigate();
   const [tail, setTail] = useState(FLEET[0]);
@@ -111,6 +137,8 @@ export default function SchedulingNewTrip() {
   const [purpose, setPurpose] = useState('charter');
   const [company, setCompany] = useState('');
   const [contact, setContact] = useState({ name: '', email: '', phone: '' });
+
+  const { pricing: preview, loading: pricingLoading } = useQuotePreview(tail, purpose, legs);
 
   const updateLeg = (i, field, value) => setLegs((ls) => ls.map((l, idx) => {
     if (idx === i) return { ...l, [field]: value };
@@ -196,6 +224,13 @@ export default function SchedulingNewTrip() {
         <button onClick={addLeg}
           style={{ marginTop: 4, padding: '6px 14px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add leg</button>
         <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10 }}>Enter ETD in local Eastern time — the Zulu (UTC) conversion shows under each field, and the ETA under the arrival airport comes from the flight-time engine (ETD + ETE).</p>
+      </div>
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Estimated quote</span>
+        <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {pricingLoading ? '…' : (preview && !preview.error ? usd(preview.total) : <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 400 }}>{preview?.error || 'add legs to price'}</span>)}
+        </span>
       </div>
 
       <button onClick={save} disabled={busy}
