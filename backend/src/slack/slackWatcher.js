@@ -15,7 +15,11 @@ let started = false;
 
 export function startSlackWatcher() {
   const config = parseSlackConfig();
-  if (!config.enabled) return; // opt-in
+  if (!config.enabled) {
+    // Log on the disabled path so a misset flag isn't invisible (value is not a secret).
+    console.log(`[slack-channels] disabled (SLACK_TRIP_CHANNELS=${process.env.SLACK_TRIP_CHANNELS ?? 'unset'})`);
+    return;
+  }
   if (!config.botToken) {
     console.warn('[slack-channels] SLACK_TRIP_CHANNELS=on but SLACK_BOT_TOKEN missing — disabled');
     return;
