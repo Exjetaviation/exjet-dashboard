@@ -247,6 +247,32 @@ async function priceAndStore(tripId, aircraft_tail, inputLegs, purpose = null) {
   } catch (pe) { console.warn('[scheduling price] failed:', pe?.message || pe); }
 }
 
+// POST /api/scheduling/quote-preview — price legs WITHOUT persisting, for the
+// New-Quote page's live total. Same engine as create (priceQuoteLegs).
+router.post('/quote-preview', requireSchedulingEditor, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const legs = Array.isArray(b.legs) ? b.legs : [];
+    if (!legs.length) return res.json({ pricing: null });
+    const pricing = await priceQuoteLegs({
+      tail: (b.aircraft_tail || '').trim() || null,
+      aircraftType: null,
+      legs: legs.map((l) => ({
+        dep_icao: (l.dep_icao || '').trim().toUpperCase(),
+        arr_icao: (l.arr_icao || '').trim().toUpperCase(),
+        pax: Number(l.pax) || 0,
+        isPositioning: !!l.positioning,
+      })),
+      nights: Number(b.nights) || 0,
+      purpose: (b.purpose || '').trim() || null,
+    });
+    res.json({ pricing });
+  } catch (e) {
+    console.error('POST /api/scheduling/quote-preview:', e.message);
+    res.status(500).json({ error: 'Failed to price' });
+  }
+});
+
 // POST /api/scheduling/trips — create a NATIVE (created-here) trip + its legs.
 // Each leg stores a LevelFlight-shaped snapshot so it renders in the same
 // list/board/detail components as mirrored legs (no schema change needed).
