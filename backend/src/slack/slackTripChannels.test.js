@@ -30,7 +30,9 @@ function makeStore(seed = {}) {
   const invitedUpdates = [];
   return {
     recorded, invitedUpdates,
+    async getCandidateTrips() { return seed.candidates || []; },
     async getProvisionedOids() { return new Set(seed.provisioned || []); },
+    async getProvisionedTripIds() { return new Set((seed.provisionedTripIds || []).map(String)); },
     async getTripLegSnapshots() { return seed.snaps || snaps; },
     async recordChannels(row) { recorded.push(row); return true; },
     async getUpcomingProvisioned() { return seed.upcoming || []; },
@@ -40,14 +42,13 @@ function makeStore(seed = {}) {
 
 const dir = { async getUserIndex() { return new Map(); } };
 const overrides = { async getOverrideMap() { return new Map(); } };
-const config = { opsMembers: ['UOPS'], accountingMembers: ['UACCT'], managementMembers: ['UMGR'] };
+const config = { opsMembers: ['UOPS'], accountingMembers: ['UACCT'], managementMembers: ['UMGR'], since: '2026-06-23T00:00:00Z' };
 
 test('provisions a new trip: two channels, invites, intro + unmatched note, records row', async () => {
   const slack = makeSlack();
-  const store = makeStore();
-  const lf = { async listDispatches() { return { dispatches: [{ _id: { $oid: 'disp1' }, tripId: 25104 }] }; } };
+  const store = makeStore({ candidates: [{ oid: 'disp1', tripId: 25104 }] });
 
-  const n = await provisionNewTrips({ lf, slack, store, dir, overrides, config, now: NOW });
+  const n = await provisionNewTrips({ slack, store, dir, overrides, config, now: NOW });
   assert.equal(n, 1);
 
   // Two channels created with the right names.
@@ -69,21 +70,29 @@ test('provisions a new trip: two channels, invites, intro + unmatched note, reco
   assert.deepEqual(store.recorded[0].invitedSlackIds.sort(), ['UACCT', 'UANN', 'UMGR', 'UOPS']);
 });
 
-test('skips trips already provisioned', async () => {
+test('skips trip numbers already provisioned', async () => {
   const slack = makeSlack();
-  const store = makeStore({ provisioned: ['disp1'] });
-  const lf = { async listDispatches() { return { dispatches: [{ _id: { $oid: 'disp1' }, tripId: 25104 }] }; } };
-  const n = await provisionNewTrips({ lf, slack, store, dir, overrides, config, now: NOW });
+  const store = makeStore({ provisionedTripIds: ['25104'], candidates: [{ oid: 'disp1', tripId: 25104 }] });
+  const n = await provisionNewTrips({ slack, store, dir, overrides, config, now: NOW });
   assert.equal(n, 0);
   assert.equal(slack.calls.created.length, 0);
 });
 
-test('skips quote/unbooked dispatches that have no tripId', async () => {
+test('dedupes multiple dispatch oids sharing one trip number into one channel set', async () => {
   const slack = makeSlack();
-  const store = makeStore();
-  // getDispatchList returns quotes too; an unbooked dispatch has an empty tripId.
-  const lf = { async listDispatches() { return { dispatches: [{ _id: { $oid: 'dispQuote' }, tripId: '' }] }; } };
-  const n = await provisionNewTrips({ lf, slack, store, dir, overrides, config, now: NOW });
+  // Same trip number 25107 from two dispatch oids (e.g. delete+recreate).
+  const store = makeStore({ candidates: [{ oid: 'old', tripId: 25107 }, { oid: 'new', tripId: 25107 }] });
+  const n = await provisionNewTrips({ slack, store, dir, overrides, config, now: NOW });
+  assert.equal(n, 1);
+  assert.deepEqual(slack.calls.created.map((c) => c.name), ['trip-25107', 'trip-25107-acct']);
+  assert.equal(store.recorded.length, 1);
+});
+
+test('skips mirror rows without a trip number (empty tripId)', async () => {
+  const slack = makeSlack();
+  // A mirror row without a trip number is not a booked trip — skip it.
+  const store = makeStore({ candidates: [{ oid: 'dispQuote', tripId: '' }] });
+  const n = await provisionNewTrips({ slack, store, dir, overrides, config, now: NOW });
   assert.equal(n, 0);
   assert.equal(slack.calls.created.length, 0);
   assert.equal(store.recorded.length, 0);

@@ -12,5 +12,8 @@ export function parseSlackConfig(env = process.env) {
     opsMembers: list(env.SLACK_OPS_MEMBERS),
     accountingMembers: list(env.SLACK_ACCOUNTING_MEMBERS),
     managementMembers: list(env.SLACK_MANAGEMENT_MEMBERS),
+    // Only provision trips first mirrored at/after this ISO cutoff (skips the
+    // historical backlog). The watcher defaults it to its boot time when unset.
+    since: env.SLACK_CHANNELS_SINCE || null,
   };
 }

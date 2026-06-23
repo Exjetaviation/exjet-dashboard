@@ -1,14 +1,13 @@
 // backend/src/slack/slackWatcher.js
 //
-// Background worker: poll LF for new dispatches and provision Slack channels.
-// Opt-in via SLACK_TRIP_CHANNELS=on (mirrors startSyncWorker). Independent of
-// the heavy SCHEDULING_SYNC worker.
+// Background worker: detect new booked trips from the scheduling mirror and
+// provision Slack channels. Opt-in via SLACK_TRIP_CHANNELS=on (mirrors
+// startSyncWorker). Reads the mirror that the SCHEDULING_SYNC worker keeps fresh.
 import { parseSlackConfig } from './slackConfig.js';
 import { provisionNewTrips, topUpMembership } from './slackTripChannels.js';
-import { getDispatchList } from '../services/levelflight.js';
 import * as slack from '../services/slack.js';
 import * as channelStore from '../services/slackChannelStore.js';
-import { getTripLegSnapshots } from '../services/tripCrewStore.js';
+import { getTripLegSnapshots, getCandidateTrips } from '../services/tripCrewStore.js';
 import { getOverrideMap } from '../services/slackOverrideStore.js';
 import { getUserIndex } from '../services/lfUserDirectory.js';
 
@@ -24,15 +23,18 @@ export function startSlackWatcher() {
   if (started) return;
   started = true;
 
-  const lf = { listDispatches: () => getDispatchList(1) };
-  const store = { ...channelStore, getTripLegSnapshots };
+  // Default the cutoff to boot time so a first deploy never back-provisions the
+  // historical backlog — only trips mirrored after we start get channels.
+  config.since = config.since || new Date().toISOString();
+
+  const store = { ...channelStore, getTripLegSnapshots, getCandidateTrips };
   const dir = { getUserIndex: (now) => getUserIndex(now) };
   const overrides = { getOverrideMap };
 
   const run = async () => {
     const now = Date.now();
     try {
-      await provisionNewTrips({ lf, slack, store, dir, overrides, config, now });
+      await provisionNewTrips({ slack, store, dir, overrides, config, now });
       await topUpMembership({ slack, store, dir, overrides, config, now });
     } catch (e) {
       console.warn('[slack-channels] tick failed:', e?.message || e);
@@ -41,5 +43,5 @@ export function startSlackWatcher() {
 
   run();
   setInterval(run, config.intervalMs);
-  console.log(`[slack-channels] watcher started (every ${config.intervalMs}ms)`);
+  console.log(`[slack-channels] watcher started (every ${config.intervalMs}ms, since ${config.since})`);
 }

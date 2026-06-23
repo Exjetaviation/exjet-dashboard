@@ -1,12 +1,12 @@
 // backend/src/slack/slackTripChannels.js
 //
 // Orchestrates Slack channel provisioning for new LF trips and tops up crew
-// membership as crew get assigned. All I/O is injected (lf, slack, store, dir,
-// overrides) so this is unit-tested with fakes.
+// membership as crew get assigned. All I/O is injected (slack, store, dir,
+// overrides) so this is unit-tested with fakes. New trips are detected from the
+// scheduling mirror (store.getCandidateTrips), which carries real trip numbers.
 import { channelName } from './channelName.js';
 import { resolveMembers } from './resolveMembers.js';
 import { crewFromLegSnapshots } from './crewFromLegSnapshots.js';
-import { normalizeDispatchList } from './dispatchList.js';
 
 const emailOf = (c, userIndex) => (c.email || userIndex.get(c.oid)?.email || '').toLowerCase() || null;
 
@@ -98,14 +98,22 @@ async function provisionOne({ d, slack, store, dir, overrides, config, now }) {
   });
 }
 
-// Detect new dispatches and provision their channels. Returns the count provisioned.
-export async function provisionNewTrips({ lf, slack, store, dir, overrides, config, now }) {
-  const dispatches = normalizeDispatchList(await lf.listDispatches());
-  const provisioned = await store.getProvisionedOids();
-  // Only real booked trips get channels. getDispatchList also returns quote/unbooked
-  // dispatches, which carry an empty tripId — skip them (they provision once booked
-  // and assigned a trip number, at which point they're still "not yet provisioned").
-  const fresh = dispatches.filter((d) => d.tripId && !provisioned.has(d.oid));
+// Detect new booked trips (from the mirror) and provision their channels. Returns
+// the count provisioned.
+export async function provisionNewTrips({ slack, store, dir, overrides, config, now }) {
+  const candidates = await store.getCandidateTrips(config.since);
+  const provisionedTripIds = await store.getProvisionedTripIds();
+  // One channel set per trip NUMBER: a number can map to several dispatch oids
+  // (e.g. a deleted+recreated trip leaves a stale mirror row). Dedupe by tripId and
+  // skip numbers already provisioned.
+  const seen = new Set();
+  const fresh = [];
+  for (const d of candidates) {
+    const t = d.tripId ? String(d.tripId) : null;
+    if (!t || seen.has(t) || provisionedTripIds.has(t)) continue;
+    seen.add(t);
+    fresh.push(d);
+  }
   for (const d of fresh) {
     try { await provisionOne({ d, slack, store, dir, overrides, config, now }); }
     catch (e) { console.warn('[slack-channels] provision failed', d.oid, e?.message || e); }
