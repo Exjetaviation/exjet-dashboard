@@ -230,7 +230,7 @@ async function buildNativeLegRows(tripId, ctx, inputLegs) {
       dep_time: l.dep_time || null,
       arr_time: arrMs != null ? new Date(arrMs).toISOString() : null,
     };
-    const snap = buildNativeLegSnapshot({ ...leg, pax: Number(l.pax) || 0, positioning: !!l.positioning }, ctx);
+    const snap = buildNativeLegSnapshot({ ...leg, pax: Number(l.pax) || 0, positioning: !!l.positioning, dep_fbo: l.dep_fbo || null, arr_fbo: l.arr_fbo || null }, ctx);
     return { trip_id: tripId, origin: 'native', ...leg, lf_synced_snapshot: snap };
   });
 }
