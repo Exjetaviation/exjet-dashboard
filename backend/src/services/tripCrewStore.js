@@ -1,6 +1,6 @@
 // backend/src/services/tripCrewStore.js
 // Soft-failing read of a dispatch's leg snapshots from the scheduling mirror
-// (scheduling_trips -> scheduling_legs.snapshot). Used to derive crew.
+// (scheduling_trips -> scheduling_legs.lf_synced_snapshot). Used to derive crew.
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 
@@ -24,8 +24,8 @@ export async function getTripLegSnapshots(dispatchOid) {
       .from('scheduling_trips').select('id').eq('lf_oid', dispatchOid).maybeSingle();
     if (te || !trip) return [];
     const { data: legs, error: le } = await client
-      .from('scheduling_legs').select('snapshot').eq('trip_id', trip.id);
+      .from('scheduling_legs').select('lf_synced_snapshot').eq('trip_id', trip.id);
     if (le) { console.warn('[tripCrewStore] legs (soft):', le.message); return []; }
-    return (legs || []).map((l) => l.snapshot).filter(Boolean);
+    return (legs || []).map((l) => l.lf_synced_snapshot).filter(Boolean);
   } catch (e) { console.warn('[tripCrewStore] getTripLegSnapshots (soft):', e?.message || e); return []; }
 }
