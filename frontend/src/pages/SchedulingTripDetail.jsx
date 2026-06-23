@@ -458,7 +458,7 @@ export default function SchedulingTripDetail() {
           return (
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(live.total)}{p.manual && !editing ? ' · adjusted' : ''}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Quote — {usd(live.total)}{!editing && p.totalOverride != null ? ' · adjusted' : ''}</span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {editing ? (
                     <>
@@ -535,7 +535,7 @@ export default function SchedulingTripDetail() {
                           onChange={(e) => setPriceEdit((d) => ({ ...d, fetEnabled: e.target.checked }))} />
                         FET ({Math.round(fetRate * 1000) / 10}%)
                       </label>
-                    ) : `FET (${Math.round(fetRate * 1000) / 10}%)`}</td>
+                    ) : (p.fetEnabled === false ? 'FET (off)' : `FET (${Math.round(fetRate * 1000) / 10}%)`)}</td>
                     <td style={{ textAlign: 'right' }}>{usd(live.fetAmount)}</td>
                   </tr>
                   <tr>
