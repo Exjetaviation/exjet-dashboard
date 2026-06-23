@@ -952,6 +952,17 @@ test('skips trips already provisioned', async () => {
   assert.equal(slack.calls.created.length, 0);
 });
 
+test('skips quote/unbooked dispatches that have no tripId', async () => {
+  const slack = makeSlack();
+  const store = makeStore();
+  // getDispatchList returns quotes too; an unbooked dispatch has an empty tripId.
+  const lf = { async listDispatches() { return { dispatches: [{ _id: { $oid: 'dispQuote' }, tripId: '' }] }; } };
+  const n = await provisionNewTrips({ lf, slack, store, dir, overrides, config, now: NOW });
+  assert.equal(n, 0);
+  assert.equal(slack.calls.created.length, 0);
+  assert.equal(store.recorded.length, 0);
+});
+
 test('top-up invites newly-assigned crew not already invited', async () => {
   const slack = makeSlack();
   const store = makeStore({
@@ -1076,7 +1087,10 @@ async function provisionOne({ d, slack, store, dir, overrides, config, now }) {
 export async function provisionNewTrips({ lf, slack, store, dir, overrides, config, now }) {
   const dispatches = normalizeDispatchList(await lf.listDispatches());
   const provisioned = await store.getProvisionedOids();
-  const fresh = dispatches.filter((d) => !provisioned.has(d.oid));
+  // Only real booked trips get channels. getDispatchList also returns quote/unbooked
+  // dispatches, which carry an empty tripId — skip them (they provision once booked
+  // and assigned a trip number, at which point they're still "not yet provisioned").
+  const fresh = dispatches.filter((d) => d.tripId && !provisioned.has(d.oid));
   for (const d of fresh) {
     try { await provisionOne({ d, slack, store, dir, overrides, config, now }); }
     catch (e) { console.warn('[slack-channels] provision failed', d.oid, e?.message || e); }
