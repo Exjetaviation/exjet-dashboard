@@ -5,15 +5,19 @@
 // receives the finished document.
 import express from 'express';
 import { buildCrewTripSheet } from '../services/tripSheet.js';
+import { buildNativeTripSheetVM } from '../services/nativeTripSheetData.js';
 import { renderTripSheetHtml } from '../services/tripSheetHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const buildTSVM = (id) => (UUID_RE.test(id) ? buildNativeTripSheetVM(id) : buildCrewTripSheet(id));
 
 const router = express.Router();
 
 // GET /api/tripsheet/:id — rendered trip-sheet HTML for the in-dashboard modal view.
 router.get('/:id', async (req, res) => {
   try {
-    const vm = await buildCrewTripSheet(req.params.id);
+    const vm = await buildTSVM(req.params.id);
     if (!vm) return res.status(404).send('Trip sheet not available for this trip yet');
     res.type('html').send(renderTripSheetHtml(vm, { print: false }));
   } catch (e) { res.status(502).send('Error building trip sheet'); }
@@ -22,7 +26,7 @@ router.get('/:id', async (req, res) => {
 // GET /api/tripsheet/:id/pdf — the rendered trip sheet printed to PDF.
 router.get('/:id/pdf', async (req, res) => {
   try {
-    const vm = await buildCrewTripSheet(req.params.id);
+    const vm = await buildTSVM(req.params.id);
     if (!vm) return res.status(404).json({ error: 'Trip sheet not available' });
     const pdf = await renderQuotePdf(renderTripSheetHtml(vm, { print: true }), { waitForMapReady: true });
     res.type('application/pdf')
