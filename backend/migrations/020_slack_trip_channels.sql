@@ -1,4 +1,4 @@
--- 018_slack_trip_channels.sql
+-- 020_slack_trip_channels.sql
 -- Auto-provisioned Slack channels per LevelFlight trip (ops + accounting),
 -- plus a manual LF-email -> Slack-user override map for crew whose emails differ.
 
