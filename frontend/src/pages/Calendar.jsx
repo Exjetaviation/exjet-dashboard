@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAdsb } from '../hooks/useAdsb';
 import { useLegActuals } from '../hooks/useLegActuals';
@@ -62,6 +62,88 @@ const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{timeZone:ET,month:'shor
 const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
 const fmtLocal = (ms,tz)=>{ if(!ms||!tz) return null; try { return new Date(ms).toLocaleString('en-US',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return null; } };
 
+// --- Fleet simulation (the "Simulate fleet" toggle) -------------------------
+// Builds a dense, realistic 10-aircraft day RELATIVE TO `anchor` (now) so there
+// are always completed (blue), in-progress (green ✈, crossing the now-line) and
+// planned (grey) legs. Returns data in the REAL leg shape plus matching actuals /
+// airborne maps, so it renders through the exact same calendar pipeline. Mock only.
+const SIM_EMPTY = { legs: [], actuals: {}, airborne: {} };
+const SIM_H = 3600000;
+const SIM_CLIENTS = ['Meridian Capital', 'Vantage Group', 'Atlas Holdings', 'Crestline LLC', 'Solaris Partners', null];
+// [tail, type, homeBase, [destinations], todaySchedule]
+// todaySchedule = [[depHoursFromNow, durationHours, fromICAO, toICAO], ...] — anchored
+// to "now" so today always has live in-progress legs. The rest of the week is generated
+// as out-and-back trips from the home base. (N69FP intentionally has NO sim flights.)
+const SIM_FLEET = [
+  ['N408JS', 'Challenger 350', 'KMIA', ['KJAX', 'KATL', 'KTEB', 'KIAD', 'KBOS'],
+    [[-6.5, 1.5, 'KMIA', 'KJAX'], [-0.75, 1.75, 'KJAX', 'KATL'], [3, 2, 'KATL', 'KMIA']]],
+  ['N512EX', 'Citation X', 'KORL', ['KTPA', 'KDAL', 'KLAS', 'KHOU', 'KMCO'],
+    [[-8, 1.5, 'KORL', 'KTPA'], [-4, 3, 'KTPA', 'KDAL'], [1.5, 2.5, 'KDAL', 'KLAS']]],
+  ['N727JS', 'G450', 'KIAD', ['KDEN', 'KSEA', 'KSFO', 'KORD', 'KBOS'],
+    [[-6, 3, 'KIAD', 'KDEN'], [-0.25, 2.75, 'KDEN', 'KSEA']]],
+  ['N880FP', 'Phenom 300', 'KHOU', ['KAUS', 'KSAT', 'KMSY', 'KDAL', 'KDFW'],
+    [[-7.5, 1.25, 'KHOU', 'KAUS'], [-5, 1.25, 'KAUS', 'KSAT'], [-2.5, 1.5, 'KSAT', 'KHOU'], [0.5, 1.5, 'KHOU', 'KMSY']]],
+  ['N604XJ', 'Challenger 604', 'KBOS', ['KMDW', 'KTEB', 'KDCA', 'KPBI', 'KCLT'],
+    [[-2, 2.75, 'KBOS', 'KMDW'], [3, 2, 'KMDW', 'KBOS']]],
+  ['N700VP', 'G700', 'KSFO', ['KSAN', 'KLAX', 'KLAS', 'KSEA', 'KJFK'],
+    [[-8, 2.5, 'KSFO', 'KSAN'], [-1, 2, 'KSAN', 'KSFO'], [4.5, 2, 'KSFO', 'KLAX']]],
+  ['N135LX', 'Learjet 75', 'KFLL', ['KMCO', 'KSAV', 'KCLT', 'KEYW', 'KTLH'],
+    [[-7, 1.5, 'KFLL', 'KMCO'], [-4, 1.5, 'KMCO', 'KSAV'], [0.5, 1.5, 'KSAV', 'KCLT']]],
+  ['N911EJ', 'Citation CJ4', 'KTMB', ['KEYW', 'KRSW', 'KPBI', 'KSRQ', 'KTLH'],
+    [[-8, 1.25, 'KTMB', 'KEYW'], [-6, 1.25, 'KEYW', 'KTMB'], [-1, 1.33, 'KTMB', 'KRSW'], [2, 1.5, 'KRSW', 'KTMB']]],
+  ['N350CL', 'Challenger 350', 'KTEB', ['KPBI', 'KBED', 'KMVY', 'KACK', 'KIAD'],
+    [[-5, 3, 'KTEB', 'KPBI'], [1.5, 3, 'KPBI', 'KTEB'], [5.5, 1.5, 'KTEB', 'KBED']]],
+];
+const SIM_DELAYS = [0, 8, -5, 12, 3, -3, 6, -2];
+function buildSimFleet(anchor) {
+  const DAY = 86400000;
+  const d0 = new Date(anchor); d0.setHours(0, 0, 0, 0); const mid = d0.getTime(); // local midnight today
+  const legs = [], actuals = {}, airborne = {};
+  let n = 0;
+  SIM_FLEET.forEach(([tail, type, home, dests, today], ti) => {
+    const add = (key, dep, durH, from, to) => {
+      const arr = dep + durH * SIM_H, legId = `sim-${tail}-${key}`;
+      const completed = arr <= anchor, inflight = dep <= anchor && anchor < arr;
+      const delay = SIM_DELAYS[n % SIM_DELAYS.length] * 60000;
+      legs.push({
+        _id: { $oid: legId },
+        departure: { airport: from, time: dep },
+        arrival: { airport: to, time: arr },
+        status: completed ? 3 : (inflight ? 1 : 2),
+        passengerCount: 2 + ((ti * 3 + n) % 10),
+        _calc: { _minutes: Math.round(durH * 60), distance: { value: Math.round(durH * 430) }, from: {}, to: {} },
+        dispatch: {
+          _id: { $oid: `simd-${tail}-${key}` },
+          tripId: 4800 + n,
+          aircraft: { tailNumber: tail, type: { name: type } },
+          client: { company: { name: SIM_CLIENTS[(ti + n) % SIM_CLIENTS.length] } },
+        },
+      });
+      if (completed) actuals[legId] = { actualDep: dep + delay, actualArr: arr + delay, depSource: 'crew', arrSource: 'crew' };
+      else if (inflight) { actuals[legId] = { actualDep: dep + delay, depSource: 'live' }; airborne[tail] = legId; }
+      n++;
+    };
+    // Today — anchored to "now" so there are live in-progress legs crossing the now-line.
+    today.forEach(([depH, durH, from, to], i) => add(`today-${i}`, anchor + depH * SIM_H, durH, from, to));
+    // Rest of the week (±4 days covers whatever 7-day window the week view shows) —
+    // out-and-back trips from the home base, a couple per day.
+    for (let dOff = -4; dOff <= 4; dOff++) {
+      if (dOff === 0) continue;
+      let t = mid + dOff * DAY + (7 + ((ti + dOff + 4) % 4)) * SIM_H; // first push 07:00–10:00
+      const obs = 1 + ((ti + dOff + 4) % 2);                          // 1 or 2 out-and-backs that day
+      for (let k = 0; k < obs; k++) {
+        const dest = dests[(ti + k + (dOff + 4)) % dests.length];
+        const durH = 1.25 + ((ti + k + Math.abs(dOff)) % 5) * 0.4;    // 1.25–2.85h
+        add(`${dOff}-${k}a`, t, durH, home, dest);                    // outbound
+        t += (durH + 1 + (k % 2) * 0.5) * SIM_H;                      // fly + ground turn
+        add(`${dOff}-${k}b`, t, durH, dest, home);                    // return
+        t += (durH + 1.5) * SIM_H;
+      }
+    }
+  });
+  return { legs, actuals, airborne };
+}
+
 export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripBasePath = null } = {}) {
   const {data,loading}  = useApi(legsEndpoint);
   const {data:dutyData} = useApi('/api/levelflight/duty');
@@ -90,7 +172,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const [hoverMode,setHoverMode] = useState('sched'); // 'sched' | 'actual' — which block is hovered
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-  const [nowHover, setNowHover] = useState(false); // hover the NOW pill to reveal exact EST/UTC time
+  const [sim, setSim] = useState(false); // "Simulate fleet" — preview a busy 10-aircraft day (mock data)
   const [,forceTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => forceTick(t => t + 1), 60000);
@@ -130,7 +212,8 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
 
   const rangeStart = getRangeStart();
 
-  const legs = data?.legs || [];
+  const SIM = useMemo(() => (sim ? buildSimFleet(Date.now()) : SIM_EMPTY), [sim]);
+  const legs = sim ? SIM.legs : (data?.legs || []);
 
   // Columns that should FILL the viewport (drives autoFit). Day view fits the focused
   // 24h; month fits its day-count; week/year fit cfg.cols.
@@ -151,7 +234,8 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
 
   // Persisted actual dep/arr for legs in view (settled delays); live in-progress
   // delays come from the ADS-B feed below.
-  const { actuals } = useLegActuals(rangeStart, rangeEnd);
+  const { actuals: liveActuals } = useLegActuals(rangeStart, rangeEnd);
+  const actuals = sim ? SIM.actuals : liveActuals;
 
   const getBlock = (dep,arr) => {
     if (!dep||!arr||arr<rangeStart||dep>rangeEnd) return null;
@@ -289,18 +373,23 @@ useEffect(() => {
   // the unreliable schedule estimate, and a real flight running late would
   // otherwise lose its border the moment it passed its scheduled arrival.
   const LATE_GRACE_MS = 6*3600000;
+  const EARLY_DEP_MS = 2*3600000; // an airborne tail can attach to a leg up to 2h before its scheduled dep (early push)
   const airborneLegId = {}; // { tail: leg._id.$oid }
   aircraft.forEach(ac => {
     const la = live[ac.tail];
     if (!la || la.onGround !== false) return; // only when ADS-B says airborne
-    let cur = null;
+    let cur = null;      // most-recently-departed leg (its scheduled dep has already passed)
+    let upcoming = null; // soonest leg about to depart — used only when the plane took off EARLY
     ac.legs.forEach(l => {
       const dep=l.departure?.time, arr=l.arrival?.time;
-      if (!dep || !arr) return;
-      if (dep <= nowTs && nowTs <= arr + LATE_GRACE_MS && (!cur || dep > cur.departure.time)) cur = l;
+      if (!dep || !arr || nowTs > arr + LATE_GRACE_MS) return;
+      if (dep <= nowTs) { if (!cur || dep > cur.departure.time) cur = l; }
+      else if (nowTs >= dep - EARLY_DEP_MS) { if (!upcoming || dep < upcoming.departure.time) upcoming = l; }
     });
-    if (cur) airborneLegId[ac.tail] = cur._id?.$oid;
+    const match = cur || upcoming; // prefer an in-progress leg; fall back to an early takeoff
+    if (match) airborneLegId[ac.tail] = match._id?.$oid;
   });
+  if (sim) Object.assign(airborneLegId, SIM.airborne); // sim has no ADS-B; mark its in-progress legs airborne directly
 
   const cols = Array.from({length:effectiveCols},(_,i) => {
     const ts=rangeStart+i*cfg.colMs;
@@ -344,7 +433,7 @@ useEffect(() => {
 </button>
 <button onClick={()=>setZoom(calcFitZoom())} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--accent)',fontWeight:'600'}}>Fit</button>
           <p style={{fontSize:'13px',color:'var(--text-secondary)',marginTop:'3px'}}>
-            {loading?'Loading...':`${aircraft.length} aircraft · ${legs.length} legs · same color = same trip`}
+            {loading?'Loading...':`${aircraft.length} aircraft · ${legs.length} legs · ${sim?'SIMULATED — mock data':'same color = same trip'}`}
           </p>
         </div>
         <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
@@ -361,6 +450,11 @@ useEffect(() => {
             <button onClick={()=>setZoom(1)} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>1:1</button>
           </div>
           <button onClick={goToToday} style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:'var(--accent)',color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer'}}>Today</button>
+          <button onClick={()=>{const next=!sim;setSim(next);if(next){setView('12h');setOffset(0);}}}
+            title="Preview a busy 10-aircraft day (mock data — does not touch live data)"
+            style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:sim?'#a855f7':'var(--bg-card)',color:sim?'#fff':'var(--text-secondary)',border:`1px solid ${sim?'#a855f7':'var(--border)'}`,borderRadius:'8px',cursor:'pointer'}}>
+            {sim?'● Simulating':'Simulate fleet'}
+          </button>
         </div>
       </div>
 
@@ -372,7 +466,7 @@ useEffect(() => {
       </div>
 
       {/* CALENDAR */}
-      <div style={{border:'1px solid var(--border)',borderRadius:'12px',background:'var(--bg-card)',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%',boxSizing:'border-box',position:'relative'}}>
+      <div style={{border:'1px solid var(--border)',borderRadius:'12px',background:'var(--bg-card)',display:'flex',flexDirection:'column',overflow:'visible',width:'100%',boxSizing:'border-box',position:'relative'}}>
 
         {/* HEADER */}
         <div style={{display:'flex',borderBottom:'2px solid var(--border)',flexShrink:0}}>
@@ -694,13 +788,10 @@ useEffect(() => {
             no header/body seam. Positioned imperatively on scroll (left = LABEL_W + nowPx − scrollLeft). */}
         {!loading&&showNow&&(
           <div ref={nowLineRef} style={{position:'absolute',top:0,bottom:0,width:2,left:nowLineLeft,display:nowInView?'block':'none',background:'var(--danger)',boxShadow:'0 0 6px rgba(239,68,68,0.5)',zIndex:7,pointerEvents:'none'}}>
-            {/* NOW pill sits just BELOW the times so it never covers the hour labels; hover reveals the exact time */}
+            {/* NOW pill: always shows the exact EST/UTC time, centered on the now-line, RESTING ON TOP of the calendar (above the top edge). */}
             <div
-              onMouseEnter={()=>setNowHover(true)}
-              onMouseLeave={()=>setNowHover(false)}
-              title={nowDetail}
-              style={{position:'absolute',top:HDR_H+4,left:5,background:'var(--danger)',borderRadius:'3px',padding:'2px 6px',fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',boxShadow:'0 1px 3px rgba(0,0,0,0.4)',pointerEvents:'auto',cursor:'default'}}>
-              {nowHover&&nowDetail ? nowDetail : 'NOW'}
+              style={{position:'absolute',top:-16,left:'50%',transform:'translateX(-50%)',background:'var(--danger)',borderRadius:'3px',padding:'2px 6px',fontSize:'10px',color:'#fff',fontWeight:'700',whiteSpace:'nowrap',boxShadow:'0 1px 3px rgba(0,0,0,0.4)',pointerEvents:'none',cursor:'default'}}>
+              {nowDetail || 'NOW'}
             </div>
           </div>
         )}
