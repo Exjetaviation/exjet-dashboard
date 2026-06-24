@@ -18,7 +18,7 @@
   (Postgres). Deployed on **Railway** (auto-deploys on push to `main`).
 - **Frontend**: React + Vite, `frontend/` (pages in `frontend/src/pages`). Deployed on
   **Vercel** (auto-deploys on push to `main`).
-- **Tests**: `node:test`. Backend: `node --test backend/src/scheduling/*.test.js backend/src/services/*.test.js`.
+- **Tests**: `node:test`. Backend: `node --test backend/src/scheduling/*.test.js backend/src/services/*.test.js backend/src/services/fuel/*.test.js`.
   Frontend lib tests are also `node:test`: `node --test frontend/src/lib/*.test.js`. Frontend
   build check: `cd frontend && npm run build`.
 - **Migrations**: numbered SQL in `backend/migrations/` (latest `017_leg_actuals.sql`). They are
@@ -157,6 +157,6 @@ Public (no auth): `/quote`, `/itinerary`. Auth-guarded `/api/*`: `scheduling`, `
 
 ## Dev commands
 - Backend: `cd backend && npm run dev` (nodemon) | `npm start`.
-- Backend tests: `node --test backend/src/scheduling/*.test.js backend/src/services/*.test.js`.
+- Backend tests: `node --test backend/src/scheduling/*.test.js backend/src/services/*.test.js backend/src/services/fuel/*.test.js`.
 - Frontend: `cd frontend && npm run dev` | `npm run build`.
 - Frontend lib tests: `node --test frontend/src/lib/*.test.js`.
