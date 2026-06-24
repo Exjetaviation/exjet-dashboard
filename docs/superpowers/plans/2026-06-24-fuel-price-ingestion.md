@@ -455,19 +455,16 @@ git commit -m "feat(fuel): fuel-price store (replace-per-vendor + import log + r
 
 **Files:** Modify `backend/src/services/gmail.js`
 
-`gmail.js` has an internal `getOAuthClient()` that hardcodes `GMAIL_REFRESH_TOKEN` (line 5-13). Add an exported builder that accepts any refresh token, so the fuel scan can use the ops account without disturbing the existing send/quotes paths.
+`gmail.js` has an internal `getOAuthClient()` that hardcodes `GMAIL_REFRESH_TOKEN` (line 5-13). Add an exported builder that takes a **full OAuth config** (client id/secret/redirect + refresh token), so the fuel scan can use a **completely separate OAuth app** for the `operations@` mailbox — nothing shared with the existing send/quotes credentials.
 
 - [ ] **Step 1: Add the export** (after `getGmail`, ~line 15):
 
 ```js
-// Build a Gmail API client for a specific account's refresh token (same OAuth app).
-// Used by the fuel scan to read operations@ via GMAIL_OPS_REFRESH_TOKEN.
-export const gmailClientFor = (refreshToken) => {
-  const client = new google.auth.OAuth2(
-    process.env.GMAIL_CLIENT_ID,
-    process.env.GMAIL_CLIENT_SECRET,
-    process.env.GMAIL_REDIRECT_URI
-  );
+// Build a Gmail API client from an explicit OAuth config. Lets the fuel scan use a
+// dedicated OAuth app (GMAIL_OPS_*) for the operations@ mailbox, isolated from the
+// existing GMAIL_* app used by sending + the quotes scan.
+export const gmailClientFor = ({ clientId, clientSecret, redirectUri, refreshToken }) => {
+  const client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   client.setCredentials({ refresh_token: refreshToken });
   return google.gmail({ version: 'v1', auth: client });
 };
@@ -523,9 +520,15 @@ const csvAttachments = (payload) => {
 // Scan operations@ for new vendor fuel CSVs and store them. Read-only on the mailbox
 // (dedup via fuel_price_imports — never marks mail read). Returns a summary.
 export async function scanFuelMail() {
-  const token = process.env.GMAIL_OPS_REFRESH_TOKEN;
-  if (!token) return { ok: false, error: 'GMAIL_OPS_REFRESH_TOKEN not set' };
-  const gmail = gmailClientFor(token);
+  // Dedicated OAuth app for the operations@ mailbox — fully isolated from the GMAIL_* app.
+  const ops = {
+    clientId: process.env.GMAIL_OPS_CLIENT_ID,
+    clientSecret: process.env.GMAIL_OPS_CLIENT_SECRET,
+    redirectUri: process.env.GMAIL_OPS_REDIRECT_URI,
+    refreshToken: process.env.GMAIL_OPS_REFRESH_TOKEN,
+  };
+  if (!ops.clientId || !ops.refreshToken) return { ok: false, error: 'GMAIL_OPS_* not configured' };
+  const gmail = gmailClientFor(ops);
   const list = await gmail.users.messages.list({ userId: 'me', q: QUERY, maxResults: 25 });
   const messages = list.data.messages || [];
   const results = [];
@@ -660,6 +663,56 @@ git commit -m "feat(fuel): weekly worker + /api/fuel routes, wired into index"
 
 ---
 
+## Task 9: One-time ops-Gmail auth helper script
+
+**Files:** Create `backend/scripts/fuelGmailAuth.mjs`
+
+A turnkey way for the user to mint `GMAIL_OPS_REFRESH_TOKEN` for the dedicated app. No test
+(one-off local script); the token prints to the user's terminal only.
+
+- [ ] **Step 1: Write the script**
+
+```js
+// One-time: mint a refresh token for the operations@ fuel mailbox using the DEDICATED
+// GMAIL_OPS_* OAuth app (isolated from the GMAIL_* app). Run locally from backend/.
+//   node scripts/fuelGmailAuth.mjs          -> prints the consent URL
+//   node scripts/fuelGmailAuth.mjs <code>   -> exchanges the ?code= for a refresh token
+import 'dotenv/config';
+import { google } from 'googleapis';
+
+const client = new google.auth.OAuth2(
+  process.env.GMAIL_OPS_CLIENT_ID,
+  process.env.GMAIL_OPS_CLIENT_SECRET,
+  process.env.GMAIL_OPS_REDIRECT_URI,
+);
+const code = process.argv[2];
+if (!code) {
+  const url = client.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+  });
+  console.log('1) Open this URL while logged in as operations@flyexjet.vip:\n' + url +
+    '\n\n2) After consent, copy the `code` query param from the redirect and run:\n   node scripts/fuelGmailAuth.mjs <code>');
+} else {
+  const { tokens } = await client.getToken(code);
+  console.log(tokens.refresh_token
+    ? '\nAdd this to env (local + Railway):\nGMAIL_OPS_REFRESH_TOKEN=' + tokens.refresh_token
+    : '\nNo refresh_token returned — re-run the URL with prompt=consent (already set) and ensure access_type=offline.');
+}
+```
+
+- [ ] **Step 2: Syntax check** — `cd backend && node --check scripts/fuelGmailAuth.mjs && echo SYNTAX_OK` → `SYNTAX_OK`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend/scripts/fuelGmailAuth.mjs
+git commit -m "feat(fuel): one-time ops-Gmail OAuth helper for GMAIL_OPS_REFRESH_TOKEN"
+```
+
+---
+
 ## Definition of Done
 
 - Migration `021` written + applied by the user.
@@ -671,8 +724,14 @@ git commit -m "feat(fuel): weekly worker + /api/fuel routes, wired into index"
 ## One-Time Setup (user)
 
 1. Apply `021_fuel_prices.sql` in Supabase.
-2. Authorize `operations@`: hit the auth URL (we'll provide via the existing OAuth flow) while logged in as operations@, then add `GMAIL_OPS_REFRESH_TOKEN` to env (local + Railway). Claude never sees the token.
-3. Set `FUEL_MAIL_SCAN=on` to enable the weekly worker (or just call `POST /api/fuel/scan`).
+2. **Create a dedicated Google OAuth app** (separate from the existing Gmail app) in the
+   Google Cloud Console for the `operations@` mailbox: a Web OAuth client with the
+   `gmail.readonly` scope and a redirect URI you control. Put its credentials in env as
+   `GMAIL_OPS_CLIENT_ID`, `GMAIL_OPS_CLIENT_SECRET`, `GMAIL_OPS_REDIRECT_URI` (local + Railway).
+3. **Mint the refresh token** with the helper script (Task 9), run **while logged in as
+   operations@flyexjet.vip**; paste the printed `GMAIL_OPS_REFRESH_TOKEN` into env. Claude
+   never sees the token.
+4. Set `FUEL_MAIL_SCAN=on` to enable the weekly worker (or just call `POST /api/fuel/scan`).
 
 ## Notes for the future cost-per-hour project
 - `getFuelPrices({ icao })` is the consumer entry point. Matching `fbo_name` to `airport_fbos` (fuzzy by `(icao, name)`) and price × fuel-burn → cost/hour are that project.

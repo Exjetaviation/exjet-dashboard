@@ -127,12 +127,15 @@ A small `parsers/index.js` routes by **sender** (primary) then filename:
 ## 5. Email Scan (reads `operations@`, read-only)
 
 **Auth:** `operations@flyexjet.vip` is a **different Google account** than the one currently
-connected (which the quotes scan + sending use via `GMAIL_REFRESH_TOKEN`). Reuse the **same
-OAuth app** (`GMAIL_CLIENT_ID`/`SECRET`/`REDIRECT_URI`, scopes already include
-`gmail.readonly`/`modify`) but obtain a **separate refresh token for operations@** via a
-one-time consent (logged in as operations@), stored as **`GMAIL_OPS_REFRESH_TOKEN`**. Add a
-helper `gmailClientFor(refreshToken)` so both accounts share the client-build code; the
-existing send/quotes-scan path keeps using `GMAIL_REFRESH_TOKEN` untouched.
+connected (which the quotes scan + sending use via `GMAIL_REFRESH_TOKEN`). Use a **fully
+separate, dedicated OAuth app** for it — nothing shared with the existing Gmail credentials
+(a single client *can* serve multiple accounts, but a separate app avoids cross-org/admin
+consent issues and keeps the fuel integration decoupled from sending + the quotes scan). New
+env: `GMAIL_OPS_CLIENT_ID`, `GMAIL_OPS_CLIENT_SECRET`, `GMAIL_OPS_REDIRECT_URI`,
+`GMAIL_OPS_REFRESH_TOKEN` (scope: `gmail.readonly` — read-only, we never modify the inbox).
+Add a helper `gmailClientFor({ clientId, clientSecret, redirectUri, refreshToken })` that
+builds a Gmail client from an explicit config; the existing send/quotes-scan path keeps using
+the `GMAIL_*` app untouched. A one-time `scripts/fuelGmailAuth.mjs` mints the refresh token.
 
 **Scan** (`backend/src/services/fuel/fuelMailScan.js` `scanFuelMail()`):
 1. Build a gmail client for the ops token. Query **narrowly** so we never touch the rest of
