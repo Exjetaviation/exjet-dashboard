@@ -95,6 +95,8 @@ const SIM_FLEET = [
     [[-5, 3, 'KTEB', 'KPBI'], [1.5, 3, 'KPBI', 'KTEB'], [5.5, 1.5, 'KTEB', 'KBED']]],
 ];
 const SIM_DELAYS = [0, 8, -5, 12, 3, -3, 6, -2];
+const SIM_BACK_DAYS = 90; // ~3 months of past flights
+const SIM_FWD_DAYS = 31;  // only ~1 month of FUTURE flights (no Aug/Sep when "now" is late June)
 function buildSimFleet(anchor) {
   const DAY = 86400000;
   const d0 = new Date(anchor); d0.setHours(0, 0, 0, 0); const mid = d0.getTime(); // local midnight today
@@ -125,18 +127,21 @@ function buildSimFleet(anchor) {
     };
     // Today — anchored to "now" so there are live in-progress legs crossing the now-line.
     today.forEach(([depH, durH, from, to], i) => add(`today-${i}`, anchor + depH * SIM_H, durH, from, to));
-    // Rest of the week (±4 days covers whatever 7-day window the week view shows) —
-    // out-and-back trips from the home base, a couple per day.
-    for (let dOff = -4; dOff <= 4; dOff++) {
-      if (dOff === 0) continue;
-      let t = mid + dOff * DAY + (7 + ((ti + dOff + 4) % 4)) * SIM_H; // first push 07:00–10:00
-      const obs = 1 + ((ti + dOff + 4) % 2);                          // 1 or 2 out-and-backs that day
+    // Rest of the window — ~3 months back, only ~1 month forward — out-and-back trips
+    // from the home base, with ~2 rest days a week so it isn't every single day.
+    for (let dOff = -SIM_BACK_DAYS; dOff <= SIM_FWD_DAYS; dOff++) {
+      if (dOff === 0) continue;                          // today is the anchored schedule above
+      const dow = (((dOff % 7) + 7) % 7);
+      if ((dow + ti) % 7 < 2) continue;                  // ~2 rest days/week, varied per tail
+      const w = ((ti + dOff) % 4 + 4) % 4;               // deterministic, always 0–3
+      let t = mid + dOff * DAY + (7 + w) * SIM_H;        // first push 07:00–10:00
+      const obs = 1 + (((ti + dOff) % 2 + 2) % 2);       // 1 or 2 out-and-backs that day
       for (let k = 0; k < obs; k++) {
-        const dest = dests[(ti + k + (dOff + 4)) % dests.length];
-        const durH = 1.25 + ((ti + k + Math.abs(dOff)) % 5) * 0.4;    // 1.25–2.85h
-        add(`${dOff}-${k}a`, t, durH, home, dest);                    // outbound
-        t += (durH + 1 + (k % 2) * 0.5) * SIM_H;                      // fly + ground turn
-        add(`${dOff}-${k}b`, t, durH, dest, home);                    // return
+        const dest = dests[((ti + k + dOff) % dests.length + dests.length) % dests.length];
+        const durH = 1.25 + (((ti + k + dOff) % 5 + 5) % 5) * 0.4; // 1.25–2.85h
+        add(`${dOff}-${k}a`, t, durH, home, dest);                 // outbound
+        t += (durH + 1 + (k % 2) * 0.5) * SIM_H;                   // fly + ground turn
+        add(`${dOff}-${k}b`, t, durH, dest, home);                 // return
         t += (durH + 1.5) * SIM_H;
       }
     }
@@ -450,8 +455,8 @@ useEffect(() => {
             <button onClick={()=>setZoom(1)} style={{padding:'0 8px',height:'30px',fontSize:'11px',background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'6px',cursor:'pointer',color:'var(--text-secondary)'}}>1:1</button>
           </div>
           <button onClick={goToToday} style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:'var(--accent)',color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer'}}>Today</button>
-          <button onClick={()=>{const next=!sim;setSim(next);if(next){setView('12h');setOffset(0);}}}
-            title="Preview a busy 10-aircraft day (mock data — does not touch live data)"
+          <button onClick={()=>{const next=!sim;setSim(next);if(next){setView('month');setOffset(0);}}}
+            title="Preview a busy fleet — ~3 months back, ~1 month ahead (mock data — does not touch live data)"
             style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:sim?'#a855f7':'var(--bg-card)',color:sim?'#fff':'var(--text-secondary)',border:`1px solid ${sim?'#a855f7':'var(--border)'}`,borderRadius:'8px',cursor:'pointer'}}>
             {sim?'● Simulating':'Simulate fleet'}
           </button>
