@@ -14,6 +14,15 @@ const getOAuthClient = () => {
 
 const getGmail = () => google.gmail({ version: 'v1', auth: getOAuthClient() });
 
+// Build a Gmail API client from an explicit OAuth config. Lets the fuel scan use a
+// dedicated OAuth app (GMAIL_OPS_*) for the operations@ mailbox, isolated from the
+// existing GMAIL_* app used by sending + the quotes scan.
+export const gmailClientFor = ({ clientId, clientSecret, redirectUri, refreshToken }) => {
+  const client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  client.setCredentials({ refresh_token: refreshToken });
+  return google.gmail({ version: 'v1', auth: client });
+};
+
 export const getUnreadQuoteEmails = async () => {
   const gmail = getGmail();
   const sevenDaysAgo = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
