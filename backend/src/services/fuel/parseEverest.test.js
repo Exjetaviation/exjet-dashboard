@@ -28,3 +28,17 @@ test('parseEverest maps columns, tier floor, alt name, skips blank icao', () => 
   assert.equal(rows[1].fbo_alt_name, 'BRAND X');
   assert.equal(rows[2].tier_from_gal, 251);
 });
+
+test('parseEverest skips blank/zero price rows', () => {
+  const csv = `ICAO,FBO,TIER,PRICE,NAME,
+KFXE,A,1,,,
+KTEB,B,1,0,,
+KMIA,C,1,5.50,,`;
+  const rows = parseEverest(csv, {});
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].icao, 'KMIA');
+});
+
+test('everestDateFromFilename rejects an invalid month', () => {
+  assert.equal(everestDateFromFilename('Everest Fuel_13_23_2026.csv'), null);
+});
