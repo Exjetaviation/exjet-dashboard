@@ -17,7 +17,9 @@ import { requireAuth } from './middleware/requireAuth.js';
 import { startRecorder } from './services/adsbRecorder.js';
 import { startReconciler } from './services/flightTrackReconciler.js';
 import schedulingRoutes from './routes/scheduling.js';
+import fuelRoutes from './routes/fuel.js';
 import { startSyncWorker } from './scheduling/syncWorker.js';
+import { startFuelMailWorker } from './services/fuel/fuelMailWorker.js';
 import { startSlackWatcher } from './slack/slackWatcher.js';
 
 // Load QB refresh token from Supabase on startup
@@ -68,6 +70,7 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/adsb', adsbRoutes);
 app.use('/api/scheduling', schedulingRoutes);
+app.use('/api/fuel', fuelRoutes);
 // Note: /api/test and /api/debug routers intentionally removed (finding F-03).
 
 app.listen(PORT, () => {
@@ -75,5 +78,6 @@ app.listen(PORT, () => {
   startRecorder();
   startReconciler();
   startSyncWorker();
+  startFuelMailWorker();
   startSlackWatcher();
 });

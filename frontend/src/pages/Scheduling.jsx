@@ -13,6 +13,7 @@ import SchedulingAircraft from './scheduling/Aircraft';
 import SchedulingClients from './scheduling/Clients';
 import SchedulingPeople from './scheduling/People';
 import RateCards from './RateCards';
+import FuelPrices from './FuelPrices';
 
 // The new Scheduling section — sourced from the MIRROR (scheduling_legs) rather
 // than a live LevelFlight call. "Schedule" is the board (mirror-backed Calendar);
@@ -59,6 +60,7 @@ export default function Scheduling() {
         <SectionTab id="clients" label="Clients" />
         <SectionTab id="people" label="Passengers" />
         <SectionTab id="ratecards" label="Rate Cards" />
+        <SectionTab id="fuel" label="Fuel" />
       </div>
 
       {section === 'overview' && <SchedulingOverview onJump={setSection} />}
@@ -71,6 +73,7 @@ export default function Scheduling() {
       {section === 'clients' && <SchedulingClients />}
       {section === 'people' && <SchedulingPeople />}
       {section === 'ratecards' && <RateCards />}
+      {section === 'fuel' && <FuelPrices />}
     </div>
   );
 }
