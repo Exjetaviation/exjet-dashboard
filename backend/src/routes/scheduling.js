@@ -171,27 +171,6 @@ router.get('/quotes', async (req, res) => {
   }
 });
 
-// GET /api/scheduling/quotes/:quoteNumber — resolve a quote by its Quote # and
-// return the same { trip, legs } payload as GET /trips/:id (powers the QuoteEditor).
-router.get('/quotes/:quoteNumber', async (req, res) => {
-  try {
-    const { data: row, error } = await supabase
-      .from('scheduling_trips').select('id, ' + TRIP_COLS).eq('quote_number', String(req.params.quoteNumber)).limit(1).maybeSingle();
-    if (error) throw error;
-    if (!row) return res.status(404).json({ error: 'Quote not found' });
-    const { data: legRows, error: legErr } = await supabase
-      .from('scheduling_legs')
-      .select('lf_synced_snapshot, origin, locally_modified, upstream_changed')
-      .eq('trip_id', row.id)
-      .order('seq');
-    if (legErr) throw legErr;
-    res.json({ trip: shapeTrip(row), legs: mirrorLegsFromRows(legRows) });
-  } catch (e) {
-    console.error('GET /api/scheduling/quotes/:quoteNumber:', e.message);
-    res.status(500).json({ error: 'Failed to load quote' });
-  }
-});
-
 const TRIP_COLS = 'lf_oid, trip_number, quote_number, status, purpose, rate_name, company_name, contact, checklist, booked_by, booked_at, locally_modified, upstream_changed, lf_synced_snapshot, origin, pricing';
 
 // PostgREST returns code PGRST116 from .single() when no row matched.
@@ -378,6 +357,27 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid/details:', e.message);
     res.status(500).json({ error: 'Failed to update trip details' });
+  }
+});
+
+// GET /api/scheduling/quotes/:quoteNumber — resolve a quote by its Quote # and
+// return the same { trip, legs } payload as GET /trips/:id (powers the QuoteEditor).
+router.get('/quotes/:quoteNumber', async (req, res) => {
+  try {
+    const { data: row, error } = await supabase
+      .from('scheduling_trips').select('id, ' + TRIP_COLS).eq('quote_number', String(req.params.quoteNumber)).limit(1).maybeSingle();
+    if (error) throw error;
+    if (!row) return res.status(404).json({ error: 'Quote not found' });
+    const { data: legRows, error: legErr } = await supabase
+      .from('scheduling_legs')
+      .select('lf_synced_snapshot, origin, locally_modified, upstream_changed')
+      .eq('trip_id', row.id)
+      .order('seq');
+    if (legErr) throw legErr;
+    res.json({ trip: shapeTrip(row), legs: mirrorLegsFromRows(legRows) });
+  } catch (e) {
+    console.error('GET /api/scheduling/quotes/:quoteNumber:', e.message);
+    res.status(500).json({ error: 'Failed to load quote' });
   }
 });
 
