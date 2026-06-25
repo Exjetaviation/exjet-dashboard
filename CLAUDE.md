@@ -98,6 +98,10 @@ flow that we fully own) plus the supporting ops features below. Recent/active wo
   by Trip # (`/scheduling/trips/:tripNo` → `SchedulingTripDetail.jsx`); both backed by one
   `scheduling_trips` row; no migration. New backend: `GET /api/scheduling/quotes/:quoteNumber`,
   trip_number read support in `GET /trips/:id`, `repriceFromBase` preserves manual overrides.
+- **Shipped on `feat/pricing-slideout`:** Pricing tab + slide-out — per-line `overrides` (pins),
+  `costPerHr`/`posRate`/`effectiveHourly`, `computeFlightCost`, Recalculate reset (`POST /price`);
+  shared `PricingSummary`/`PricingSlideOut` components used by both Quote editor and Trip page; Fees
+  tab renamed "Pricing" (tab `id` still `fees`).
 - **Roadmap / open items for the LF cutover** (from `docs/superpowers/specs/2026-06-22-quoting-dispatch-revamp-design.md`):
   final Quote#/Trip# numbering scheme, whether native dispatches ever sync back to LF, TSA Secure
   Flight filing, Payments/QuickBooks push, and a future **"true cost-per-hour" quoting** project that
@@ -303,16 +307,27 @@ Code in `backend/src/scheduling/` (32 `*.test.js` files — the most-tested surf
    - **FET base** = flight + surcharge + landing + FA + crew + overnight. **FET** = `fetBase × fet_rate`
      (charter ~7.5%, owner 0). **Segment fee** = `segment_fee_per_pax × Σpax` sits **OUTSIDE** the FET
      base. **Total** = fetBase + FET + segment fee.
+   - Also emits nominal **`costPerHr`** (rate-card `hourly_rate`) and **`posRate`** (`positioning_rate`).
 4. **Persist** — `priceAndStore()` writes the itemized breakdown to `scheduling_trips.pricing` + `rate_name`.
+   The `pricing` jsonb also stores `costPerHr`, `posRate`, `overrides`, and `effectiveHourly` (additive; no migration).
 
 **Manual per-line re-price** — `recomputeFromInputs(i)` (`PATCH …/price-lines`): recomputes from editable
 rate inputs + **ad-hoc fees** (`feeCatalog`: Uber/hotels/catering/de-ice/etc., each `{code, description,
 amount, taxable}`). **Taxable** fees join the FET base; **non-taxable** are added after FET.
 `fetEnabled=false` → FET 0 (owner). `totalOverride` **wins** over the computed total (sets `manual:true`).
+Takes `flightCost` as a precomputed per-trip input (fallback `hourlyRate × hours`) and an **`overrides`
+map** that pins specific lines (`flightCost | surcharge | landingCost | overnightCost | faCost |
+crewCost | segmentFee`): a pinned line uses the saved dollar amount and is not recomputed. Derives
+**`effectiveHourly`** = `flightCost / hours`. When `costPerHr` or `posRate` are edited,
+**`computeFlightCost(legs, rateCard, {costPerHr, posRate})`** recomputes the per-leg flight cost
+honoring min_hours/short-leg flooring — unless the flight line is pinned. **`POST …/price`
+(Recalculate)** = full reset: fresh rate-card price via `priceAndStore`, drops all `overrides`.
+`repriceFromBase` (leg/aircraft swap) also preserves the `overrides` map.
 
 > **Pricing is duplicated frontend↔backend, deliberately, for the manual-edit recompute only.**
 > `frontend/src/lib/feesMath.js` `recomputeInputs` is a **line-for-line mirror** of backend
-> `recomputeFromInputs`, used to show the live on-screen total while editing. **The backend is the
+> `recomputeFromInputs` (a `feesMath` test asserts `deepEqual`), including the `overrides` map and
+> `effectiveHourly` — used to show the live on-screen total while editing. **The backend is the
 > source of truth** (the persisted `pricing.total` always comes from a backend recompute). Keep the two
 > in lockstep. The frontend does **not** reimplement `priceTrip`.
 
@@ -656,7 +671,7 @@ Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuote
 
 | Router | Mount | Highlights |
 |---|---|---|
-| `scheduling.js` | `/api/scheduling` | the native scheduling/quoting API — trips CRUD, legs, `/quote-preview`, `/price`, `/price-lines`, `/people`, `/passengers`, `/documents`, `/crew-roster`, `/airport-search`, `/airport/:icao/fbos`, `/leg-estimate`, `/revert`, itinerary send. `GET /quotes` list includes `quote_number`. `GET /quotes/:quoteNumber` resolves a quote by Quote # → `{ trip, legs }`. `GET /trips/:id` now also accepts a `trip_number` (read-only; mutations still require uuid/lf_oid via `tripColumn`). `PATCH /trips/:id/details` also persists `purpose`/`company_name`/`contact` and returns `{ ok, pricing }`. Reprice (`priceAndStore`/`repriceFromBase`) preserves manual ad-hoc fees, FET-off, and total override. Mutations gated by `requireSchedulingEditor`. |
+| `scheduling.js` | `/api/scheduling` | the native scheduling/quoting API — trips CRUD, legs, `/quote-preview`, `/price`, `/price-lines`, `/people`, `/passengers`, `/documents`, `/crew-roster`, `/airport-search`, `/airport/:icao/fbos`, `/leg-estimate`, `/revert`, itinerary send. `GET /quotes` list includes `quote_number`. `GET /quotes/:quoteNumber` resolves a quote by Quote # → `{ trip, legs }`. `GET /trips/:id` now also accepts a `trip_number` (read-only; mutations still require uuid/lf_oid via `tripColumn`). `PATCH /trips/:id/details` also persists `purpose`/`company_name`/`contact` and returns `{ ok, pricing }`. Reprice (`priceAndStore`/`repriceFromBase`) preserves manual ad-hoc fees, FET-off, total override, and `overrides` map. `PATCH /price-lines` persists `costPerHr`/`posRate`/`overrides` and recomputes per-leg flight cost when those rates change (skipped if flight line is pinned); `POST /price` = Recalculate: fresh rate-card price, drops all `overrides`. Mutations gated by `requireSchedulingEditor`. |
 | `levelflight.js` | `/api/levelflight` | live LF read-through: `/legs` (2mo back/3mo fwd, pax-count corrected), `/duty`, `/aircraft`, `/pilots`, `/trip/:oid`, `/pilot-calendar`, `/aircraft-status/:oid`. |
 | `adsb.js` | `/api/adsb` | `/positions`, `/trail`, `/actuals`, `/previous-flights`, `/flight-track/:legId`. |
 | `quotes.js` | `/api/quotes` | OLD email-AI quotes (`/scan`, CRUD, `/:id/send`) + LF quote read-through (`/list`, `/dispatch/:id/preview\|pdf\|send-link`). |
@@ -701,9 +716,18 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   translucent **scheduled** block + solid **actual** bar that grows live; **blue=completed, green=in-flight,
   grey=future** via `legStateColor`; delay math `lib/delaySegments.js`). `Map.jsx` (FleetMap — live ADS-B,
   **"Awaiting signal"** when no fix, persisted trail toggle, history replay). `Quotes.jsx`, `Finances.jsx`
-  (QB, 6 tabs), `FuelPrices.jsx`, `SchedulingTripDetail.jsx` (tabbed native editor),
-  `QuoteEditor.jsx` (streamlined quote page: inline legs + live flight time, per-leg pax, editable client info, compact auto-priced panel with ad-hoc fees + total override, debounced autosave, View Quote/PDF/Copy-link + Book + Discard; booked trips use `SchedulingTripDetail`). `AgentReviewPanel.jsx` streams the readiness review.
-- **lib utils** (7 have `node:test`): `feesMath` (mirror of backend pricing), `trips`, `easternTime` (+ `easternInputParts` added for QuoteEditor date/time inputs),
+  (QB, 6 tabs), `FuelPrices.jsx`, `SchedulingTripDetail.jsx` (tabbed native editor — **Fees tab renamed
+  "Pricing"**, tab `id` still `fees`), `QuoteEditor.jsx` (streamlined quote page: inline legs + live
+  flight time, per-leg pax, editable client info, compact auto-priced panel with ad-hoc fees + total
+  override, debounced autosave, View Quote/PDF/Copy-link + Book + Discard; booked trips use
+  `SchedulingTripDetail`). `AgentReviewPanel.jsx` streams the readiness review.
+- **Shared pricing components** (`components/pricing/`): `PricingSummary.jsx` (collapsible summary bar
+  used in both `QuoteEditor` and `SchedulingTripDetail`), `PricingSlideOut.jsx` (right-side drawer
+  editor — edit dollar amounts → per-line pins, ▲▼ steppers, Recalculate, ad-hoc fees, FET toggle,
+  Total override; autosaves via `/price-lines`), `pricingRows.js` (`fmtHrs`/`usd`/`pinPatch`/
+  `unpinPatch`/`normalizePricing` helpers).
+- **lib utils** (7 have `node:test`): `feesMath` (mirror of backend pricing, including per-line `overrides`
+  map and `effectiveHourly`), `trips`, `easternTime` (+ `easternInputParts` added for QuoteEditor date/time inputs),
   `calendarRange`, `delaySegments`, `schedulingAggregate`, `formatElapsed`, `feeCatalog`, `basemap`.
 - **Dead/orphan files:** `pages/PricingModel.jsx` (not routed), `routes/quotes.js` + `services/gmail.js`
   (empty stubs), `App.css` (unused Vite boilerplate), `services/quoteEngine.js` (legacy copy).
@@ -785,7 +809,8 @@ Native **`node:test`** throughout (no framework). Tests live **next to source** 
   `crew > live > exact > approx`, never downgraded.
 - **Supabase JWT is ES256** — verify via `supabase.auth.getUser`, never HS256 `jwt.verify`.
 - **Pricing source of truth is the backend**; keep `feesMath.recomputeInputs` (frontend) in lockstep with
-  `pricing.recomputeFromInputs` (backend). Segment fee sits OUTSIDE the FET base in the NEW model.
+  `pricing.recomputeFromInputs` (backend), including the per-line `overrides` map and `effectiveHourly`.
+  Segment fee sits OUTSIDE the FET base in the NEW model.
 - **PDFs locally need `PUPPETEER_EXECUTABLE_PATH`** (bundled chromium is Linux-only); wrap output in `Buffer.from`.
 
 **Footguns**
