@@ -132,3 +132,19 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
     tail: rateCard.aircraft_tail,
   };
 };
+
+// Per-leg flight cost honoring nominal Cost/Hr (revenue legs) and Pos/Hr (ferry legs),
+// with the rate card's min_hours / short_leg flooring. `rates` optionally overrides the
+// card's hourly_rate / positioning_rate (when the user edits Cost/Hr or Pos/Hr).
+// legs: [{ mins, isPositioning }]. Returns { flightCost, hours }.
+export const computeFlightCost = (legs = [], rateCard = {}, rates = {}) => {
+  const card = {
+    ...rateCard,
+    hourly_rate: rates.costPerHr != null && rates.costPerHr !== '' ? Number(rates.costPerHr) : rateCard.hourly_rate,
+    positioning_rate: rates.posRate != null && rates.posRate !== '' ? Number(rates.posRate) : rateCard.positioning_rate,
+  };
+  const perLeg = legs.map((l) => calcLeg(l.mins, card, { isPositioning: !!l.isPositioning }));
+  const flightCost = Math.round(perLeg.reduce((s, l) => s + l.cost, 0));
+  const hours = Math.round(perLeg.reduce((s, l) => s + l.hrs, 0) * 100) / 100;
+  return { flightCost, hours };
+};

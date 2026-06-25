@@ -199,3 +199,24 @@ test('repriceFromBase preserves per-line overrides across a leg reprice', () => 
   assert.deepEqual(out.overrides, { surcharge: 9999 });
   assert.equal(out.manual, true);
 });
+
+// ── Task 3: computeFlightCost per-leg with overridable Cost/Hr + Pos/Hr ──────
+import { computeFlightCost as cfc } from './pricing.js';
+
+const card2 = { hourly_rate: 8500, positioning_rate: 7000, min_hours: 0, short_leg_time: 0 };
+
+test('computeFlightCost: revenue legs at costPerHr, ferry legs at posRate', () => {
+  const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
+  // 2h*8500 + 1h*7000 = 24000
+  assert.equal(cfc(legs, card2, {}).flightCost, 24000);
+});
+
+test('computeFlightCost: applies overridden costPerHr/posRate', () => {
+  const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
+  assert.equal(cfc(legs, card2, { costPerHr: 10000, posRate: 5000 }).flightCost, 25000); // 2*10000 + 1*5000
+});
+
+test('computeFlightCost: returns total flight hours', () => {
+  const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
+  assert.equal(cfc(legs, card2, {}).hours, 3);
+});
