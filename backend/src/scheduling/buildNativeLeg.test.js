@@ -48,3 +48,21 @@ test('buildNativeLegSnapshot fbo defaults to null', () => {
   assert.equal(snap.departure.fbo, null);
   assert.equal(snap.arrival.fbo, null);
 });
+
+test('buildNativeLegSnapshot populates _calc (rounded nm + EFT) from time so the trip page shows flight time', () => {
+  const snap = buildNativeLegSnapshot(
+    { dep_icao: 'KFXE', arr_icao: 'KTEB', seq: 0 }, { id: 't1' },
+    { distanceNm: 932.4837, minutes: 133.6 },
+  );
+  assert.equal(snap._calc.distance.value, 932);   // whole nm, no decimals
+  assert.equal(snap._calc.minutes, 134);
+  assert.equal(snap._calc._minutes, 134);
+  assert.equal(snap._calc.time, '2:14');
+});
+
+test('buildNativeLegSnapshot _calc is null without time, or without a full route', () => {
+  // no time → no _calc
+  assert.equal(buildNativeLegSnapshot({ dep_icao: 'KFXE', arr_icao: 'KTEB' }, { id: 't1' })._calc, null);
+  // blank placeholder leg (no airports) → no _calc even if a time is passed
+  assert.equal(buildNativeLegSnapshot({ dep_icao: null, arr_icao: null }, { id: 't1' }, { distanceNm: null, minutes: 150 })._calc, null);
+});

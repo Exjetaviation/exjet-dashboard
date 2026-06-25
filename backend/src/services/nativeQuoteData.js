@@ -17,7 +17,7 @@ export const mapNativeQuoteLeg = (leg, time) => {
     toName: airportName(leg.arr_icao),
     depTime: leg.dep_time ? Date.parse(leg.dep_time) : null,
     arrTime: leg.arr_time ? Date.parse(leg.arr_time) : null,
-    distance: time?.distanceNm ?? null,
+    distance: time?.distanceNm != null ? Math.round(time.distanceNm) : null,
     eft: time ? eftStr(time.minutes) : null,
     pax: leg.pax ?? null,
     fromLatLng: dep ? [dep.lat, dep.lng] : null,
@@ -38,10 +38,13 @@ export async function buildNativeQuoteVM(tripId) {
     .from('scheduling_legs').select('dep_icao, arr_icao, dep_time, arr_time, lf_synced_snapshot, seq')
     .eq('trip_id', tripId).order('seq');
   const rows = legRows || [];
+  // A quote never shows blank placeholder legs (e.g. the initial draft leg) —
+  // only legs that have both a departure and an arrival airport.
+  const real = rows.filter((l) => l.dep_icao && l.arr_icao);
   const tail = rows[0]?.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber || null;
   const { type, maxPax } = aircraftInfo(tail);
-  const times = await legMinutes(null, rows.map((l) => ({ dep_icao: l.dep_icao, arr_icao: l.arr_icao })));
-  const legs = rows.map((l, i) => mapNativeQuoteLeg(
+  const times = await legMinutes(null, real.map((l) => ({ dep_icao: l.dep_icao, arr_icao: l.arr_icao })));
+  const legs = real.map((l, i) => mapNativeQuoteLeg(
     { ...l, pax: l.lf_synced_snapshot?.passengerCount ?? null }, times[i]));
   const total = trip.pricing && !trip.pricing.error ? (trip.pricing.total ?? null) : null;
   return {

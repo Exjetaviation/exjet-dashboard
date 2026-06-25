@@ -18,6 +18,11 @@ test('mapNativeQuoteLeg: builds the quote VM leg shape', () => {
   assert.ok(m.fromLatLng[0] > 0 && m.fromLatLng[1] < 0, 'KFXE coords must be [lat>0, lng<0] — guards against a lat/lng swap');
 });
 
+test('mapNativeQuoteLeg: rounds distance to whole nm (no long decimals on the quote)', () => {
+  const m = mapNativeQuoteLeg({ dep_icao: 'KFXE', arr_icao: 'KTEB', pax: 4 }, { minutes: 133, distanceNm: 932.4837465 });
+  assert.equal(m.distance, 932);
+});
+
 test('mapNativeQuoteLeg: unknown airport → null name/coords, still maps codes', () => {
   const m = mapNativeQuoteLeg({ dep_icao: 'ZZZZ', arr_icao: 'KTEB', dep_time: null, arr_time: null, pax: 0 }, null);
   assert.equal(m.from, 'ZZZZ');
