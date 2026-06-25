@@ -53,7 +53,8 @@ export default function SchedulingTripDetail() {
   const [error, setError] = useState(null);
   const [pricingOpen, setPricingOpen] = useState(false);
   const [pricingCollapsed, setPricingCollapsed] = useState(false);
-  const loaded = useRef(false);
+  const priceSaveTimer = useRef(null);
+  const pendingPricing = useRef(null);
   const [crewEdit, setCrewEdit] = useState(null);   // draft crew assignment when editing
   const [detailsEdit, setDetailsEdit] = useState(null); // draft aircraft/customer/legs when editing
   const [passengers, setPassengers] = useState([]);     // saved manifest
@@ -77,7 +78,7 @@ export default function SchedulingTripDetail() {
       const j = await r.json();
       if (j.trip) {
         if (j.trip.status === 'quote' && j.trip.quote_number) { navigate(`/scheduling/quotes/${j.trip.quote_number}`, { replace: true }); return; }
-        loaded.current = false; setMeta(j.trip); setLegs(j.legs || []);
+        setMeta({ ...j.trip, pricing: (j.trip.pricing && !j.trip.pricing.error) ? normalizePricing(j.trip.pricing, j.trip.purpose) : j.trip.pricing }); setLegs(j.legs || []);
       } else setError(j.error || 'Trip not found');
     } catch (e) { setError(e.message); }
   }, [id, navigate]);
@@ -105,57 +106,6 @@ export default function SchedulingTripDetail() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadPassengers(); loadDocuments(); }, [loadPassengers, loadDocuments]);
-
-  // Mark loaded only after the post-load render's autosave effects have run (and
-  // skipped because loaded.current was still false), so loading never triggers a save.
-  useEffect(() => { if (meta?.id) loaded.current = true; }, [meta?.id]);
-
-  // Autosave pricing controls (debounced) — native trips only; mirrors QuoteEditor's pattern.
-  const priceKey = JSON.stringify({
-    overrides: meta?.pricing?.overrides,
-    costPerHr: meta?.pricing?.costPerHr,
-    posRate: meta?.pricing?.posRate,
-    surchargePerHr: meta?.pricing?.surchargePerHr,
-    landingFee: meta?.pricing?.landingFee,
-    landings: meta?.pricing?.landings,
-    nights: meta?.pricing?.nights,
-    faCount: meta?.pricing?.faCount,
-    crewCount: meta?.pricing?.crewCount,
-    segmentPerPax: meta?.pricing?.segmentPerPax,
-    fees: meta?.pricing?.fees,
-    fetEnabled: meta?.pricing?.fetEnabled,
-    totalOverride: meta?.pricing?.totalOverride,
-  });
-  useEffect(() => {
-    if (!loaded.current || !tripId || !isNative || !meta?.pricing) return;
-    const t = setTimeout(async () => {
-      try {
-        const r = await apiFetch(`/api/scheduling/trips/${tripId}/price-lines`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            overrides: meta.pricing.overrides,
-            costPerHr: meta.pricing.costPerHr,
-            posRate: meta.pricing.posRate,
-            surchargePerHr: meta.pricing.surchargePerHr,
-            landingFee: meta.pricing.landingFee,
-            landings: meta.pricing.landings,
-            nights: meta.pricing.nights,
-            faCount: meta.pricing.faCount,
-            crewCount: meta.pricing.crewCount,
-            segmentPerPax: meta.pricing.segmentPerPax,
-            fees: meta.pricing.fees,
-            fetEnabled: meta.pricing.fetEnabled,
-            totalOverride: meta.pricing.totalOverride,
-          }),
-        });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
-        if (j.pricing) setMeta((m) => ({ ...m, pricing: normalizePricing(j.pricing, meta?.purpose) }));
-      } catch (e) { setError(e.message); }
-    }, 700);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceKey]);
 
   const uploadDoc = async (file, passengerId = null) => {
     if (!file) return;
@@ -229,12 +179,34 @@ export default function SchedulingTripDetail() {
     setBusy(false);
   };
 
+  // Pricing edits are saved by the user action (this fn), not by an effect watching
+  // pricing — so load()/reprice() can refresh pricing without ever triggering a save.
   const patchPricing = (patch) => {
     setMeta((m) => {
       const merged = { ...(m?.pricing || {}), ...patch };
       const pricing = normalizePricing({ ...merged, ...recomputeInputs(merged) }, m?.purpose);
+      pendingPricing.current = pricing;
       return { ...m, pricing };
     });
+    if (priceSaveTimer.current) clearTimeout(priceSaveTimer.current);
+    priceSaveTimer.current = setTimeout(async () => {
+      const p = pendingPricing.current;
+      if (!p || !tripId) return;
+      try {
+        const r = await apiFetch(`/api/scheduling/trips/${tripId}/price-lines`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            overrides: p.overrides, costPerHr: p.costPerHr, posRate: p.posRate,
+            surchargePerHr: p.surchargePerHr, landingFee: p.landingFee, landings: p.landings,
+            nights: p.nights, faCount: p.faCount, crewCount: p.crewCount,
+            segmentPerPax: p.segmentPerPax, fees: p.fees, fetEnabled: p.fetEnabled, totalOverride: p.totalOverride,
+          }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
+        if (j.pricing) setMeta((m) => ({ ...m, pricing: normalizePricing(j.pricing, m?.purpose) }));
+      } catch (e) { setError(e.message); }
+    }, 700);
   };
   const recalcPricing = async () => { await reprice(); };
 
@@ -481,7 +453,7 @@ export default function SchedulingTripDetail() {
       {tab === 'fees' && (
         <PricingSummary pricing={meta?.pricing} collapsed={pricingCollapsed} onToggle={() => setPricingCollapsed((c) => !c)} onOpen={() => setPricingOpen(true)} editable={isNative} />
       )}
-      {pricingOpen && isNative && (
+      {tab === 'fees' && pricingOpen && isNative && (
         <PricingSlideOut pricing={meta?.pricing} onPatch={patchPricing} onRecalculate={recalcPricing} onClose={() => setPricingOpen(false)} />
       )}
 
