@@ -93,6 +93,11 @@ export async function runReconcile({ days = RECONCILE_LOOKBACK_DAYS } = {}) {
     console.warn('[flightTrackReconciler] runReconcile error (soft):', e?.message || e);
   }
   console.log(`[flightTrackReconciler] reconcile days=${days} scanned=${scanned} written=${written} skipped=${skipped}`);
+  // best-effort: roll completed pilot flight-info into component times
+  try {
+    const { accrueAllCompleted } = await import('../fleet/accrueAllCompleted.js');
+    await accrueAllCompleted();
+  } catch (e) { console.warn('[reconciler] component accrual skipped:', e.message); }
   return { scanned, written, skipped };
 }
 
