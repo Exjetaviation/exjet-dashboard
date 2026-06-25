@@ -93,6 +93,11 @@ flow that we fully own) plus the supporting ops features below. Recent/active wo
 - **Open feature branches:** ADS-B live tracking, force-dark-theme, calendar airborne-border, map
   fullscreen, dark-map-background fixes, and `chore/remove-old-assistant-widget` (retiring the legacy
   `/api/assistant`, §14).
+- **Shipped on `feat/quote-editor-trip-split`:** quote/trip page split — a streamlined Quote editor
+  keyed by Quote # (`/scheduling/quotes/:quoteNo` → `QuoteEditor.jsx`) vs the booked Trip page keyed
+  by Trip # (`/scheduling/trips/:tripNo` → `SchedulingTripDetail.jsx`); both backed by one
+  `scheduling_trips` row; no migration. New backend: `GET /api/scheduling/quotes/:quoteNumber`,
+  trip_number read support in `GET /trips/:id`, `repriceFromBase` preserves manual overrides.
 - **Roadmap / open items for the LF cutover** (from `docs/superpowers/specs/2026-06-22-quoting-dispatch-revamp-design.md`):
   final Quote#/Trip# numbering scheme, whether native dispatches ever sync back to LF, TSA Secure
   Flight filing, Payments/QuickBooks push, and a future **"true cost-per-hour" quoting** project that
@@ -651,7 +656,7 @@ Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuote
 
 | Router | Mount | Highlights |
 |---|---|---|
-| `scheduling.js` | `/api/scheduling` | the native scheduling/quoting API — trips CRUD, legs, `/quote-preview`, `/price`, `/price-lines`, `/people`, `/passengers`, `/documents`, `/crew-roster`, `/airport-search`, `/airport/:icao/fbos`, `/leg-estimate`, `/revert`, itinerary send. Mutations gated by `requireSchedulingEditor`. |
+| `scheduling.js` | `/api/scheduling` | the native scheduling/quoting API — trips CRUD, legs, `/quote-preview`, `/price`, `/price-lines`, `/people`, `/passengers`, `/documents`, `/crew-roster`, `/airport-search`, `/airport/:icao/fbos`, `/leg-estimate`, `/revert`, itinerary send. `GET /quotes` list includes `quote_number`. `GET /quotes/:quoteNumber` resolves a quote by Quote # → `{ trip, legs }`. `GET /trips/:id` now also accepts a `trip_number` (read-only; mutations still require uuid/lf_oid via `tripColumn`). `PATCH /trips/:id/details` also persists `purpose`/`company_name`/`contact` and returns `{ ok, pricing }`. Reprice (`priceAndStore`/`repriceFromBase`) preserves manual ad-hoc fees, FET-off, and total override. Mutations gated by `requireSchedulingEditor`. |
 | `levelflight.js` | `/api/levelflight` | live LF read-through: `/legs` (2mo back/3mo fwd, pax-count corrected), `/duty`, `/aircraft`, `/pilots`, `/trip/:oid`, `/pilot-calendar`, `/aircraft-status/:oid`. |
 | `adsb.js` | `/api/adsb` | `/positions`, `/trail`, `/actuals`, `/previous-flights`, `/flight-track/:legId`. |
 | `quotes.js` | `/api/quotes` | OLD email-AI quotes (`/scan`, CRUD, `/:id/send`) + LF quote read-through (`/list`, `/dispatch/:id/preview\|pdf\|send-link`). |
@@ -681,11 +686,9 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   `/flights` + `/flights/:id`, `/trips/:id`, `/crew` + `/crew/:id`, `/aircraft` + `/aircraft/:tail`,
   `/clients` + `/clients/:id`, `/rate-cards`, `/finances`, `/maintenance`, `/assistant`, `/crew-calendar`,
   `/quotes`. (`RateCards` & `Maintenance` are hidden from the sidebar; routes still exist.)
-- **Scheduling routes:** `/scheduling` (tabbed hub `Scheduling.jsx`), `/scheduling/new`,
-  `/scheduling/trips/:id` (tabbed editor), `/scheduling/trips/:id/sheet`, `/scheduling/people/:id`. The
-  `pages/scheduling/*` sub-pages (Overview/Aircraft/Clients/Crew/People/Requests) are **tabs inside
-  `Scheduling.jsx`** (active tab in `?section=`), not top-level routes. The "Schedule" tab reuses
-  `Calendar` with `legsEndpoint="/api/scheduling/legs"`.
+- **Scheduling routes:** `/scheduling` (tabbed hub `Scheduling.jsx`), `/scheduling/new` (creates a draft quote then redirects into the editor via `NewQuoteRedirect.jsx`), `/scheduling/quotes/:quoteNo` (`QuoteEditor.jsx` — the streamlined quote editor keyed by Quote #), `/scheduling/trips/:id` (tabbed editor `SchedulingTripDetail.jsx` — `:id` accepts a uuid, 24-hex lf_oid, or trip_number; redirects quote-status rows to `/quotes/:quoteNo` and shows a "View quote ↗" cross-link), `/scheduling/trips/:id/sheet`, `/scheduling/people/:id`. `SchedulingNewTrip.jsx` was replaced by `QuoteEditor.jsx` + `NewQuoteRedirect.jsx`. The `pages/scheduling/*` sub-pages (Overview/Aircraft/Clients/Crew/People/Requests) are **tabs inside `Scheduling.jsx`** (active tab in `?section=`), not top-level routes. The "Schedule" tab reuses `Calendar` with `legsEndpoint="/api/scheduling/legs"`.
+
+> **Quote/Trip addressing:** a single `scheduling_trips` row is the quote while in Quote # space (`/quotes/:quoteNo`) and the booked trip once in Trip # space (`/trips/:tripNo`). No migration — the split is purely a routing/UI convention.
 
 > **Scheduling section ≠ live Flights.** `/scheduling` reads the **Supabase mirror** (`/api/scheduling/*`);
 > the dashboard Flights/Calendar default to **live LevelFlight** (`/api/levelflight/*`). The same
@@ -699,8 +702,8 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   grey=future** via `legStateColor`; delay math `lib/delaySegments.js`). `Map.jsx` (FleetMap — live ADS-B,
   **"Awaiting signal"** when no fix, persisted trail toggle, history replay). `Quotes.jsx`, `Finances.jsx`
   (QB, 6 tabs), `FuelPrices.jsx`, `SchedulingTripDetail.jsx` (tabbed native editor),
-  `SchedulingNewTrip.jsx` (live ETE/price preview). `AgentReviewPanel.jsx` streams the readiness review.
-- **lib utils** (7 have `node:test`): `feesMath` (mirror of backend pricing), `trips`, `easternTime`,
+  `QuoteEditor.jsx` (streamlined quote page: inline legs + live flight time, per-leg pax, editable client info, compact auto-priced panel with ad-hoc fees + total override, debounced autosave, View Quote/PDF/Copy-link + Book + Discard; booked trips use `SchedulingTripDetail`). `AgentReviewPanel.jsx` streams the readiness review.
+- **lib utils** (7 have `node:test`): `feesMath` (mirror of backend pricing), `trips`, `easternTime` (+ `easternInputParts` added for QuoteEditor date/time inputs),
   `calendarRange`, `delaySegments`, `schedulingAggregate`, `formatElapsed`, `feeCatalog`, `basemap`.
 - **Dead/orphan files:** `pages/PricingModel.jsx` (not routed), `routes/quotes.js` + `services/gmail.js`
   (empty stubs), `App.css` (unused Vite boilerplate), `services/quoteEngine.js` (legacy copy).

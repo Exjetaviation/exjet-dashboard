@@ -25,7 +25,8 @@ import AssistantPage from './pages/AssistantPage';
 import CrewCalendar from './pages/CrewCalendar';
 import Scheduling from './pages/Scheduling';
 import SchedulingTripDetail from './pages/SchedulingTripDetail';
-import SchedulingNewTrip from './pages/SchedulingNewTrip';
+import QuoteEditor from './pages/QuoteEditor';
+import NewQuoteRedirect from './pages/NewQuoteRedirect';
 import SchedulingTripSheet from './pages/SchedulingTripSheet';
 import PersonProfile from './pages/scheduling/PersonProfile';
 
@@ -96,7 +97,8 @@ function SchedulingApp() {
         <TopNav />
         <Routes>
           <Route index element={<Scheduling />} />
-          <Route path="new" element={<SchedulingNewTrip />} />
+          <Route path="new" element={<NewQuoteRedirect />} />
+          <Route path="quotes/:quoteNo" element={<QuoteEditor />} />
           <Route path="trips/:id" element={<SchedulingTripDetail />} />
           <Route path="trips/:id/sheet" element={<SchedulingTripSheet />} />
           <Route path="people/:id" element={<PersonProfile />} />

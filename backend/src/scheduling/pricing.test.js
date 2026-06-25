@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcLeg, priceTrip, recomputeFromInputs } from './pricing.js';
+import { calcLeg, priceTrip, recomputeFromInputs, repriceFromBase } from './pricing.js';
 
 const rc = {
   aircraft_tail: 'N69FP', rate_name: 'GIV', hourly_rate: 9000, positioning_rate: 4500,
@@ -95,4 +95,48 @@ test('default (no fees, no flags) keeps FET on — backward compatible', () => {
   const r = recomputeFromInputs(baseInputs);
   assert.equal(r.fetAmount, Math.round(r.fetBase * 0.075));
   assert.equal(r.totalOverride, null);
+});
+
+// ── repriceFromBase tests ────────────────────────────────────────────────────
+// A freshly-computed rate-card breakdown (the shape priceTrip/priceQuoteLegs returns).
+const fresh = () => ({
+  hourlyRate: 8000, hours: 5, surchargePerHr: 500, faFee: 0, faCount: 0,
+  crewFee: 0, crewCount: 0, landingFee: 1000, landings: 2,
+  segmentPerPax: 50, pax: 10, overnightCost: 0, fetRate: 0.075,
+  flightCost: 40000, surcharge: 2500, landingCost: 2000, segmentFee: 500,
+  fetBase: 44500, fetAmount: 3338, total: 48338, rateName: 'N69FP CHARTER', tail: 'N69FP',
+});
+
+test('repriceFromBase: no manual edits returns the fresh base unchanged', () => {
+  const out = repriceFromBase(fresh(), {});
+  assert.equal(out.total, 48338);
+  assert.ok(!out.manual);
+});
+
+test('repriceFromBase: null old returns the fresh base unchanged', () => {
+  const out = repriceFromBase(fresh(), null);
+  assert.equal(out.total, 48338);
+  assert.ok(!out.manual);
+});
+
+test('repriceFromBase: preserves a total override (override wins)', () => {
+  const out = repriceFromBase(fresh(), { totalOverride: 60000 });
+  assert.equal(out.totalOverride, 60000);
+  assert.equal(out.total, 60000);
+  assert.equal(out.manual, true);
+});
+
+test('repriceFromBase: preserves ad-hoc fees and adds them to the total', () => {
+  const out = repriceFromBase(fresh(), { fees: [{ code: 'Catering', amount: 600, taxable: false }] });
+  assert.equal(out.fees.length, 1);
+  assert.equal(out.feesNonTaxable, 600);
+  assert.equal(out.total, 48338 + 600); // non-taxable fee added after FET
+  assert.equal(out.manual, true);
+});
+
+test('repriceFromBase: preserves FET off (owner)', () => {
+  const out = repriceFromBase(fresh(), { fetEnabled: false });
+  assert.equal(out.fetAmount, 0);
+  assert.equal(out.total, 44500 + 500); // fetBase + segmentFee, no FET
+  assert.equal(out.manual, true);
 });

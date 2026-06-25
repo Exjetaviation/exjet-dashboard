@@ -71,28 +71,35 @@ export default function SchedulingTripDetail() {
     try {
       const r = await apiFetch(`/api/scheduling/trips/${id}`);
       const j = await r.json();
-      if (j.trip) { setMeta(j.trip); setLegs(j.legs || []); }
-      else setError(j.error || 'Trip not found');
+      if (j.trip) {
+        if (j.trip.status === 'quote' && j.trip.quote_number) { navigate(`/scheduling/quotes/${j.trip.quote_number}`, { replace: true }); return; }
+        setMeta(j.trip); setLegs(j.legs || []);
+      } else setError(j.error || 'Trip not found');
     } catch (e) { setError(e.message); }
-  }, [id]);
+  }, [id, navigate]);
+
+  const tripId = meta?.id || null;
 
   const loadPassengers = useCallback(async () => {
+    if (!tripId) return;
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/passengers`);
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/passengers`);
       const j = await r.json();
       if (j.passengers) setPassengers(j.passengers);
     } catch { /* soft */ }
-  }, [id]);
+  }, [tripId]);
 
   const loadDocuments = useCallback(async () => {
+    if (!tripId) return;
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/documents`);
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/documents`);
       const j = await r.json();
       if (j.documents) setDocuments(j.documents);
     } catch { /* soft */ }
-  }, [id]);
+  }, [tripId]);
 
-  useEffect(() => { load(); loadPassengers(); loadDocuments(); }, [load, loadPassengers, loadDocuments]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadPassengers(); loadDocuments(); }, [loadPassengers, loadDocuments]);
 
   const uploadDoc = async (file, passengerId = null) => {
     if (!file) return;
@@ -104,7 +111,7 @@ export default function SchedulingTripDetail() {
         fr.onerror = reject;
         fr.readAsDataURL(file);
       });
-      const r = await apiFetch(`/api/scheduling/trips/${id}/documents`, {
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/documents`, {
         method: 'POST',
         body: JSON.stringify({ name: file.name, doc_type: passengerId ? 'passenger_id' : docType, content_type: file.type, data_base64, passenger_id: passengerId }),
       });
@@ -126,7 +133,7 @@ export default function SchedulingTripDetail() {
   const setStatus = async (status) => {
     setBusy(true); setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Update failed (${r.status})`); }
       await load();
     } catch (e) { setError(e.message); }
@@ -136,7 +143,7 @@ export default function SchedulingTripDetail() {
   const revert = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/revert`, { method: 'POST' });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/revert`, { method: 'POST' });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Revert failed (${r.status})`); }
       await load();
     } catch (e) { setError(e.message); }
@@ -147,7 +154,7 @@ export default function SchedulingTripDetail() {
     if (!window.confirm('Permanently delete this trip and all its legs, passengers, and documents? This cannot be undone.')) return;
     setBusy(true); setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'DELETE' });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}`, { method: 'DELETE' });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Delete failed (${r.status})`); }
       navigate('/scheduling'); // it's gone — back to the list
       return;
@@ -159,7 +166,7 @@ export default function SchedulingTripDetail() {
   const reprice = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/price`, { method: 'POST', body: JSON.stringify({}) });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/price`, { method: 'POST', body: JSON.stringify({}) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Pricing failed (${r.status})`); }
       await load();
     } catch (e) { setError(e.message); }
@@ -185,7 +192,7 @@ export default function SchedulingTripDetail() {
   const savePrice = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/price-lines`, { method: 'PATCH', body: JSON.stringify(priceEdit) });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/price-lines`, { method: 'PATCH', body: JSON.stringify(priceEdit) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
       setPriceEdit(null);
       await load();
@@ -211,7 +218,6 @@ export default function SchedulingTripDetail() {
   const title = routeSummary || (meta?.trip_number ? `Trip #${meta.trip_number}` : 'Trip');
   const subtitle = [
     meta?.trip_number ? `Trip #${meta.trip_number}` : null,
-    meta?.quote_number ? `Quote ${meta.quote_number}` : null,
     tail, client,
   ].filter(Boolean).join(' · ');
   const released = meta?.status === 'released';
@@ -280,7 +286,7 @@ export default function SchedulingTripDetail() {
   const savePax = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/passengers`, { method: 'PUT', body: JSON.stringify({ passengers: paxEdit }) });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/passengers`, { method: 'PUT', body: JSON.stringify({ passengers: paxEdit }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
       setPassengers(j.passengers || []);
@@ -312,7 +318,7 @@ export default function SchedulingTripDetail() {
     if (!legs.length) { setError('Add at least one leg with a From and To.'); return; }
     setBusy(true);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/details`, {
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/details`, {
         method: 'PATCH',
         body: JSON.stringify({ aircraft_tail: detailsEdit.aircraft_tail, customer_name: detailsEdit.customer_name, legs }),
       });
@@ -334,7 +340,7 @@ export default function SchedulingTripDetail() {
     setMeta((m) => ({ ...m, checklist: next })); // optimistic
     setError(null);
     try {
-      const r = await apiFetch(`/api/scheduling/trips/${id}/checklist`, { method: 'PATCH', body: JSON.stringify({ [key]: next[key] }) });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/checklist`, { method: 'PATCH', body: JSON.stringify({ [key]: next[key] }) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
       const j = await r.json();
       setMeta((m) => ({ ...m, checklist: j.checklist }));
@@ -347,7 +353,7 @@ export default function SchedulingTripDetail() {
     try {
       const byKey = (k) => roster.find((p) => crewKey(p) === k) || null;
       const body = { pic: byKey(crewEdit.pic), sic: byKey(crewEdit.sic), fa: byKey(crewEdit.fa) };
-      const r = await apiFetch(`/api/scheduling/trips/${id}/crew`, { method: 'PATCH', body: JSON.stringify(body) });
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/crew`, { method: 'PATCH', body: JSON.stringify(body) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Save failed (${r.status})`); }
       setCrewEdit(null);
       await load();
@@ -362,7 +368,10 @@ export default function SchedulingTripDetail() {
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>← Scheduling</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{subtitle}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+            {subtitle}
+            {meta?.quote_number && <> · <button onClick={() => navigate(`/scheduling/quotes/${meta.quote_number}`)} style={{ fontSize: 13, color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>View quote ↗</button></>}
+          </p>
         </div>
         {isNative && detailsEdit == null && (
           <button onClick={startDetailsEdit} disabled={busy}
@@ -381,13 +390,13 @@ export default function SchedulingTripDetail() {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
         <TripInfoCard trip={meta} tail={tail} aircraftType={legsForView[0]?.dispatch?.aircraft?.type?.name || null} client={client} />
         <TripActionsRail
-          meta={meta} id={id} busy={busy}
+          meta={meta} id={tripId} busy={busy}
           onAction={setStatus} onRevert={revert} onSendItinerary={() => setShowSend(true)} released={released}
         />
       </div>
       {meta?.stage === 'closed' && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>This trip is closed.</p>}
       {meta?.stage === 'cancelled' && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>This trip is cancelled.</p>}
-      {showSend && <ItinerarySendModal dispatchId={id} onClose={() => setShowSend(false)} />}
+      {showSend && <ItinerarySendModal dispatchId={tripId} onClose={() => setShowSend(false)} />}
       <TripTabs tabs={TABS} active={tab} onSelect={setTab} />
 
       {tab === 'legs' && (<>
@@ -676,11 +685,11 @@ export default function SchedulingTripDetail() {
         <Section title="Documents">
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
-              <a href={`${API_BASE}/quote/${id}`} target="_blank" rel="noopener noreferrer"
+              <a href={`${API_BASE}/quote/${tripId}`} target="_blank" rel="noopener noreferrer"
                 style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none' }}>View Quote ↗</a>
-              <a href={`${API_BASE}/quote/${id}/pdf`} target="_blank" rel="noopener noreferrer"
+              <a href={`${API_BASE}/quote/${tripId}/pdf`} target="_blank" rel="noopener noreferrer"
                 style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, textDecoration: 'none' }}>Quote PDF ↗</a>
-              <button onClick={() => navigator.clipboard?.writeText(`${API_BASE}/quote/${id}`)}
+              <button onClick={() => navigator.clipboard?.writeText(`${API_BASE}/quote/${tripId}`)}
                 style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Copy client link</button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
