@@ -41,6 +41,26 @@ export const getAircraft = async () => {
   return res.data;
 };
 
+// Fleet list (the org's aircraft) — NOTE: distinct from getAircraft()'s /api/aircraft/all catalog.
+export const getAircraftList = async () => {
+  const client = await lf();
+  const res = await client.get('/api/aircraft/list');
+  return res.data?.aircraft || res.data || [];
+};
+
+export const getAircraftDetail = async (id) => {
+  const client = await lf();
+  const res = await client.get(`/api/aircraft/${encodeURIComponent(id)}`);
+  return res.data?.aircraft || res.data || null;
+};
+
+// Per-component current hours/cycles (baseline source). Shape confirmed at runtime; tolerate variants.
+export const getOtherFlightTimes = async () => {
+  const client = await lf();
+  const res = await client.get('/api/aircraft/otherFlightTimes');
+  return res.data || null;
+};
+
 export const getPilots = async (page = 1) => {
   const client = await lf();
   const res = await client.get(`/api/admin/6/${page}`);
