@@ -5,8 +5,8 @@
 // airborneSince per aircraft for the "time flying" timer, and prunes old rows.
 
 import { getLivePositions } from './adsb.js';
-import { savePositions, pruneOld } from './adsbStore.js';
-import { hasMoved, detectTakeoff, normReg, matchActiveLeg } from './adsbTrack.js';
+import { savePositions, pruneOld, queryTrack } from './adsbStore.js';
+import { hasMoved, detectTakeoff, recoverDepFromPositions, normReg, matchActiveLeg } from './adsbTrack.js';
 import { getActiveLegsByTail } from './activeLegs.js';
 import { recordLegActual } from './legActualsStore.js';
 
@@ -16,6 +16,23 @@ const RECORD_INTERVAL_MS = 20000;
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const RETENTION_DAYS = 14; // raw firehose only; permanent history lives in flight_tracks
 const MOVE_THRESHOLD_DEG = 0.0005;
+const HISTORY_PAD_MS = 10 * 60 * 1000;       // firehose lookback pad (matches the reconciler)
+const MAX_DEP_LATENESS_MS = 2 * 3600000;     // last-resort "now" dep only this close to schedule
+
+// Recover a leg's REAL departure from the persisted firehose, for when we first see the tail
+// already airborne with no real-time takeoff (the server booted mid-flight, or ADS-B picked the
+// plane up mid-climb). Returns { dep, source } labeled by how it was derived — 'exact' for a
+// stored ground->air transition, 'approx' for the earliest airborne sample — NOT 'live', so the
+// hourly reconciler (and crew OOOI) can still refine it. Never "now" (which would read 30+ min
+// late after a restart). { dep: null } if there's no usable history. Soft-fails.
+async function recoverDepFromHistory(tail, leg) {
+  try {
+    const lo = leg.depTime - HISTORY_PAD_MS;
+    const hi = leg.arrTime + HISTORY_PAD_MS;
+    const positions = await queryTrack(tail, new Date(lo).toISOString(), new Date(hi).toISOString());
+    return recoverDepFromPositions(positions, leg, HISTORY_PAD_MS);
+  } catch (e) { console.warn('[adsbRecorder] dep history recover failed (soft):', e?.message || e); return { dep: null, source: null }; }
+}
 
 // reg -> { lat, lon, onGround, airborneSince }
 const last = new Map();
@@ -39,32 +56,48 @@ async function tick() {
     if (p?.lat == null || p?.lon == null) continue;
     const prev = last.get(reg) || null;
     const onGround = !!p.onGround;
+    const tail = normReg(reg);
+    const leg = matchActiveLeg(activeLegs.get(tail) || [], now);
 
-    // Takeoff time from the ground->air transition. If we boot mid-flight (no
-    // prev) and it's airborne, detectTakeoff returns null and the timer stays
-    // hidden until we observe a real takeoff — honest over guessing.
-    const airborneSince = detectTakeoff(
+    // Airborne start (exact ground->air takeoff, else carried forward; null on the ground or
+    // when first seen airborne — resolved just below). Drives the "time flying" timer.
+    let airborneSince = detectTakeoff(
       prev ? { onGround: prev.onGround, airborneSince: prev.airborneSince } : null,
       { onGround, t: now },
     );
 
-    // LIVE actual dep/arr: stamp the leg the moment we observe a transition. This is
-    // the reliable source (full stream, no movement gate) — see legActualsStore.js.
-    if (prev && prev.onGround !== onGround) {
-      const tail = normReg(reg);
-      const leg = matchActiveLeg(activeLegs.get(tail) || [], now);
-      if (leg) {
-        if (onGround === false) { // ground -> air = takeoff
-          await recordLegActual(leg.legId, { registration: tail, scheduledDep: leg.depTime, actualDep: now, depSource: 'live' });
-        } else {                  // air -> ground = landing
-          await recordLegActual(leg.legId, { registration: tail, scheduledDep: leg.depTime, actualArr: now, arrSource: 'live' });
-        }
+    // LIVE actual DEPARTURE — establish it the first time we'd anchor an airborne start for a
+    // leg (then airborneSince carries forward, so this runs once per stint). Only a real-time
+    // ground->air transition we actually WITNESSED is a true 'live' takeoff ("now" IS it).
+    // Otherwise we're seeing the tail already airborne (server booted mid-flight, or a mid-climb
+    // pickup): recover the takeoff from the firehose, labeled 'exact'/'approx' by how it was
+    // derived so the reconciler can still refine it. Only as a last resort — no usable history —
+    // do we stamp "now", and only when close to schedule; that guess is marked 'approx' too.
+    const newlyAirborne = !onGround && prev?.airborneSince == null && leg;
+    if (newlyAirborne) {
+      const witnessed = prev && prev.onGround === true; // observed the real ground->air this tick
+      let dep = null, depSource = null;
+      if (witnessed) {
+        dep = now; depSource = 'live';
+      } else {
+        const rec = await recoverDepFromHistory(tail, leg); // { dep, source: 'exact'|'approx'|null }
+        if (rec.dep != null) { dep = rec.dep; depSource = rec.source; }
+        else if (now <= leg.depTime + MAX_DEP_LATENESS_MS) { dep = now; depSource = 'approx'; }
       }
+      if (dep != null) {
+        airborneSince = dep; // anchor the timer + the live actual bar at the recovered/observed takeoff
+        await recordLegActual(leg.legId, { registration: tail, scheduledDep: leg.depTime, actualDep: dep, depSource });
+      }
+    }
+
+    // LIVE actual ARRIVAL: air -> ground transition (the destination FBO is usually covered).
+    if (prev && prev.onGround === false && onGround === true && leg) {
+      await recordLegActual(leg.legId, { registration: tail, scheduledDep: leg.depTime, actualArr: now, arrSource: 'live' });
     }
 
     if (hasMoved(prev, { lat: p.lat, lon: p.lon }, MOVE_THRESHOLD_DEG)) {
       rows.push({
-        registration: normReg(reg), lat: p.lat, lon: p.lon,
+        registration: tail, lat: p.lat, lon: p.lon,
         altitude_ft: Number.isFinite(p.altitudeFt) ? p.altitudeFt : null,
         on_ground: onGround, t: new Date(now).toISOString(),
       });

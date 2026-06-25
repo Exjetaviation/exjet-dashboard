@@ -29,6 +29,23 @@ export function detectTakeoff(prev, next) {
   return prev.airborneSince ?? null;
 }
 
+// Earliest AIRBORNE sample time (epoch ms) for a leg from a tail's firehose positions, within
+// the leg's padded [depTime - pad, arrTime + pad] window. The live recorder uses this to
+// recover a real takeoff time from history when it sees a tail already airborne (server booted
+// mid-flight, or ADS-B picked the plane up mid-climb) and deriveActualTimes found no clean
+// transition — so we anchor the bar to when the flight was first SEEN airborne, not "now".
+// Unlike approximateActualTimes it has no coverage guard (that guard exists to protect the
+// ARRIVAL endpoint; the first airborne sample is a fine departure estimate). null if none.
+export function firstAirborneTime(positions, leg, padMs) {
+  const lo = leg.depTime - padMs;
+  const hi = leg.arrTime + padMs;
+  let min = null;
+  for (const p of positions || []) {
+    if (p.on_ground === false && p.t >= lo && p.t <= hi && (min == null || p.t < min)) min = p.t;
+  }
+  return min;
+}
+
 // Clip a time-ordered position list to a leg's [depTime - pad, arrTime + pad]
 // window and return [[lat, lon], ...] for a Leaflet polyline.
 export function clipTrackToLeg(positions, leg, padMs) {
@@ -64,6 +81,21 @@ export function deriveActualTimes(positions, leg, padMs) {
     }
   }
   return { actualDep, actualArr };
+}
+
+// Recover a leg's DEPARTURE (epoch ms) + its true source from a tail's firehose positions, for
+// the live recorder when it first sees a tail already airborne (server booted mid-flight, or a
+// mid-climb pickup) with no real-time takeoff to witness. Labeled by HOW it was derived — an
+// exact ground->air transition -> { source: 'exact' }, else the earliest airborne sample ->
+// { source: 'approx' } — deliberately NOT 'live'. Keeping it 'exact'/'approx' lets the hourly
+// reconciler (and crew OOOI) still refine it, and keeps the unguarded first-airborne estimate at
+// the lowest priority instead of locking out a better value. { dep: null, source: null } when
+// there is no usable airborne history.
+export function recoverDepFromPositions(positions, leg, padMs) {
+  const exactDep = deriveActualTimes(positions, leg, padMs).actualDep;
+  if (exactDep != null) return { dep: exactDep, source: 'exact' };
+  const firstUp = firstAirborneTime(positions, leg, padMs);
+  return firstUp != null ? { dep: firstUp, source: 'approx' } : { dep: null, source: null };
 }
 
 // Approximate dep/arr (epoch ms, or null) for a leg from the FIRST and LAST airborne
