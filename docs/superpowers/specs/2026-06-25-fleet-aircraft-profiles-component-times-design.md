@@ -106,7 +106,7 @@ The pilot's completed Flight Info is the source of truth.
 **Per completed `flight_info`:**
 1. Resolve the aircraft from the leg's tail (`dispatch.aircraft.tailNumber` → `normReg` on both sides). No match → skip.
 2. For each **accruing** component (airframe + engines): upsert a ledger entry keyed `UNIQUE(component_id, leg_id)` with `hours_delta = flight_minutes/60` (Off→On), `cycles_delta = 1`, `time_source='crew'` (pilot-entered).
-3. For the **APU** component: `hours_delta = apu_stop − apu_start`; cycles from `apu_end_cycles`.
+3. For the **APU** component: `hours_delta = apu_stop − apu_start`; `cycles_delta = apu_end_cycles − previous_apu_reading` (APU End Cycles is a **running total** — store the reading, accrue the delta).
 4. Recompute `total_hours/total_cycles`.
 
 **Correctness guards:**
@@ -161,11 +161,13 @@ Native `node:test`, next to source:
 - LF import is on-demand (`POST /api/fleet/aircraft/import`); no new always-on worker beyond the reconciler backfill pass (which no-ops if tables absent).
 - Update **`CLAUDE.md`** in the same change: new tables (§18), `/api/fleet` + flight-info routes (§19), the reconciler accrual pass (§9/§17), Fleet pages (§20), `fleet.js` → DB note (§6), migration `022` (§3).
 
-## 12. Open questions
+## 12. Resolved decisions (was: open questions)
 
-1. **Airframe accrual basis** — defaulting to Off→On (flight time). Confirm vs block (In−Out).
-2. **APU End Cycles** semantics — running total vs cycles-added-this-flight (affects `cycles_delta`); confirm against LF data.
-3. **Baseline times source** — whether `/api/aircraft/otherFlightTimes` cleanly returns per-component current hours/cycles, or we seed baselines manually. Confirm during import build.
+1. **Airframe accrual basis** — **Off→On (flight time)**, same as engines (block In−Out is still recorded for pilot duty/logbook).
+2. **APU End Cycles** — it is a **running total**; `cycles_delta = apu_end_cycles − previous reading`. We persist the last reading per APU component to compute the delta.
+3. **Baseline times** — **auto-import from LF** (`otherFlightTimes` / aircraft `legacy` / component detail) as the seed; any value LF doesn't provide stays editable for maintenance to enter manually.
+
+Remaining empirical check (resolve during the import build, non-blocking): confirm exactly which LF endpoint returns per-component current hours/cycles cleanly (`/api/aircraft/otherFlightTimes` vs component detail).
 
 ## 13. Future phases (separate specs)
 
