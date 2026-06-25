@@ -10,7 +10,7 @@ import { recomputeInputs } from '../lib/feesMath';
 import { FEE_CODES } from '../lib/feeCatalog';
 
 const FLEET = ['N408JS', 'N69FP'];
-const blankLeg = () => ({ dep_icao: '', arr_icao: '', dep_date: '', dep_clock: '', pax: '', positioning: false, dep_fbo: null, arr_fbo: null });
+const blankLeg = () => ({ _id: crypto.randomUUID(), dep_icao: '', arr_icao: '', dep_date: '', dep_clock: '', pax: '', positioning: false, dep_fbo: null, arr_fbo: null });
 const legDepUTC = (l) => easternToUTC(l.dep_date, l.dep_clock);
 const legDepIso = (l) => { const d = legDepUTC(l); return d ? d.toISOString() : ''; };
 const toMs = (t) => (t == null ? null : (typeof t === 'number' ? t : Date.parse(t)));
@@ -94,6 +94,7 @@ function LegRow({ leg, i, total, onUpdate, onRemove }) {
 function legToForm(l) {
   const p = easternInputParts(toMs(l.departure?.time));
   return {
+    _id: crypto.randomUUID(),
     dep_icao: l.departure?.airport || '', arr_icao: l.arrival?.airport || '',
     dep_date: p.date, dep_clock: p.clock,
     pax: l.passengerCount ?? '', positioning: !!l.isPositioning,
@@ -150,7 +151,7 @@ export default function QuoteEditor() {
       if (!r.ok || !j.trip) { setError(j.error || 'Quote not found'); return; }
       loaded.current = false;
       setTrip(j.trip);
-      setTail(j.trip.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber || (j.legs?.[0]?.dispatch?.aircraft?.tailNumber) || FLEET[0]);
+      setTail(j.legs?.[0]?.dispatch?.aircraft?.tailNumber || FLEET[0]);
       setPurpose(j.trip.purpose || 'charter');
       setCompany(j.trip.company_name || '');
       setContact(j.trip.contact && typeof j.trip.contact === 'object' ? { name: j.trip.contact.name || '', email: j.trip.contact.email || '', phone: j.trip.contact.phone || '' } : { name: '', email: '', phone: '' });
@@ -161,8 +162,6 @@ export default function QuoteEditor() {
       setTotalOverride(p?.totalOverride ?? null);
       setLegs((j.legs || []).map(legToForm));
       if (!j.legs?.length) setLegs([blankLeg()]);
-      // allow autosave effects to run after this paint settles
-      setTimeout(() => { loaded.current = true; }, 0);
     } catch (e) { setError(e.message); }
   }, [quoteNo]);
   useEffect(() => { load(); }, [load]);
@@ -213,13 +212,17 @@ export default function QuoteEditor() {
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
-        if (j.pricing) setPricing(j.pricing);
+        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? j.pricing : null);
         setSaveState('saved');
       } catch (e) { setError(e.message); setSaveState('error'); }
     }, 700);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priceKey]);
+
+  // Mark loaded only after the post-load render's autosave effects have run (and
+  // skipped because loaded.current was still false), so loading never triggers a save.
+  useEffect(() => { if (trip) loaded.current = true; }, [trip?.id]);
 
   const updateFee = (idx, field, value) => setFees((d) => d.map((f, i) => (i === idx ? { ...f, [field]: value } : f)));
   const addFee = () => setFees((d) => [...d, { code: FEE_CODES[0], description: '', amount: 0, taxable: true }]);
@@ -315,7 +318,7 @@ export default function QuoteEditor() {
         <div style={card}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Legs</div>
           {legs.map((l, i) => (
-            <LegRow key={i} leg={l} i={i} total={legs.length} onUpdate={updateLeg} onRemove={removeLeg} />
+            <LegRow key={l._id} leg={l} i={i} total={legs.length} onUpdate={updateLeg} onRemove={removeLeg} />
           ))}
           <button onClick={addLeg}
             style={{ marginTop: 4, padding: '6px 14px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ Add leg</button>
