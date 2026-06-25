@@ -14,7 +14,8 @@ import { documentAlerts } from '../scheduling/docExpiry.js';
 import { rankPeople } from '../scheduling/peopleSearch.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 import { nextQuoteNumber, nextTripNumber } from '../scheduling/numbering.js';
-import { recomputeFromInputs } from '../scheduling/pricing.js';
+import { recomputeFromInputs, repriceFromBase } from '../scheduling/pricing.js';
+import { tripParamColumn } from '../scheduling/tripParam.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
 import * as lf from '../services/levelflight.js';
@@ -148,7 +149,7 @@ router.get('/crew-roster', async (req, res) => {
 router.get('/quotes', async (req, res) => {
   try {
     const { data: trips, error } = await supabase
-      .from('scheduling_trips').select('id, lf_oid, trip_number, status, origin, pricing').eq('status', 'quote');
+      .from('scheduling_trips').select('id, lf_oid, trip_number, quote_number, status, origin, pricing').eq('status', 'quote');
     if (error) throw error;
     if (!trips?.length) return res.json({ quotes: [] });
     const ids = trips.map((t) => t.id);
@@ -161,12 +162,33 @@ router.get('/quotes', async (req, res) => {
       byTrip.get(lr.trip_id).push(lr.lf_synced_snapshot);
     }
     const quotes = trips.map((t) => ({
-      id: t.id, lf_oid: t.lf_oid, trip_number: t.trip_number, total: t.pricing && !t.pricing.error ? t.pricing.total : null, ...quoteSummary(byTrip.get(t.id) || []),
+      id: t.id, lf_oid: t.lf_oid, trip_number: t.trip_number, quote_number: t.quote_number, total: t.pricing && !t.pricing.error ? t.pricing.total : null, ...quoteSummary(byTrip.get(t.id) || []),
     }));
     res.json({ quotes });
   } catch (e) {
     console.error('GET /api/scheduling/quotes:', e.message);
     res.status(502).json({ error: e.message, quotes: [] });
+  }
+});
+
+// GET /api/scheduling/quotes/:quoteNumber — resolve a quote by its Quote # and
+// return the same { trip, legs } payload as GET /trips/:id (powers the QuoteEditor).
+router.get('/quotes/:quoteNumber', async (req, res) => {
+  try {
+    const { data: row, error } = await supabase
+      .from('scheduling_trips').select('id, ' + TRIP_COLS).eq('quote_number', String(req.params.quoteNumber)).limit(1).maybeSingle();
+    if (error) throw error;
+    if (!row) return res.status(404).json({ error: 'Quote not found' });
+    const { data: legRows, error: legErr } = await supabase
+      .from('scheduling_legs')
+      .select('lf_synced_snapshot, origin, locally_modified, upstream_changed')
+      .eq('trip_id', row.id)
+      .order('seq');
+    if (legErr) throw legErr;
+    res.json({ trip: shapeTrip(row), legs: mirrorLegsFromRows(legRows) });
+  } catch (e) {
+    console.error('GET /api/scheduling/quotes/:quoteNumber:', e.message);
+    res.status(500).json({ error: 'Failed to load quote' });
   }
 });
 
@@ -238,15 +260,20 @@ async function buildNativeLegRows(tripId, ctx, inputLegs) {
 }
 
 // Price a native trip from its input legs (best-effort) and persist the breakdown.
+// A reprice keeps any manual ad-hoc fees / FET-off / total override the quote
+// already had (repriceFromBase). Returns the stored pricing (or null on failure).
 async function priceAndStore(tripId, aircraft_tail, inputLegs, purpose = null) {
   try {
-    const pricing = await priceQuoteLegs({
+    const fresh = await priceQuoteLegs({
       tail: aircraft_tail, aircraftType: null,
       legs: inputLegs.map((l) => ({ dep_icao: (l.dep_icao || '').trim().toUpperCase(), arr_icao: (l.arr_icao || '').trim().toUpperCase(), pax: Number(l.pax) || 0, isPositioning: !!l.positioning })),
       nights: 0, purpose,
     });
+    const { data: cur } = await supabase.from('scheduling_trips').select('pricing').eq('id', tripId).single();
+    const pricing = repriceFromBase(fresh, cur?.pricing || {});
     await supabase.from('scheduling_trips').update({ pricing, rate_name: pricing.rateName || null }).eq('id', tripId);
-  } catch (pe) { console.warn('[scheduling price] failed:', pe?.message || pe); }
+    return pricing;
+  } catch (pe) { console.warn('[scheduling price] failed:', pe?.message || pe); return null; }
 }
 
 // POST /api/scheduling/quote-preview — price legs WITHOUT persisting, for the
@@ -330,6 +357,13 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
     const inputLegs = Array.isArray(body.legs) ? body.legs : [];
     if (!inputLegs.length) return res.status(400).json({ error: 'A trip needs at least one leg.' });
 
+    // Editable quote header fields (only applied when present in the body).
+    const tripPatch = { modified_at: new Date().toISOString(), modified_by: req.user?.email || null };
+    if ('purpose' in body) tripPatch.purpose = (body.purpose || '').trim() || null;
+    if ('company_name' in body) tripPatch.company_name = (body.company_name || '').trim() || null;
+    if ('contact' in body) tripPatch.contact = (body.contact && typeof body.contact === 'object' && !Array.isArray(body.contact)) ? body.contact : null;
+    const purpose = 'purpose' in body ? tripPatch.purpose : trip.purpose;
+
     const ctx = { id: trip.id, trip_number: trip.trip_number, status: trip.status, aircraft_tail, customer_name };
     const legRows = await buildNativeLegRows(trip.id, ctx, inputLegs);
     // Replace the leg set: delete existing, insert the new ones.
@@ -338,9 +372,9 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
     const { error: ie } = await supabase.from('scheduling_legs').insert(legRows);
     if (ie) throw ie;
 
-    await supabase.from('scheduling_trips').update({ modified_at: new Date().toISOString(), modified_by: req.user?.email || null }).eq('id', trip.id);
-    await priceAndStore(trip.id, aircraft_tail, inputLegs, trip.purpose);
-    res.json({ ok: true });
+    await supabase.from('scheduling_trips').update(tripPatch).eq('id', trip.id);
+    const pricing = await priceAndStore(trip.id, aircraft_tail, inputLegs, purpose);
+    res.json({ ok: true, pricing });
   } catch (e) {
     console.error('PATCH /api/scheduling/trips/:lfOid/details:', e.message);
     res.status(500).json({ error: 'Failed to update trip details' });
@@ -353,7 +387,7 @@ router.patch('/trips/:lfOid/details', requireSchedulingEditor, async (req, res) 
 router.get('/trips/:lfOid', async (req, res) => {
   try {
     const { data: row, error } = await supabase
-      .from('scheduling_trips').select('id, ' + TRIP_COLS).eq(tripColumn(req.params.lfOid), req.params.lfOid).single();
+      .from('scheduling_trips').select('id, ' + TRIP_COLS).eq(tripParamColumn(req.params.lfOid), req.params.lfOid).single();
     if (error) {
       if (isNotFound(error)) return res.status(404).json({ error: 'Trip not found' });
       throw error;
