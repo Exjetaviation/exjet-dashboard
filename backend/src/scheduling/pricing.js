@@ -47,6 +47,29 @@ export const recomputeFromInputs = (i) => {
   };
 };
 
+// After a rate-card reprice (leg/aircraft/purpose change), keep the user's manual
+// ad-hoc fees, FET on/off, and total override, recomputing so the override still
+// wins. Returns the fresh base untouched when there were no manual edits.
+export const repriceFromBase = (fresh, old = {}) => {
+  const o = old && !old.error ? old : {};
+  const hasManual = o.manual === true
+    || (Array.isArray(o.fees) && o.fees.length > 0)
+    || (o.totalOverride !== null && o.totalOverride !== undefined && o.totalOverride !== '')
+    || o.fetEnabled === false;
+  if (!hasManual) return fresh;
+  const inputs = {
+    hourlyRate: fresh.hourlyRate, hours: fresh.hours, surchargePerHr: fresh.surchargePerHr,
+    faFee: fresh.faFee, faCount: fresh.faCount, crewFee: fresh.crewFee, crewCount: fresh.crewCount,
+    landingFee: fresh.landingFee, landings: fresh.landings,
+    segmentPerPax: fresh.segmentPerPax, pax: fresh.pax, overnightCost: fresh.overnightCost,
+    fetRate: fresh.fetRate,
+    fees: Array.isArray(o.fees) ? o.fees : [],
+    fetEnabled: o.fetEnabled !== false,
+    totalOverride: o.totalOverride ?? null,
+  };
+  return { ...fresh, ...inputs, ...recomputeFromInputs(inputs), manual: true };
+};
+
 // legs: [{ from, to, mins, pax, isPositioning }]
 // Itemized like LevelFlight: flight cost, fuel surcharge, landings, FA, crew,
 // overnights, segment fee, FET. FET (the federal air-transportation excise) is
