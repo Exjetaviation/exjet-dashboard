@@ -26,6 +26,11 @@ import { buildNativeItineraryVM } from '../services/nativeItineraryData.js';
 import { renderItineraryHtml } from '../services/itineraryHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
 import { buildItineraryEmail } from '../services/itineraryEmail.js';
+import { requireFlightInfoAccess } from '../middleware/requireFlightInfoAccess.js';
+import { getFlightInfo, upsertFlightInfo, markComplete, prefillFromBlock } from '../scheduling/flightInfoStore.js';
+import { accrueLeg } from '../fleet/accrueLeg.js';
+import { getAircraft } from '../fleet/aircraftStore.js';
+import { listComponents, applyLedgerEntry } from '../fleet/componentStore.js';
 
 const router = express.Router();
 
@@ -1071,6 +1076,33 @@ router.post('/trips/:lfOid/revert', requireSchedulingEditor, async (req, res) =>
     console.error('POST /api/scheduling/trips/:lfOid/revert:', e.message);
     res.status(500).json({ error: 'Failed to revert trip' });
   }
+});
+
+async function loadLeg(req, res, next) {
+  if (!supabase) { req.legRow = null; return next(); }
+  const { data } = await supabase.from('scheduling_legs').select('*').eq('id', req.params.legId).maybeSingle();
+  req.legRow = data || null; next();
+}
+
+router.get('/legs/:legId/flight-info', loadLeg, async (req, res) => {
+  let fi = await getFlightInfo(supabase, req.params.legId);
+  if (!fi) fi = { scheduling_leg_id: req.params.legId, status: 'draft',
+                  ...prefillFromBlock(req.legRow?.lf_synced_snapshot?.block) };
+  res.json(fi);
+});
+
+router.put('/legs/:legId/flight-info', loadLeg, requireFlightInfoAccess, async (req, res) =>
+  res.json(await upsertFlightInfo(supabase, req.params.legId, req.body || {})));
+
+router.post('/legs/:legId/flight-info/complete', loadLeg, requireFlightInfoAccess, async (req, res) => {
+  const fi = await markComplete(supabase, req.params.legId, req.user?.email);
+  const tail = req.legRow?.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber;
+  if (fi && tail) {
+    await accrueLeg({ getAircraftByTail: (t) => getAircraft(supabase, t),
+      listComponents: (acId) => listComponents(supabase, acId),
+      applyLedgerEntry: (e) => applyLedgerEntry(supabase, e) }, fi, tail);
+  }
+  res.json(fi);
 });
 
 export default router;
