@@ -9,6 +9,7 @@ import { easternToUTC, zuluParts, easternInputParts } from '../lib/easternTime';
 import { recomputeInputs } from '../lib/feesMath';
 import PricingSummary from '../components/pricing/PricingSummary';
 import PricingSlideOut from '../components/pricing/PricingSlideOut';
+import { normalizePricing } from '../components/pricing/pricingRows';
 
 const FLEET = ['N408JS', 'N69FP'];
 const blankLeg = () => ({ _id: crypto.randomUUID(), dep_icao: '', arr_icao: '', dep_date: '', dep_clock: '', pax: '', positioning: false, dep_fbo: null, arr_fbo: null });
@@ -140,14 +141,9 @@ export default function QuoteEditor() {
       setCompany(j.trip.company_name || '');
       setContact(j.trip.contact && typeof j.trip.contact === 'object' ? { name: j.trip.contact.name || '', email: j.trip.contact.email || '', phone: j.trip.contact.phone || '' } : { name: '', email: '', phone: '' });
       const p = j.trip.pricing && !j.trip.pricing.error ? j.trip.pricing : null;
-      // Merge fees + fetEnabled defaults into pricing so the shared components have
-      // a single authoritative source. Fresh quotes may not have these fields yet.
-      const defaultFetEnabled = (j.trip.purpose || 'charter') !== 'owner';
-      setPricing(p ? {
-        ...p,
-        fees: Array.isArray(p.fees) ? p.fees.map((f) => ({ ...f })) : [],
-        fetEnabled: p.fetEnabled !== undefined ? p.fetEnabled !== false : defaultFetEnabled,
-      } : null);
+      // Normalize so the autosave key is stable (fees[]/fetEnabled defaults, numeric
+      // fields) and the shared components have a single authoritative source.
+      setPricing(p ? normalizePricing(p, j.trip.purpose || 'charter') : null);
       setLegs((j.legs || []).map(legToForm));
       if (!j.legs?.length) setLegs([blankLeg()]);
     } catch (e) { setError(e.message); }
@@ -179,7 +175,7 @@ export default function QuoteEditor() {
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
-        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? j.pricing : null);
+        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
         setSaveState('saved');
       } catch (e) { setError(e.message); setSaveState('error'); }
     }, 700);
@@ -230,7 +226,7 @@ export default function QuoteEditor() {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
         // Server is authoritative — replace local pricing with the recomputed result.
-        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? j.pricing : null);
+        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
         setSaveState('saved');
       } catch (e) { setError(e.message); setSaveState('error'); }
     }, 700);
@@ -246,7 +242,6 @@ export default function QuoteEditor() {
   const patchPricing = (patch) => {
     setPricing((p) => {
       const merged = { ...(p || {}), ...patch };
-      if (patch.overrides) merged.overrides = patch.overrides;
       return { ...merged, ...recomputeInputs(merged) };
     });
   };
@@ -255,7 +250,8 @@ export default function QuoteEditor() {
     try {
       const r = await apiFetch(`/api/scheduling/trips/${tripId}/price`, { method: 'POST', body: JSON.stringify({}) });
       const j = await r.json();
-      if (r.ok && j.pricing) setPricing(j.pricing && !j.pricing.error ? j.pricing : null);
+      if (!r.ok) throw new Error(j.error || `Recalculate failed (${r.status})`);
+      setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
     } catch (e) { setError(e.message); }
   };
 
