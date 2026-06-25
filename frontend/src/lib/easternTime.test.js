@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { easternToUTC, zuluParts, easternParts } from './easternTime.js';
+import { easternToUTC, zuluParts, easternParts, easternInputParts } from './easternTime.js';
 
 test('converts summer Eastern (EDT, UTC-4) to UTC', () => {
   assert.equal(easternToUTC('2026-06-20', '14:30').toISOString(), '2026-06-20T18:30:00.000Z');
@@ -52,4 +52,25 @@ test('easternParts dates by the Eastern wall clock, not UTC', () => {
 test('easternParts is null-safe', () => {
   assert.equal(easternParts(null), null);
   assert.equal(easternParts(new Date('nope')), null);
+});
+
+test('easternInputParts: summer instant converts to EDT (UTC-4)', () => {
+  const ms = Date.parse('2026-06-20T18:30:00Z'); // 14:30 EDT
+  assert.deepEqual(easternInputParts(ms), { date: '2026-06-20', clock: '14:30' });
+});
+
+test('easternInputParts: winter instant converts to EST (UTC-5)', () => {
+  const ms = Date.parse('2026-01-15T18:30:00Z'); // 13:30 EST
+  assert.deepEqual(easternInputParts(ms), { date: '2026-01-15', clock: '13:30' });
+});
+
+test('easternInputParts: round-trips through easternToUTC', () => {
+  const ms = Date.parse('2026-06-20T18:30:00Z');
+  const p = easternInputParts(ms);
+  assert.equal(easternToUTC(p.date, p.clock).getTime(), ms);
+});
+
+test('easternInputParts: null/invalid returns empty fields', () => {
+  assert.deepEqual(easternInputParts(null), { date: '', clock: '' });
+  assert.deepEqual(easternInputParts(NaN), { date: '', clock: '' });
 });

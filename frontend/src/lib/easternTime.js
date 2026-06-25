@@ -68,3 +68,19 @@ export function formatEastern(date) {
     hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
   });
 }
+
+// UTC epoch ms -> Eastern wall clock as input-field values:
+// { date: 'YYYY-MM-DD', clock: 'HH:mm' } (DST-aware). Inverse of easternToUTC,
+// used to load a stored leg time into the quote editor's date/time inputs.
+export function easternInputParts(ms) {
+  if (ms == null || isNaN(ms)) return { date: '', clock: '' };
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ET, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+  const p = {};
+  for (const part of dtf.formatToParts(new Date(ms))) p[part.type] = part.value;
+  const hour = p.hour === '24' ? '00' : p.hour; // Intl may emit '24' at midnight
+  return { date: `${p.year}-${p.month}-${p.day}`, clock: `${hour}:${p.minute}` };
+}
