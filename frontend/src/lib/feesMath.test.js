@@ -32,3 +32,24 @@ test('default keeps FET on (backward compatible)', () => {
   assert.equal(r.fetAmount, Math.round(r.fetBase * 0.075));
   assert.equal(r.totalOverride, null);
 });
+
+const base2 = () => ({ flightCost: 48010, hours: 4.72, surchargePerHr: 1800, faFee: 700, faCount: 10,
+  crewFee: 200, crewCount: 10, landingFee: 500, landings: 2, segmentPerPax: 4.95, pax: 15,
+  overnightCost: 13500, fetRate: 0.075, fees: [], fetEnabled: true, totalOverride: null });
+
+test('recomputeInputs: flightCost input + effectiveHourly', () => {
+  const r = recomputeInputs(base2());
+  assert.equal(r.flightCost, 48010);
+  assert.equal(r.effectiveHourly, Math.round(48010 / 4.72));
+});
+
+test('recomputeInputs: per-line override pins the line', () => {
+  const r = recomputeInputs({ ...base2(), overrides: { surcharge: 9000 } });
+  assert.equal(r.surcharge, 9000);
+});
+
+test('recomputeInputs: matches backend recomputeFromInputs for the same inputs', async () => {
+  const { recomputeFromInputs } = await import('../../../backend/src/scheduling/pricing.js');
+  const inputs = { ...base2(), overrides: { faCost: 6000 }, totalOverride: null };
+  assert.deepEqual(recomputeInputs(inputs), recomputeFromInputs(inputs));
+});

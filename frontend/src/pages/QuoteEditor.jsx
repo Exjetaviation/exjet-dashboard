@@ -7,7 +7,9 @@ import AirportInput from '../components/AirportInput';
 import FboPicker from '../components/trip/FboPicker';
 import { easternToUTC, zuluParts, easternInputParts } from '../lib/easternTime';
 import { recomputeInputs } from '../lib/feesMath';
-import { FEE_CODES } from '../lib/feeCatalog';
+import PricingSummary from '../components/pricing/PricingSummary';
+import PricingSlideOut from '../components/pricing/PricingSlideOut';
+import { normalizePricing } from '../components/pricing/pricingRows';
 
 const FLEET = ['N408JS', 'N69FP'];
 const blankLeg = () => ({ _id: crypto.randomUUID(), dep_icao: '', arr_icao: '', dep_date: '', dep_clock: '', pax: '', positioning: false, dep_fbo: null, arr_fbo: null });
@@ -18,7 +20,6 @@ const toMs = (t) => (t == null ? null : (typeof t === 'number' ? t : Date.parse(
 const labelStyle = { fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
 const inputStyle = { width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, boxSizing: 'border-box' };
 const captionStyle = { fontSize: 10, marginTop: 3, minHeight: 13, whiteSpace: 'nowrap', color: 'var(--text-secondary)' };
-const usd = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString());
 
 // Live distance + flight time for a leg (debounced) — the working estimate engine.
 function useLegEstimate(dep, arr, depIso) {
@@ -102,21 +103,6 @@ function legToForm(l) {
   };
 }
 
-// Build recomputeInputs() inputs from a persisted pricing breakdown + local fee edits.
-function priceInputs(p, fees, fetEnabled, totalOverride) {
-  const per = (rate, cost, qty) => (rate ?? (qty > 0 ? Math.round((cost || 0) / qty) : 0));
-  const hours = p.hours ?? p.totalHrs ?? 0;
-  return {
-    hourlyRate: per(p.hourlyRate, p.flightCost, hours), hours, surchargePerHr: per(p.surchargePerHr, p.surcharge, hours),
-    faFee: per(p.faFee, p.faCost, p.faCount), faCount: p.faCount || 0,
-    crewFee: per(p.crewFee, p.crewCost, p.crewCount), crewCount: p.crewCount || 0,
-    landingFee: per(p.landingFee, p.landingCost, p.landings), landings: p.landings || 0,
-    segmentPerPax: per(p.segmentPerPax, p.segmentFee, p.pax), pax: p.pax || 0,
-    overnightCost: p.overnightCost || 0, fetRate: p.fetRate || 0,
-    fees, fetEnabled, totalOverride,
-  };
-}
-
 export default function QuoteEditor() {
   const { quoteNo } = useParams();
   const navigate = useNavigate();
@@ -127,13 +113,14 @@ export default function QuoteEditor() {
   const [company, setCompany] = useState('');
   const [contact, setContact] = useState({ name: '', email: '', phone: '' });
   const [pricing, setPricing] = useState(null);
-  const [fees, setFees] = useState([]);
-  const [fetEnabled, setFetEnabled] = useState(true);
-  const [totalOverride, setTotalOverride] = useState(null);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [pricingCollapsed, setPricingCollapsed] = useState(false);
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const loaded = useRef(false);
+  const priceSaveTimer = useRef(null);
+  const pendingPricing = useRef(null);
 
   const { data: legsData } = useApi('/api/scheduling/legs');
   const clients = distinctClients(legsData?.legs || []);
@@ -156,10 +143,9 @@ export default function QuoteEditor() {
       setCompany(j.trip.company_name || '');
       setContact(j.trip.contact && typeof j.trip.contact === 'object' ? { name: j.trip.contact.name || '', email: j.trip.contact.email || '', phone: j.trip.contact.phone || '' } : { name: '', email: '', phone: '' });
       const p = j.trip.pricing && !j.trip.pricing.error ? j.trip.pricing : null;
-      setPricing(p);
-      setFees(Array.isArray(p?.fees) ? p.fees.map((f) => ({ ...f })) : []);
-      setFetEnabled(p ? p.fetEnabled !== false : (j.trip.purpose !== 'owner'));
-      setTotalOverride(p?.totalOverride ?? null);
+      // Normalize so the autosave key is stable (fees[]/fetEnabled defaults, numeric
+      // fields) and the shared components have a single authoritative source.
+      setPricing(p ? normalizePricing(p, j.trip.purpose || 'charter') : null);
       setLegs((j.legs || []).map(legToForm));
       if (!j.legs?.length) setLegs([blankLeg()]);
     } catch (e) { setError(e.message); }
@@ -191,7 +177,7 @@ export default function QuoteEditor() {
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
-        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? j.pricing : null);
+        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
         setSaveState('saved');
       } catch (e) { setError(e.message); setSaveState('error'); }
     }, 700);
@@ -199,35 +185,52 @@ export default function QuoteEditor() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailsKey]);
 
-  // Autosave pricing controls (ad-hoc fees / FET / override), debounced.
-  const priceKey = JSON.stringify({ fees, fetEnabled, totalOverride });
-  useEffect(() => {
-    if (!loaded.current || !tripId || readOnly) return;
-    const t = setTimeout(async () => {
-      setSaveState('saving'); setError(null);
-      try {
-        const r = await apiFetch(`/api/scheduling/trips/${tripId}/price-lines`, {
-          method: 'PATCH',
-          body: JSON.stringify({ fees, fetEnabled, totalOverride }),
-        });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
-        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? j.pricing : null);
-        setSaveState('saved');
-      } catch (e) { setError(e.message); setSaveState('error'); }
-    }, 700);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceKey]);
-
   // Mark loaded only after the post-load render's autosave effects have run (and
   // skipped because loaded.current was still false), so loading never triggers a save.
   useEffect(() => { if (trip) loaded.current = true; }, [trip?.id]);
 
-  const updateFee = (idx, field, value) => setFees((d) => d.map((f, i) => (i === idx ? { ...f, [field]: value } : f)));
-  const addFee = () => setFees((d) => [...d, { code: FEE_CODES[0], description: '', amount: 0, taxable: true }]);
-  const removeFee = (idx) => setFees((d) => d.filter((_, i) => i !== idx));
-  const clearOverride = () => setTotalOverride(null);
+  // Merge a pricing patch into local pricing, recompute live, and schedule the debounced
+  // price save — so only explicit edits (not recalc/load) ever trigger a PATCH /price-lines.
+  const patchPricing = (patch) => {
+    setPricing((p) => {
+      const merged = { ...(p || {}), ...patch };
+      const next = normalizePricing({ ...merged, ...recomputeInputs(merged) }, purpose);
+      pendingPricing.current = next;
+      return next;
+    });
+    if (priceSaveTimer.current) clearTimeout(priceSaveTimer.current);
+    priceSaveTimer.current = setTimeout(async () => {
+      const p = pendingPricing.current;
+      if (!p || !tripId || readOnly) return;
+      setSaveState('saving'); setError(null);
+      try {
+        const r = await apiFetch(`/api/scheduling/trips/${tripId}/price-lines`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            overrides: p.overrides, costPerHr: p.costPerHr, posRate: p.posRate,
+            surchargePerHr: p.surchargePerHr, landingFee: p.landingFee, landings: p.landings,
+            nights: p.nights, faCount: p.faCount, crewCount: p.crewCount,
+            segmentPerPax: p.segmentPerPax, fees: p.fees, fetEnabled: p.fetEnabled, totalOverride: p.totalOverride,
+          }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
+        if (j.pricing) setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
+        setSaveState('saved');
+      } catch (e) { setError(e.message); setSaveState('error'); }
+    }, 700);
+  };
+
+  const recalcPricing = async () => {
+    if (priceSaveTimer.current) clearTimeout(priceSaveTimer.current);
+    setError(null);
+    try {
+      const r = await apiFetch(`/api/scheduling/trips/${tripId}/price`, { method: 'POST', body: JSON.stringify({}) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `Recalculate failed (${r.status})`);
+      setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
+    } catch (e) { setError(e.message); }
+  };
 
   const book = async () => {
     setBusy(true); setError(null);
@@ -248,7 +251,6 @@ export default function QuoteEditor() {
     } catch (e) { setError(e.message); setBusy(false); }
   };
 
-  const live = pricing ? recomputeInputs(priceInputs(pricing, fees, fetEnabled, totalOverride)) : null;
   const saveLabel = { idle: '', saving: 'Saving…', saved: 'Saved ✓', error: 'Save failed' }[saveState];
   const saveColor = saveState === 'error' ? 'var(--danger)' : 'var(--text-secondary)';
 
@@ -325,61 +327,21 @@ export default function QuoteEditor() {
           <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 10 }}>ETD is local Eastern (Zulu shown beneath); the ETA under each arrival comes from the flight-time engine.</p>
         </div>
 
-        <div style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Pricing — {usd(live?.total)}{totalOverride != null ? ' · adjusted' : ''}</span>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{pricing?.rateName || (purpose === 'owner' ? 'Owner rate' : 'Charter rate')}</span>
-          </div>
-          {!pricing ? (
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Add a leg with a From and To to price the quote.</p>
-          ) : (
-            <table style={{ width: '100%', fontSize: 13, color: 'var(--text-secondary)', borderCollapse: 'collapse' }}>
-              <tbody>
-                <tr><td style={{ padding: '3px 0' }}>Flight cost</td><td style={{ textAlign: 'right' }}>{usd(live.flightCost)}</td></tr>
-                {live.surcharge > 0 && <tr><td>Fuel surcharge</td><td style={{ textAlign: 'right' }}>{usd(live.surcharge)}</td></tr>}
-                {live.landingCost > 0 && <tr><td>Landings ({pricing.landings})</td><td style={{ textAlign: 'right' }}>{usd(live.landingCost)}</td></tr>}
-                {live.segmentFee > 0 && <tr><td>Segment fees</td><td style={{ textAlign: 'right' }}>{usd(live.segmentFee)}</td></tr>}
-                <tr><td colSpan={2} style={{ paddingTop: 10, fontSize: 11, fontWeight: 600, letterSpacing: '.04em' }}>AD-HOC FEES</td></tr>
-                {fees.map((f, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '3px 0' }}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <select value={f.code || ''} onChange={(e) => updateFee(i, 'code', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '4px 6px', fontSize: 12 }}>
-                          {FEE_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <input value={f.description || ''} onChange={(e) => updateFee(i, 'description', e.target.value)} placeholder="Description" style={{ ...inputStyle, width: 'auto', padding: '4px 6px', fontSize: 12, flex: '1 1 120px' }} />
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}><input type="checkbox" checked={!!f.taxable} onChange={(e) => updateFee(i, 'taxable', e.target.checked)} /> Taxable</label>
-                        <button onClick={() => removeFee(i)} style={{ padding: '2px 7px', fontSize: 11, background: 'var(--bg-secondary)', color: 'var(--danger)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>✕</button>
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input type="number" value={f.amount} onChange={(e) => updateFee(i, 'amount', e.target.value)} style={{ width: 78, textAlign: 'right', padding: '2px 5px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 5 }} />
-                    </td>
-                  </tr>
-                ))}
-                <tr><td colSpan={2} style={{ padding: '4px 0' }}>
-                  <button onClick={addFee} style={{ padding: '4px 12px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>+ New Fee</button>
-                </td></tr>
-                <tr>
-                  <td><label style={{ display: 'flex', alignItems: 'center', gap: 6 }}><input type="checkbox" checked={fetEnabled} onChange={(e) => setFetEnabled(e.target.checked)} /> FET ({Math.round((pricing.fetRate || 0) * 1000) / 10}%)</label></td>
-                  <td style={{ textAlign: 'right' }}>{usd(live.fetAmount)}</td>
-                </tr>
-                <tr>
-                  <td style={{ paddingTop: 6, fontWeight: 700, color: 'var(--text-primary)' }}>Total{totalOverride != null ? ' · adjusted' : ''}</td>
-                  <td style={{ paddingTop: 6, textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
-                      <input type="number" value={totalOverride ?? ''} placeholder={String(live.computedTotal)}
-                        onChange={(e) => setTotalOverride(e.target.value === '' ? null : e.target.value)}
-                        style={{ width: 96, textAlign: 'right', padding: '2px 5px', fontSize: 13, fontWeight: 700, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 5 }} />
-                      {totalOverride != null && totalOverride !== '' &&
-                        <button title="Clear override" onClick={clearOverride} style={{ padding: '2px 7px', fontSize: 12, background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>↺</button>}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-        </div>
+        <PricingSummary
+          pricing={pricing}
+          collapsed={pricingCollapsed}
+          onToggle={() => setPricingCollapsed((c) => !c)}
+          onOpen={() => setPricingOpen(true)}
+          editable={!readOnly}
+        />
+        {pricingOpen && !readOnly && (
+          <PricingSlideOut
+            pricing={pricing}
+            onPatch={patchPricing}
+            onRecalculate={recalcPricing}
+            onClose={() => setPricingOpen(false)}
+          />
+        )}
 
         <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {sendBtns}

@@ -140,3 +140,108 @@ test('repriceFromBase: preserves FET off (owner)', () => {
   assert.equal(out.total, 44500 + 500); // fetBase + segmentFee, no FET
   assert.equal(out.manual, true);
 });
+
+// ── Task 1: flightCost input + per-line overrides + effectiveHourly ──────────
+import { recomputeFromInputs as rfi } from './pricing.js';
+
+const rfiBase = () => ({
+  flightCost: 48010, hours: 4.72, surchargePerHr: 1800,
+  faFee: 700, faCount: 10, crewFee: 200, crewCount: 10,
+  landingFee: 500, landings: 2, segmentPerPax: 4.95, pax: 15,
+  overnightCost: 13500, fetRate: 0.075, fees: [], fetEnabled: true, totalOverride: null,
+});
+
+test('recomputeFromInputs: uses flightCost input directly (not hourlyRate*hours)', () => {
+  const r = rfi(rfiBase());
+  assert.equal(r.flightCost, 48010);
+  assert.equal(r.effectiveHourly, Math.round(48010 / 4.72));
+});
+
+test('recomputeFromInputs: a per-line override pins that line and flows into FET base', () => {
+  const r = rfi({ ...rfiBase(), overrides: { surcharge: 9000 } });
+  assert.equal(r.surcharge, 9000);
+  assert.ok(r.fetBase >= 9000);
+});
+
+test('recomputeFromInputs: flightCost override changes effectiveHourly', () => {
+  const r = rfi({ ...rfiBase(), overrides: { flightCost: 60000 } });
+  assert.equal(r.flightCost, 60000);
+  assert.equal(r.effectiveHourly, Math.round(60000 / 4.72));
+});
+
+test('recomputeFromInputs: back-compat — no flightCost input falls back to hourlyRate*hours', () => {
+  const r = rfi({ hourlyRate: 10000, hours: 5, fetRate: 0, fees: [] });
+  assert.equal(r.flightCost, 50000);
+});
+
+test('recomputeFromInputs: totalOverride still wins over computed total', () => {
+  const r = rfi({ ...rfiBase(), totalOverride: 99000 });
+  assert.equal(r.total, 99000);
+});
+
+// ── Task 2: priceTrip emits costPerHr/posRate; repriceFromBase preserves overrides ──
+const card = {
+  aircraft_tail: 'N69FP', label: 'N69FP CHARTER', hourly_rate: 8500, positioning_rate: 7000,
+  surcharge_per_hr: 1800, landing_fee: 500, fa_fee: 700, crew_fee: 200, overnight_fee: 1500,
+  overnight_threshold: 0, segment_fee_per_pax: 4.95, fet_rate: 0.075,
+};
+
+test('priceTrip emits nominal costPerHr and posRate from the rate card', () => {
+  const r = priceTrip({ legs: [{ from: 'KFXE', to: 'KTEB', mins: 130, pax: 4, isPositioning: false }], rateCard: card });
+  assert.equal(r.costPerHr, 8500);
+  assert.equal(r.posRate, 7000);
+});
+
+test('repriceFromBase preserves per-line overrides across a leg reprice', () => {
+  const freshResult = priceTrip({ legs: [{ from: 'KFXE', to: 'KTEB', mins: 130, pax: 4, isPositioning: false }], rateCard: card });
+  const out = repriceFromBase(freshResult, { overrides: { surcharge: 9999 } });
+  assert.equal(out.surcharge, 9999);
+  assert.deepEqual(out.overrides, { surcharge: 9999 });
+  assert.equal(out.manual, true);
+});
+
+// ── Task 3: computeFlightCost per-leg with overridable Cost/Hr + Pos/Hr ──────
+import { computeFlightCost as cfc } from './pricing.js';
+
+const card2 = { hourly_rate: 8500, positioning_rate: 7000, min_hours: 0, short_leg_time: 0 };
+
+test('computeFlightCost: revenue legs at costPerHr, ferry legs at posRate', () => {
+  const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
+  // 2h*8500 + 1h*7000 = 24000
+  assert.equal(cfc(legs, card2, {}).flightCost, 24000);
+});
+
+test('computeFlightCost: applies overridden costPerHr/posRate', () => {
+  const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
+  assert.equal(cfc(legs, card2, { costPerHr: 10000, posRate: 5000 }).flightCost, 25000); // 2*10000 + 1*5000
+});
+
+test('computeFlightCost: returns total flight hours', () => {
+  const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
+  assert.equal(cfc(legs, card2, {}).hours, 3);
+});
+
+// ── Bug fix: overnightRate/overnightThreshold emitted by priceTrip; fallback preserved ──
+import { priceTrip as pt } from './pricing.js';
+
+test('recomputeFromInputs: overnightRate present → RON Days drives RON Cost', () => {
+  const r = rfi({ nights: 5, overnightRate: 1500, overnightThreshold: 0, fees: [], fetRate: 0 });
+  assert.equal(r.overnightCost, 7500); // 5 nights * 1500
+});
+
+test('recomputeFromInputs: overnightThreshold reduces billable nights', () => {
+  const r = rfi({ nights: 5, overnightRate: 1500, overnightThreshold: 3, fees: [], fetRate: 0 });
+  assert.equal(r.overnightCost, 3000); // (5-3) * 1500
+});
+
+test('recomputeFromInputs: no overnightRate → falls back to stored overnightCost (not zeroed)', () => {
+  const r = rfi({ overnightCost: 9000, fees: [], fetRate: 0 });
+  assert.equal(r.overnightCost, 9000);
+});
+
+test('priceTrip emits overnightRate + overnightThreshold from the rate card', () => {
+  const c = { aircraft_tail: 'N69FP', hourly_rate: 8000, overnight_fee: 1500, overnight_threshold: 2 };
+  const r = pt({ legs: [{ from: 'A', to: 'B', mins: 120, pax: 2, isPositioning: false }], rateCard: c, nights: 4 });
+  assert.equal(r.overnightRate, 1500);
+  assert.equal(r.overnightThreshold, 2);
+});

@@ -12,51 +12,67 @@ export const calcLeg = (mins, rateCard, { isPositioning = false } = {}) => {
   return { hrs: Math.round(hrs * 100) / 100, mins, cost: Math.round(cost) };
 };
 
-// Recompute the full breakdown from editable RATE inputs plus ad-hoc Fees.
+// Recompute the full breakdown from editable inputs + per-line $ overrides + ad-hoc Fees.
+// `flightCost` (the per-leg computed value) is passed in; if absent we fall back to
+// hourlyRate*hours (back-compat). `overrides` pins any line to a manual dollar amount.
 // Taxable ad-hoc fees join the FET base; non-taxable fees are added after FET.
-// `fetEnabled === false` disables FET (owner trips). `totalOverride` (when set)
-// wins over the computed total (LevelFlight's editable TOTAL PRICE).
+// `fetEnabled === false` disables FET. `totalOverride` (when set) wins over the total.
 export const recomputeFromInputs = (i) => {
   const n = (v) => Number(v) || 0;
-  const flightCost = Math.round(n(i.hourlyRate) * n(i.hours));
-  const surcharge = Math.round(n(i.surchargePerHr) * n(i.hours));
-  const faCost = Math.round(n(i.faFee) * n(i.faCount));
-  const crewCost = Math.round(n(i.crewFee) * n(i.crewCount));
-  const landingCost = Math.round(n(i.landingFee) * n(i.landings));
-  const overnightCost = Math.round(n(i.overnightCost));
-  const segmentFee = Math.round(n(i.segmentPerPax) * n(i.pax));
+  const ov = (i.overrides && typeof i.overrides === 'object') ? i.overrides : {};
+  const pinned = (k) => ov[k] !== undefined && ov[k] !== null && ov[k] !== '';
+  const pin = (k, computed) => (pinned(k) ? Math.round(n(ov[k])) : computed);
+
+  const baseFlight = (i.flightCost !== undefined && i.flightCost !== null && i.flightCost !== '')
+    ? Math.round(n(i.flightCost)) : Math.round(n(i.hourlyRate) * n(i.hours));
+  const flightCost = pin('flightCost', baseFlight);
+  const surcharge = pin('surcharge', Math.round(n(i.surchargePerHr) * n(i.hours)));
+  const faCost = pin('faCost', Math.round(n(i.faFee) * n(i.faCount)));
+  const crewCost = pin('crewCost', Math.round(n(i.crewFee) * n(i.crewCount)));
+  const landingCost = pin('landingCost', Math.round(n(i.landingFee) * n(i.landings)));
+  const overnightComputed = (i.overnightRate !== undefined && i.overnightRate !== null)
+    ? Math.round(Math.max(0, n(i.nights) - n(i.overnightThreshold)) * n(i.overnightRate))
+    : Math.round(n(i.overnightCost));
+  const overnightCost = pin('overnightCost', overnightComputed);
+  const segmentFee = pin('segmentFee', Math.round(n(i.segmentPerPax) * n(i.pax)));
 
   const fees = Array.isArray(i.fees) ? i.fees : [];
   const feesTaxable = Math.round(fees.filter((f) => f.taxable).reduce((s, f) => s + n(f.amount), 0));
   const feesNonTaxable = Math.round(fees.filter((f) => !f.taxable).reduce((s, f) => s + n(f.amount), 0));
 
   const fetBase = flightCost + surcharge + landingCost + faCost + crewCost + overnightCost + feesTaxable;
-  const fetEnabled = i.fetEnabled !== false;            // default ON; explicit false disables
+  const fetEnabled = i.fetEnabled !== false;
   const fetAmount = fetEnabled ? Math.round(fetBase * n(i.fetRate)) : 0;
   const computedTotal = Math.round(fetBase + segmentFee + fetAmount + feesNonTaxable);
 
   const hasOverride = i.totalOverride !== null && i.totalOverride !== undefined && i.totalOverride !== '';
   const totalOverride = hasOverride ? Math.round(n(i.totalOverride)) : null;
 
+  const hours = n(i.hours);
+  const effectiveHourly = hours > 0 ? Math.round(flightCost / hours) : 0;
+
   return {
     flightCost, surcharge, faCost, crewCost, landingCost, overnightCost, segmentFee,
     fees, feesTaxable, feesNonTaxable,
     fetEnabled, fetBase: Math.round(fetBase), fetAmount,
-    computedTotal, totalOverride,
+    computedTotal, totalOverride, effectiveHourly,
     total: hasOverride ? totalOverride : computedTotal,
   };
 };
 
 // After a rate-card reprice (leg/aircraft/purpose change), keep the user's manual
-// ad-hoc fees, FET on/off, and total override, recomputing so the override still
-// wins. Returns the fresh base untouched when there were no manual edits.
+// per-line $ overrides, ad-hoc fees, FET on/off, and total override; recompute so the
+// override still wins. Returns the fresh base untouched when there were no manual edits.
 export const repriceFromBase = (fresh, old = {}) => {
   const o = old && !old.error ? old : {};
-  const hasManual = (Array.isArray(o.fees) && o.fees.length > 0)
+  const ov = (o.overrides && typeof o.overrides === 'object') ? o.overrides : {};
+  const hasManual = Object.keys(ov).length > 0
+    || (Array.isArray(o.fees) && o.fees.length > 0)
     || (o.totalOverride !== null && o.totalOverride !== undefined && o.totalOverride !== '')
     || o.fetEnabled === false;
   if (!hasManual) return fresh;
   const inputs = {
+    flightCost: fresh.flightCost,
     hourlyRate: fresh.hourlyRate, hours: fresh.hours, surchargePerHr: fresh.surchargePerHr,
     faFee: fresh.faFee, faCount: fresh.faCount, crewFee: fresh.crewFee, crewCount: fresh.crewCount,
     landingFee: fresh.landingFee, landings: fresh.landings,
@@ -65,8 +81,9 @@ export const repriceFromBase = (fresh, old = {}) => {
     fees: Array.isArray(o.fees) ? o.fees : [],
     fetEnabled: o.fetEnabled !== false,
     totalOverride: o.totalOverride ?? null,
+    overrides: ov,
   };
-  return { ...fresh, ...inputs, ...recomputeFromInputs(inputs), manual: true };
+  return { ...fresh, ...inputs, ...recomputeFromInputs(inputs), overrides: ov, manual: true };
 };
 
 // legs: [{ from, to, mins, pax, isPositioning }]
@@ -100,16 +117,35 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
   return {
     perLeg, legs: legs.length, totalHrs, hours: totalHrs,
     hourlyRate: totalHrs > 0 ? Math.round(flightCost / totalHrs) : (rateCard.hourly_rate || 0),
+    costPerHr: rateCard.hourly_rate || 0,
+    posRate: rateCard.positioning_rate || 0,
     flightCost: Math.round(flightCost),
     surchargePerHr: rateCard.surcharge_per_hr || 0, surcharge,
     landingFee: rateCard.landing_fee || 0, landings, landingCost,
     faFee: rateCard.fa_fee || 0, faCount, faCost,
     crewFee: rateCard.crew_fee || 0, crewCount, crewCost,
     nights, billableNights, overnightCost,
+    overnightRate: rateCard.overnight_fee || 0, overnightThreshold: rateCard.overnight_threshold || 3,
     segmentPerPax: rateCard.segment_fee_per_pax || 0, pax: legs.reduce((s, l) => s + (l.pax || 0), 0), segmentFee,
     fetBase: Math.round(fetBase), fetRate: rateCard.fet_rate || 0, fetAmount,
     total,
     rateName: rateCard.label || rateCard.rate_name || rateCard.aircraft_tail,
     tail: rateCard.aircraft_tail,
   };
+};
+
+// Per-leg flight cost honoring nominal Cost/Hr (revenue legs) and Pos/Hr (ferry legs),
+// with the rate card's min_hours / short_leg flooring. `rates` optionally overrides the
+// card's hourly_rate / positioning_rate (when the user edits Cost/Hr or Pos/Hr).
+// legs: [{ mins, isPositioning }]. Returns { flightCost, hours }.
+export const computeFlightCost = (legs = [], rateCard = {}, rates = {}) => {
+  const card = {
+    ...rateCard,
+    hourly_rate: rates.costPerHr != null && rates.costPerHr !== '' ? Number(rates.costPerHr) : rateCard.hourly_rate,
+    positioning_rate: rates.posRate != null && rates.posRate !== '' ? Number(rates.posRate) : rateCard.positioning_rate,
+  };
+  const perLeg = legs.map((l) => calcLeg(l.mins, card, { isPositioning: !!l.isPositioning }));
+  const flightCost = Math.round(perLeg.reduce((s, l) => s + l.cost, 0));
+  const hours = Math.round(perLeg.reduce((s, l) => s + l.hrs, 0) * 100) / 100;
+  return { flightCost, hours };
 };

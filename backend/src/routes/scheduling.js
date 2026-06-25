@@ -14,7 +14,7 @@ import { documentAlerts } from '../scheduling/docExpiry.js';
 import { rankPeople } from '../scheduling/peopleSearch.js';
 import { priceQuoteLegs, legMinutes } from '../scheduling/priceQuote.js';
 import { nextQuoteNumber, nextTripNumber } from '../scheduling/numbering.js';
-import { recomputeFromInputs, repriceFromBase } from '../scheduling/pricing.js';
+import { recomputeFromInputs, repriceFromBase, computeFlightCost } from '../scheduling/pricing.js';
 import { tripParamColumn } from '../scheduling/tripParam.js';
 import { buildCrewArrays } from '../scheduling/crewAssignment.js';
 import { defaultAirportIndex, searchAirports } from '../scheduling/airportSearch.js';
@@ -565,17 +565,45 @@ router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, r
     const base = trip.pricing && !trip.pricing.error ? trip.pricing : {};
     const b = req.body || {};
     const pick = (k) => (b[k] === undefined || b[k] === null || b[k] === '' ? (Number(base[k]) || 0) : Number(b[k]) || 0);
+
+    // Recompute the per-leg flight cost when Cost/Hr or Pos/Hr changed (and the flight
+    // line isn't pinned); otherwise keep the stored flightCost.
+    const overrides = (b.overrides && typeof b.overrides === 'object') ? b.overrides : (base.overrides || {});
+    const costPerHr = b.costPerHr === undefined ? (Number(base.costPerHr) || 0) : Number(b.costPerHr) || 0;
+    const posRate = b.posRate === undefined ? (Number(base.posRate) || 0) : Number(b.posRate) || 0;
+    let flightCost = Number(base.flightCost) || 0;
+    let hours = Number(base.hours) || 0;
+    const flightPinned = overrides.flightCost !== undefined && overrides.flightCost !== null && overrides.flightCost !== '';
+    const ratesChanged = (b.costPerHr !== undefined && Number(b.costPerHr) !== (Number(base.costPerHr) || 0))
+      || (b.posRate !== undefined && Number(b.posRate) !== (Number(base.posRate) || 0));
+    if (ratesChanged && !flightPinned) {
+      const { data: legRows } = await supabase
+        .from('scheduling_legs').select('dep_icao, arr_icao, lf_synced_snapshot').eq('trip_id', trip.id).order('seq');
+      const legInputs = (legRows || []).map((l) => ({ dep_icao: l.dep_icao, arr_icao: l.arr_icao, isPositioning: !!l.lf_synced_snapshot?.isPositioning }));
+      const times = await legMinutes(null, legInputs);
+      const tail = base.tail || legRows?.[0]?.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber || null;
+      const { data: cards } = await supabase.from('rate_cards').select('*').eq('aircraft_tail', tail);
+      const rateCard = (cards || [])[0] || {};
+      const legs = legInputs.map((l, idx) => ({ mins: times[idx].minutes, isPositioning: l.isPositioning }));
+      const fc = computeFlightCost(legs, rateCard, { costPerHr, posRate });
+      flightCost = fc.flightCost; hours = fc.hours || hours;
+    }
+
     const inputs = {
-      hourlyRate: pick('hourlyRate'), hours: pick('hours'), surchargePerHr: pick('surchargePerHr'),
+      flightCost, hours, costPerHr, posRate,
+      surchargePerHr: pick('surchargePerHr'),
       faFee: pick('faFee'), faCount: pick('faCount'), crewFee: pick('crewFee'), crewCount: pick('crewCount'),
       landingFee: pick('landingFee'), landings: pick('landings'),
-      segmentPerPax: pick('segmentPerPax'), pax: pick('pax'), overnightCost: pick('overnightCost'),
+      segmentPerPax: pick('segmentPerPax'), pax: pick('pax'),
+      nights: pick('nights'), overnightRate: base.overnightRate, overnightThreshold: base.overnightThreshold,
+      overnightCost: pick('overnightCost'),
       fetRate: base.fetRate || 0,
       fees: Array.isArray(b.fees) ? b.fees : (base.fees || []),
       fetEnabled: b.fetEnabled === undefined ? (base.fetEnabled !== false) : !!b.fetEnabled,
       totalOverride: b.totalOverride === undefined ? (base.totalOverride ?? null) : b.totalOverride,
+      overrides,
     };
-    const pricing = { ...base, ...inputs, ...recomputeFromInputs(inputs), manual: true };
+    const pricing = { ...base, ...inputs, ...recomputeFromInputs(inputs), overrides, costPerHr, posRate, manual: true };
     await supabase.from('scheduling_trips').update({ pricing }).eq('id', trip.id);
     res.json({ pricing });
   } catch (e) {
