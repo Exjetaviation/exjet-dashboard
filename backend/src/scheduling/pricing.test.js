@@ -140,3 +140,41 @@ test('repriceFromBase: preserves FET off (owner)', () => {
   assert.equal(out.total, 44500 + 500); // fetBase + segmentFee, no FET
   assert.equal(out.manual, true);
 });
+
+// ── Task 1: flightCost input + per-line overrides + effectiveHourly ──────────
+import { recomputeFromInputs as rfi } from './pricing.js';
+
+const rfiBase = () => ({
+  flightCost: 48010, hours: 4.72, surchargePerHr: 1800,
+  faFee: 700, faCount: 10, crewFee: 200, crewCount: 10,
+  landingFee: 500, landings: 2, segmentPerPax: 4.95, pax: 15,
+  overnightCost: 13500, fetRate: 0.075, fees: [], fetEnabled: true, totalOverride: null,
+});
+
+test('recomputeFromInputs: uses flightCost input directly (not hourlyRate*hours)', () => {
+  const r = rfi(rfiBase());
+  assert.equal(r.flightCost, 48010);
+  assert.equal(r.effectiveHourly, Math.round(48010 / 4.72));
+});
+
+test('recomputeFromInputs: a per-line override pins that line and flows into FET base', () => {
+  const r = rfi({ ...rfiBase(), overrides: { surcharge: 9000 } });
+  assert.equal(r.surcharge, 9000);
+  assert.ok(r.fetBase >= 9000);
+});
+
+test('recomputeFromInputs: flightCost override changes effectiveHourly', () => {
+  const r = rfi({ ...rfiBase(), overrides: { flightCost: 60000 } });
+  assert.equal(r.flightCost, 60000);
+  assert.equal(r.effectiveHourly, Math.round(60000 / 4.72));
+});
+
+test('recomputeFromInputs: back-compat — no flightCost input falls back to hourlyRate*hours', () => {
+  const r = rfi({ hourlyRate: 10000, hours: 5, fetRate: 0, fees: [] });
+  assert.equal(r.flightCost, 50000);
+});
+
+test('recomputeFromInputs: totalOverride still wins over computed total', () => {
+  const r = rfi({ ...rfiBase(), totalOverride: 99000 });
+  assert.equal(r.total, 99000);
+});
