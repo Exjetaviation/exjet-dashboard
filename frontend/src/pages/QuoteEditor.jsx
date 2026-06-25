@@ -119,6 +119,8 @@ export default function QuoteEditor() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const loaded = useRef(false);
+  const priceSaveTimer = useRef(null);
+  const pendingPricing = useRef(null);
 
   const { data: legsData } = useApi('/api/scheduling/legs');
   const clients = distinctClients(legsData?.legs || []);
@@ -183,70 +185,45 @@ export default function QuoteEditor() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailsKey]);
 
-  // Autosave pricing controls (debounced) — broadened to include all editable fields
-  // from the slide-out: overrides, rates, counts, ad-hoc fees, FET, total override.
-  const priceKey = JSON.stringify({
-    overrides: pricing?.overrides,
-    costPerHr: pricing?.costPerHr,
-    posRate: pricing?.posRate,
-    surchargePerHr: pricing?.surchargePerHr,
-    landingFee: pricing?.landingFee,
-    landings: pricing?.landings,
-    nights: pricing?.nights,
-    faCount: pricing?.faCount,
-    crewCount: pricing?.crewCount,
-    segmentPerPax: pricing?.segmentPerPax,
-    fees: pricing?.fees,
-    fetEnabled: pricing?.fetEnabled,
-    totalOverride: pricing?.totalOverride,
-  });
-  useEffect(() => {
-    if (!loaded.current || !tripId || readOnly || !pricing) return;
-    const t = setTimeout(async () => {
+  // Mark loaded only after the post-load render's autosave effects have run (and
+  // skipped because loaded.current was still false), so loading never triggers a save.
+  useEffect(() => { if (trip) loaded.current = true; }, [trip?.id]);
+
+  // Merge a pricing patch into local pricing, recompute live, and schedule the debounced
+  // price save — so only explicit edits (not recalc/load) ever trigger a PATCH /price-lines.
+  const patchPricing = (patch) => {
+    setPricing((p) => {
+      const merged = { ...(p || {}), ...patch };
+      const next = normalizePricing({ ...merged, ...recomputeInputs(merged) }, purpose);
+      pendingPricing.current = next;
+      return next;
+    });
+    if (priceSaveTimer.current) clearTimeout(priceSaveTimer.current);
+    priceSaveTimer.current = setTimeout(async () => {
+      const p = pendingPricing.current;
+      if (!p || !tripId || readOnly) return;
       setSaveState('saving'); setError(null);
       try {
         const r = await apiFetch(`/api/scheduling/trips/${tripId}/price-lines`, {
           method: 'PATCH',
           body: JSON.stringify({
-            overrides: pricing.overrides,
-            costPerHr: pricing.costPerHr,
-            posRate: pricing.posRate,
-            surchargePerHr: pricing.surchargePerHr,
-            landingFee: pricing.landingFee,
-            landings: pricing.landings,
-            nights: pricing.nights,
-            faCount: pricing.faCount,
-            crewCount: pricing.crewCount,
-            segmentPerPax: pricing.segmentPerPax,
-            fees: pricing.fees,
-            fetEnabled: pricing.fetEnabled,
-            totalOverride: pricing.totalOverride,
+            overrides: p.overrides, costPerHr: p.costPerHr, posRate: p.posRate,
+            surchargePerHr: p.surchargePerHr, landingFee: p.landingFee, landings: p.landings,
+            nights: p.nights, faCount: p.faCount, crewCount: p.crewCount,
+            segmentPerPax: p.segmentPerPax, fees: p.fees, fetEnabled: p.fetEnabled, totalOverride: p.totalOverride,
           }),
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || `Save failed (${r.status})`);
-        // Server is authoritative — replace local pricing with the recomputed result.
         if (j.pricing) setPricing(j.pricing && !j.pricing.error ? normalizePricing(j.pricing, purpose) : null);
         setSaveState('saved');
       } catch (e) { setError(e.message); setSaveState('error'); }
     }, 700);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceKey]);
-
-  // Mark loaded only after the post-load render's autosave effects have run (and
-  // skipped because loaded.current was still false), so loading never triggers a save.
-  useEffect(() => { if (trip) loaded.current = true; }, [trip?.id]);
-
-  // Merge a pricing patch into local pricing, recompute live, and let the autosave persist it.
-  const patchPricing = (patch) => {
-    setPricing((p) => {
-      const merged = { ...(p || {}), ...patch };
-      return { ...merged, ...recomputeInputs(merged) };
-    });
   };
 
   const recalcPricing = async () => {
+    if (priceSaveTimer.current) clearTimeout(priceSaveTimer.current);
+    setError(null);
     try {
       const r = await apiFetch(`/api/scheduling/trips/${tripId}/price`, { method: 'POST', body: JSON.stringify({}) });
       const j = await r.json();

@@ -208,7 +208,7 @@ export default function SchedulingTripDetail() {
       } catch (e) { setError(e.message); }
     }, 700);
   };
-  const recalcPricing = async () => { await reprice(); };
+  const recalcPricing = async () => { if (priceSaveTimer.current) clearTimeout(priceSaveTimer.current); await reprice(); };
 
   // Legs: prefer the mirror response; fall back to router state during the first paint.
   const legsForView = legs.length ? legs : (stateTrip?.legs || []);
