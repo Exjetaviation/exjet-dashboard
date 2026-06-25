@@ -178,3 +178,24 @@ test('recomputeFromInputs: totalOverride still wins over computed total', () => 
   const r = rfi({ ...rfiBase(), totalOverride: 99000 });
   assert.equal(r.total, 99000);
 });
+
+// ── Task 2: priceTrip emits costPerHr/posRate; repriceFromBase preserves overrides ──
+const card = {
+  aircraft_tail: 'N69FP', label: 'N69FP CHARTER', hourly_rate: 8500, positioning_rate: 7000,
+  surcharge_per_hr: 1800, landing_fee: 500, fa_fee: 700, crew_fee: 200, overnight_fee: 1500,
+  overnight_threshold: 0, segment_fee_per_pax: 4.95, fet_rate: 0.075,
+};
+
+test('priceTrip emits nominal costPerHr and posRate from the rate card', () => {
+  const r = priceTrip({ legs: [{ from: 'KFXE', to: 'KTEB', mins: 130, pax: 4, isPositioning: false }], rateCard: card });
+  assert.equal(r.costPerHr, 8500);
+  assert.equal(r.posRate, 7000);
+});
+
+test('repriceFromBase preserves per-line overrides across a leg reprice', () => {
+  const freshResult = priceTrip({ legs: [{ from: 'KFXE', to: 'KTEB', mins: 130, pax: 4, isPositioning: false }], rateCard: card });
+  const out = repriceFromBase(freshResult, { overrides: { surcharge: 9999 } });
+  assert.equal(out.surcharge, 9999);
+  assert.deepEqual(out.overrides, { surcharge: 9999 });
+  assert.equal(out.manual, true);
+});
