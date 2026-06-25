@@ -27,7 +27,7 @@ import { renderItineraryHtml } from '../services/itineraryHtml.js';
 import { renderQuotePdf } from '../services/quotePdf.js';
 import { buildItineraryEmail } from '../services/itineraryEmail.js';
 import { requireFlightInfoAccess } from '../middleware/requireFlightInfoAccess.js';
-import { getFlightInfo, upsertFlightInfo, markComplete, prefillFromBlock } from '../scheduling/flightInfoStore.js';
+import { getFlightInfo, upsertFlightInfo, markComplete, prefillFromBlock, replaceCrew } from '../scheduling/flightInfoStore.js';
 import { accrueLeg } from '../fleet/accrueLeg.js';
 import { getAircraft } from '../fleet/aircraftStore.js';
 import { listComponents, applyLedgerEntry } from '../fleet/componentStore.js';
@@ -1078,24 +1078,37 @@ router.post('/trips/:lfOid/revert', requireSchedulingEditor, async (req, res) =>
   }
 });
 
+const FLIGHT_INFO_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function loadLeg(req, res, next) {
-  if (!supabase) { req.legRow = null; return next(); }
-  const { data } = await supabase.from('scheduling_legs').select('*').eq('id', req.params.legId).maybeSingle();
-  req.legRow = data || null; next();
+  req.legRow = null;
+  if (supabase) {
+    const key = req.params.legId;
+    const col = FLIGHT_INFO_UUID_RE.test(key) ? 'id' : 'lf_oid';
+    const { data } = await supabase.from('scheduling_legs').select('*').eq(col, key).maybeSingle();
+    req.legRow = data || null;
+  }
+  next();
 }
 
 router.get('/legs/:legId/flight-info', loadLeg, async (req, res) => {
-  let fi = await getFlightInfo(supabase, req.params.legId);
-  if (!fi) fi = { scheduling_leg_id: req.params.legId, status: 'draft',
+  const legUuid = req.legRow?.id || null;
+  let fi = legUuid ? await getFlightInfo(supabase, legUuid) : null;
+  if (!fi) fi = { scheduling_leg_id: legUuid, status: 'draft',
                   ...prefillFromBlock(req.legRow?.lf_synced_snapshot?.block) };
   res.json(fi);
 });
 
-router.put('/legs/:legId/flight-info', loadLeg, requireFlightInfoAccess, async (req, res) =>
-  res.json(await upsertFlightInfo(supabase, req.params.legId, req.body || {})));
+router.put('/legs/:legId/flight-info', loadLeg, requireFlightInfoAccess, async (req, res) => {
+  if (!req.legRow?.id) return res.status(404).json({ error: 'leg not found' });
+  const { crew, ...patch } = req.body || {};
+  const row = await upsertFlightInfo(supabase, req.legRow.id, patch);
+  if (row && Array.isArray(crew)) await replaceCrew(supabase, row.id, crew);
+  res.json(row);
+});
 
 router.post('/legs/:legId/flight-info/complete', loadLeg, requireFlightInfoAccess, async (req, res) => {
-  const fi = await markComplete(supabase, req.params.legId, req.user?.email);
+  if (!req.legRow?.id) return res.status(404).json({ error: 'leg not found' });
+  const fi = await markComplete(supabase, req.legRow.id, req.user?.email);
   const tail = req.legRow?.lf_synced_snapshot?.dispatch?.aircraft?.tailNumber;
   if (fi && tail) {
     await accrueLeg({ getAircraftByTail: (t) => getAircraft(supabase, t),

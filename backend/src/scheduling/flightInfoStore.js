@@ -50,3 +50,18 @@ export async function markComplete(supabase, legId, userEmail) {
   if (error) { console.warn('[flightInfo] complete soft-fail:', error.message); return null; }
   return data;
 }
+
+export async function replaceCrew(supabase, flightInfoId, crewRows) {
+  if (!supabase || !flightInfoId) return;
+  await supabase.from('flight_info_crew').delete().eq('flight_info_id', flightInfoId);
+  const rows = (crewRows || []).filter(Boolean).map((c) => ({
+    flight_info_id: flightInfoId,
+    crew_lf_oid: c.crew_lf_oid ?? null,
+    role: c.role ?? null,
+    performed_takeoff: c.performed_takeoff ?? null,
+    performed_landing: c.performed_landing ?? null,
+    imc_hours: c.imc_hours ?? null,
+    night_hours: c.night_hours ?? null,
+  }));
+  if (rows.length) await supabase.from('flight_info_crew').insert(rows);
+}
