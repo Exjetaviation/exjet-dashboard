@@ -99,8 +99,9 @@ function QuotesView() {
     setBusyId(id); setError(null);
     try {
       const r = await apiFetch(`/api/scheduling/trips/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'booked' }) });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Book failed (${r.status})`); }
-      navigate(`/scheduling/trips/${id}`); // it's a booked trip now — show where it went
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `Book failed (${r.status})`);
+      navigate(`/scheduling/trips/${j.trip?.trip_number || id}`); // it's a booked trip now
       return;
     } catch (e) { setError(e.message); }
     setBusyId(null);
@@ -141,7 +142,7 @@ function QuotesView() {
                   style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, background: '#a855f7', color: '#fff', border: 'none', borderRadius: 8, cursor: busyId === q.id ? 'default' : 'pointer', opacity: busyId === q.id ? 0.6 : 1 }}>
                   {busyId === q.id ? 'Booking…' : 'Book'}
                 </button>
-                <button onClick={() => navigate(`/scheduling/trips/${q.id}`)}
+                <button onClick={() => navigate(q.quote_number ? `/scheduling/quotes/${q.quote_number}` : `/scheduling/trips/${q.id}`)}
                   style={{ padding: '7px 12px', fontSize: 13, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>View</button>
               </div>
             </div>
