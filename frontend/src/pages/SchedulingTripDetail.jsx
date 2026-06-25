@@ -6,6 +6,7 @@ import ItinerarySendModal from '../components/ItinerarySendModal';
 import { distinctCrew, distinctClients } from '../lib/schedulingAggregate';
 import { useApi } from '../hooks/useApi';
 import TripTabs from '../components/trip/TripTabs';
+import FlightInfoTab from '../components/scheduling/FlightInfoTab';
 import TripInfoCard from '../components/trip/TripInfoCard';
 import TripActionsRail from '../components/trip/TripActionsRail';
 import FboPicker from '../components/trip/FboPicker';
@@ -70,6 +71,7 @@ export default function SchedulingTripDetail() {
     { id: 'crew', label: 'Crew' },
     { id: 'pax', label: 'Passengers' },
     { id: 'docs', label: 'Documents' },
+    { id: 'flightinfo', label: 'Flight Info' },
   ];
 
   const load = useCallback(async () => {
@@ -556,6 +558,8 @@ export default function SchedulingTripDetail() {
           ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No passengers on the manifest. Click "Edit manifest" to add some.</p>}
         </Section>
       )}
+
+      {tab === 'flightinfo' && <FlightInfoTab legs={legsForView} />}
 
       {tab === 'docs' && (<>
         <Section title="Trip Checklist">
