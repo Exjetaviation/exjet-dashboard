@@ -129,13 +129,13 @@ flow that we fully own) plus the supporting ops features below. Recent/active wo
 - **CORS** is locked to `http://localhost:5173` and `https://exjet-dashboard.vercel.app`.
 
 ### Migrations — applied MANUALLY
-Numbered SQL in `backend/migrations/` (**`001` … `021`**, latest `021_fuel_prices.sql`). There is **no
+Numbered SQL in `backend/migrations/` (**`001` … `022`**, latest `022_fleet.sql`). There is **no
 migration runner and no `psql`/DDL access** — Claude only has the Supabase PostgREST client (service
 key). **Migrations are applied by hand in the Supabase SQL editor.** Every migration is idempotent
 (`IF NOT EXISTS` guards). After writing one, **ask the user to run it.** Stores are written to
 **soft-fail** when a table/column is absent, so code can deploy before its migration is applied.
 The latest migrations gate in-flight features: `018` quoting revamp, `019` quote-accept, `020` Slack,
-`021` fuel.
+`021` fuel, `022` fleet (aircraft profiles + components + time ledger + flight info).
 
 ---
 
@@ -255,7 +255,10 @@ Code in `backend/src/scheduling/` (32 `*.test.js` files — the most-tested surf
   ops_control/sales_admin — everyone else read-only), `workflow.js` (state machine), `numbering.js`/`nextNumber.js`.
 - **Reference data** (`scheduling/data/`):
   - **`fleet.js`** — static native fleet map: `N408JS` & `N69FP` → Gulfstream GIV SP, maxPax 15.
-    **Extend this as the fleet changes** (native quotes don't call LF for aircraft type).
+    **Extend this as the fleet changes** (native quotes don't call LF for aircraft type). The static
+    `fleet.js` is now superseded by the `aircraft` table (migration 022) as the Fleet area's source of
+    truth; `fleet.js` remains the fallback for native quote/itinerary/trip-sheet rendering until those
+    callers migrate.
   - **`airports.json`** — ~43,390 `ICAO → {lat,lng}` (harvested from LF). This is the **quotable
     universe** — flight time can only be computed for codes present here. `airportNames.json` ~43,389
     `ICAO → {name,city,region}`. `airportSearch.js` ranks From/To suggestions (search universe = the
@@ -591,7 +594,7 @@ hard-coded here) merged with manually-entered `maintenance_events` rows. Endpoin
 | Worker | File | Cadence | Opt-in flag | What it does |
 |---|---|---|---|---|
 | `startRecorder` | `services/adsbRecorder.js` | 20s poll, prune hourly | always on | ADS-B firehose + live `leg_actuals` |
-| `startReconciler` | `services/flightTrackReconciler.js` | boot backfill + hourly | always on | `flight_tracks` snapshots + backfill/crew actuals |
+| `startReconciler` | `services/flightTrackReconciler.js` | boot backfill + hourly | always on | `flight_tracks` snapshots + backfill/crew actuals; also runs a best-effort component-time accrual pass (`accrueAllCompleted` — rolls completed pilot Flight Info into `component_time_entries`; soft-fails if fleet tables are absent) |
 | `startSyncWorker` | `scheduling/syncWorker.js` | 5 min | **`SCHEDULING_SYNC=on`** | LF → Supabase mirror + people directory |
 | `startFuelMailWorker` | `services/fuel/fuelMailWorker.js` | boot + weekly | **`FUEL_MAIL_SCAN=on`** | scan `operations@` Gmail → `fuel_prices` |
 | `startSlackWatcher` | `slack/slackWatcher.js` | 60s | **`SLACK_TRIP_CHANNELS=on`** (+`SLACK_BOT_TOKEN`) | provision per-trip Slack channels |
@@ -661,6 +664,13 @@ Catalog (table → what a row is → key columns):
 - `fuel_price_imports` (021) — per-Gmail-message ingest log. `gmail_message_id` PK, `vendor`,
   `rows_imported`, `status`.
 
+**Fleet (022)**
+- `aircraft` (022) — one plane; `id` uuid PK, `tail` UNIQUE, `lf_aircraft_oid`, `origin`, basic-info + performance columns, `lf_synced_snapshot`/`locally_modified`. Replaces static `fleet.js` as the Fleet area's source of truth.
+- `aircraft_components` (022) — engine/apu/airframe per aircraft; identity (`serial`/`model`/`manufacturer`), `baseline_hours/cycles` + `total_hours/cycles`, `apu_last_reading`, `accrues_flight_time`/`tracks_cycles`.
+- `component_time_entries` (022) — append-only time ledger; `component_id`, `leg_id` (UNIQUE per component+leg = idempotency), `hours_delta`/`cycles_delta`, `source`, `time_source`.
+- `flight_info` (022) — one pilot post-flight log per leg; `scheduling_leg_id` UNIQUE, OOOI (`out/off/on/in_at`), fuel/APU/oil, `approach_type`, `debrief`, `status`.
+- `flight_info_crew` (022) — PIC/SIC per-pilot rows; `performed_takeoff/landing`, `imc_hours`, `night_hours`.
+
 ---
 
 ## 19. HTTP API surface (route catalog)
@@ -683,7 +693,10 @@ Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuote
 | `agent.js` | `/api/agent` | readiness review + chat (NDJSON streaming). |
 | `assistant.js` | `/api/assistant` | **legacy** one-shot chat. |
 | `fuel.js` | `/api/fuel` | `/scan`, `/prices`, `/imports`. |
+| `fleet.js` | `/api/fleet` | aircraft profiles CRUD + `POST /aircraft/import` (import from LevelFlight via `getAircraftList`/`getAircraftDetail`), components + `components/:id/ledger` + `components/:id/entries` (manual time/adjustment). |
 | `pricing.js` | — | **NOT mounted (dead).** |
+
+> **Flight Info routes on `scheduling.js`:** `GET/PUT /api/scheduling/legs/:legId/flight-info` + `POST .../complete` (pilot post-flight log; legId resolves lf_oid (24-hex) or uuid id; access guard `requireFlightInfoAccess` = editors or assigned crew).
 
 ---
 
@@ -729,6 +742,10 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
 - **lib utils** (7 have `node:test`): `feesMath` (mirror of backend pricing, including per-line `overrides`
   map and `effectiveHourly`), `trips`, `easternTime` (+ `easternInputParts` added for QuoteEditor date/time inputs),
   `calendarRange`, `delaySegments`, `schedulingAggregate`, `formatElapsed`, `feeCatalog`, `basemap`.
+- **Fleet pages** (`/fleet/*`): `FleetAircraftList` (aircraft index), `FleetAircraftDetail` (per-tail
+  with Basic Info · Performance · Components sub-nav), `FleetComponents` (cross-aircraft component list).
+  **Flight Info tab** in `SchedulingTripDetail.jsx` — per-leg pilot post-flight entry form (OOOI, fuel, APU,
+  approaches, debrief, Mark Complete); `lib/flightTime.js` provides HH:MM ↔ decimal conversion helpers.
 - **Dead/orphan files:** `pages/PricingModel.jsx` (not routed), `routes/quotes.js` + `services/gmail.js`
   (empty stubs), `App.css` (unused Vite boilerplate), `services/quoteEngine.js` (legacy copy).
 - **Build/deploy:** `npm run build` (Vite → `dist/`); Vercel SPA rewrite (`vercel.json`); env `VITE_SUPABASE_URL`,
@@ -812,6 +829,13 @@ Native **`node:test`** throughout (no framework). Tests live **next to source** 
   `pricing.recomputeFromInputs` (backend), including the per-line `overrides` map and `effectiveHourly`.
   Segment fee sits OUTSIDE the FET base in the NEW model.
 - **PDFs locally need `PUPPETEER_EXECUTABLE_PATH`** (bundled chromium is Linux-only); wrap output in `Buffer.from`.
+- **Component totals = `baseline + Σ ledger`**; accrual is **idempotent per (component, leg)** (UNIQUE index).
+  Engines + airframe accrue **Off→On** flight time + 1 cycle; APU accrues `apu_stop − apu_start` hours +
+  running-total cycle delta.
+- The **pilot Flight Info "Mark Complete"** is the authoritative accrual trigger; ADS-B `leg_actuals`/LF
+  `block` only pre-fill the form.
+- **Flight-info routes resolve a leg by lf_oid (24-hex) or uuid id**; the dashboard's mirror-leg objects
+  carry `_id.$oid` (= `scheduling_legs.lf_oid`), not the uuid.
 
 **Footguns**
 - **Two LF clients & two ForeFlight clients** (production `services/*` vs agent `agent/providers/*`) — edit the
