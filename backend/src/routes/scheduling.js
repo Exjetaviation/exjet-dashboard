@@ -595,7 +595,7 @@ router.patch('/trips/:lfOid/price-lines', requireSchedulingEditor, async (req, r
       faFee: pick('faFee'), faCount: pick('faCount'), crewFee: pick('crewFee'), crewCount: pick('crewCount'),
       landingFee: pick('landingFee'), landings: pick('landings'),
       segmentPerPax: pick('segmentPerPax'), pax: pick('pax'),
-      nights: pick('nights'), overnightRate: Number(base.overnightRate) || 0, overnightThreshold: Number(base.overnightThreshold) || 0,
+      nights: pick('nights'), overnightRate: base.overnightRate, overnightThreshold: base.overnightThreshold,
       overnightCost: pick('overnightCost'),
       fetRate: base.fetRate || 0,
       fees: Array.isArray(b.fees) ? b.fees : (base.fees || []),

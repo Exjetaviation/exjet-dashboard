@@ -220,3 +220,28 @@ test('computeFlightCost: returns total flight hours', () => {
   const legs = [{ mins: 120, isPositioning: false }, { mins: 60, isPositioning: true }];
   assert.equal(cfc(legs, card2, {}).hours, 3);
 });
+
+// ── Bug fix: overnightRate/overnightThreshold emitted by priceTrip; fallback preserved ──
+import { priceTrip as pt } from './pricing.js';
+
+test('recomputeFromInputs: overnightRate present → RON Days drives RON Cost', () => {
+  const r = rfi({ nights: 5, overnightRate: 1500, overnightThreshold: 0, fees: [], fetRate: 0 });
+  assert.equal(r.overnightCost, 7500); // 5 nights * 1500
+});
+
+test('recomputeFromInputs: overnightThreshold reduces billable nights', () => {
+  const r = rfi({ nights: 5, overnightRate: 1500, overnightThreshold: 3, fees: [], fetRate: 0 });
+  assert.equal(r.overnightCost, 3000); // (5-3) * 1500
+});
+
+test('recomputeFromInputs: no overnightRate → falls back to stored overnightCost (not zeroed)', () => {
+  const r = rfi({ overnightCost: 9000, fees: [], fetRate: 0 });
+  assert.equal(r.overnightCost, 9000);
+});
+
+test('priceTrip emits overnightRate + overnightThreshold from the rate card', () => {
+  const c = { aircraft_tail: 'N69FP', hourly_rate: 8000, overnight_fee: 1500, overnight_threshold: 2 };
+  const r = pt({ legs: [{ from: 'A', to: 'B', mins: 120, pax: 2, isPositioning: false }], rateCard: c, nights: 4 });
+  assert.equal(r.overnightRate, 1500);
+  assert.equal(r.overnightThreshold, 2);
+});

@@ -125,6 +125,7 @@ export const priceTrip = ({ legs, rateCard, nights = 0, faCount = 1, crewCount =
     faFee: rateCard.fa_fee || 0, faCount, faCost,
     crewFee: rateCard.crew_fee || 0, crewCount, crewCost,
     nights, billableNights, overnightCost,
+    overnightRate: rateCard.overnight_fee || 0, overnightThreshold: rateCard.overnight_threshold || 3,
     segmentPerPax: rateCard.segment_fee_per_pax || 0, pax: legs.reduce((s, l) => s + (l.pax || 0), 0), segmentFee,
     fetBase: Math.round(fetBase), fetRate: rateCard.fet_rate || 0, fetAmount,
     total,
