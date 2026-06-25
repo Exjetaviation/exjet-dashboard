@@ -52,8 +52,7 @@ export const recomputeFromInputs = (i) => {
 // wins. Returns the fresh base untouched when there were no manual edits.
 export const repriceFromBase = (fresh, old = {}) => {
   const o = old && !old.error ? old : {};
-  const hasManual = o.manual === true
-    || (Array.isArray(o.fees) && o.fees.length > 0)
+  const hasManual = (Array.isArray(o.fees) && o.fees.length > 0)
     || (o.totalOverride !== null && o.totalOverride !== undefined && o.totalOverride !== '')
     || o.fetEnabled === false;
   if (!hasManual) return fresh;

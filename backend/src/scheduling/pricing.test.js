@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcLeg, priceTrip, recomputeFromInputs } from './pricing.js';
+import { calcLeg, priceTrip, recomputeFromInputs, repriceFromBase } from './pricing.js';
 
 const rc = {
   aircraft_tail: 'N69FP', rate_name: 'GIV', hourly_rate: 9000, positioning_rate: 4500,
@@ -98,8 +98,6 @@ test('default (no fees, no flags) keeps FET on — backward compatible', () => {
 });
 
 // ── repriceFromBase tests ────────────────────────────────────────────────────
-import { repriceFromBase } from './pricing.js';
-
 // A freshly-computed rate-card breakdown (the shape priceTrip/priceQuoteLegs returns).
 const fresh = () => ({
   hourlyRate: 8000, hours: 5, surchargePerHr: 500, faFee: 0, faCount: 0,
@@ -111,6 +109,12 @@ const fresh = () => ({
 
 test('repriceFromBase: no manual edits returns the fresh base unchanged', () => {
   const out = repriceFromBase(fresh(), {});
+  assert.equal(out.total, 48338);
+  assert.ok(!out.manual);
+});
+
+test('repriceFromBase: null old returns the fresh base unchanged', () => {
+  const out = repriceFromBase(fresh(), null);
   assert.equal(out.total, 48338);
   assert.ok(!out.manual);
 });
