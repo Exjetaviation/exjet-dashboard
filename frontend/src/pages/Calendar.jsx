@@ -5,6 +5,7 @@ import { useLegActuals } from '../hooks/useLegActuals';
 import { useNavigate } from 'react-router-dom';
 import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
 import { easternParts, zuluParts } from '../lib/easternTime';
+import { groupDutiesByStart } from '../lib/dutyGroups';
 const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
 const VIEWS = {
   '12h': { label:'12 hr', colMs:3600000,  cols:12,  baseColW:160, stepMs:43200000    },
@@ -673,13 +674,10 @@ useEffect(() => {
                       }
                       return {...d,role};
                     });
-                    const sortedD=[...dutyWithRole].sort((a,b)=>a._start-b._start);
-                    const groups=[];
-                    sortedD.forEach(d=>{
-                      const last=groups[groups.length-1];
-                      if(last&&d._start-last[0]._start<=30*60000){last.push(d);}
-                      else{groups.push([d]);}
-                    });
+                    // Crew duties starting within 15 min of each other share one
+                    // bracket (one START marker); >15 min apart → separate brackets
+                    // so the SIC's distinct duty start shows too.
+                    const groups=groupDutiesByStart(dutyWithRole,15*60000);
                     return groups.map((group,gi)=>{
                       const earliest=Math.min(...group.map(d=>d._start));
                       // While ANY duty in the group is still open, the second
