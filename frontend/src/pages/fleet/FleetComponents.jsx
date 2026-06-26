@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' };
 
 export default function FleetComponents() {
+  const base = useLocation().pathname.startsWith('/scheduling') ? '/scheduling' : '/fleet';
   const [components, setComponents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -33,7 +34,7 @@ export default function FleetComponents() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Link
-            to="/fleet"
+            to={base}
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, textDecoration: 'none' }}
           >
             ← Fleet
@@ -42,7 +43,7 @@ export default function FleetComponents() {
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
           Add components from the{' '}
-          <Link to="/fleet" style={{ color: 'var(--accent)' }}>aircraft detail page</Link>.
+          <Link to={base} style={{ color: 'var(--accent)' }}>aircraft detail page</Link>.
         </p>
       </div>
 
@@ -73,7 +74,7 @@ export default function FleetComponents() {
                 <tr key={comp.id ?? i} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '10px 14px', color: 'var(--accent)', fontWeight: 600 }}>
                     {comp.tail
-                      ? <Link to={`/fleet/aircraft/${comp.tail}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{comp.tail}</Link>
+                      ? <Link to={`${base}/aircraft/${comp.tail}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{comp.tail}</Link>
                       : (comp.aircraft_id || '—')}
                   </td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-primary)' }}>{comp.component_type || '—'}</td>

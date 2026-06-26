@@ -1,18 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
+import AddAircraftModal from '../../components/fleet/AddAircraftModal';
 
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12 };
 const btn = { background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 600 };
 const btnSec = { background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontSize: 13, textDecoration: 'none', display: 'inline-block' };
 
-export default function FleetAircraftList() {
+export default function FleetAircraftList({ basePath = '/fleet' }) {
   const navigate = useNavigate();
   const [aircraft, setAircraft] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const fetchAircraft = useCallback(async () => {
     try {
@@ -46,12 +48,20 @@ export default function FleetAircraftList() {
     }
   };
 
+  const handleAircraftCreated = (created) => {
+    setShowAddModal(false);
+    navigate(`${basePath}/aircraft/${created.tail}`);
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Fleet Aircraft</h1>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Link to="/fleet/components" style={btnSec}>Components</Link>
+          <Link to={`${basePath}/components`} style={btnSec}>Components</Link>
+          <button onClick={() => setShowAddModal(true)} style={btnSec}>
+            + Add Aircraft
+          </button>
           <button onClick={handleImport} disabled={importing} style={btn}>
             {importing ? 'Importing…' : 'Import from LevelFlight'}
           </button>
@@ -92,7 +102,7 @@ export default function FleetAircraftList() {
               {aircraft.map((ac) => (
                 <tr
                   key={ac.id}
-                  onClick={() => navigate(`/fleet/aircraft/${ac.tail}`)}
+                  onClick={() => navigate(`${basePath}/aircraft/${ac.tail}`)}
                   style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-secondary)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -115,6 +125,13 @@ export default function FleetAircraftList() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showAddModal && (
+        <AddAircraftModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={handleAircraftCreated}
+        />
       )}
     </div>
   );

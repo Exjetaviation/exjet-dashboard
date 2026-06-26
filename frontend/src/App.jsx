@@ -29,7 +29,6 @@ import QuoteEditor from './pages/QuoteEditor';
 import NewQuoteRedirect from './pages/NewQuoteRedirect';
 import SchedulingTripSheet from './pages/SchedulingTripSheet';
 import PersonProfile from './pages/scheduling/PersonProfile';
-import FleetAircraftList from './pages/fleet/FleetAircraftList';
 import FleetAircraftDetail from './pages/fleet/FleetAircraftDetail';
 import FleetComponents from './pages/fleet/FleetComponents';
 
@@ -85,9 +84,6 @@ function Dashboard() {
           <Route path="/assistant" element={<AssistantPage />} />
           <Route path="/crew-calendar" element={<CrewCalendar />} />
           <Route path="/quotes" element={<Quotes />} />
-          <Route path="/fleet" element={<FleetAircraftList />} />
-          <Route path="/fleet/aircraft/:tail" element={<FleetAircraftDetail />} />
-          <Route path="/fleet/components" element={<FleetComponents />} />
         </Routes>
       </main>
     </div>
@@ -108,6 +104,8 @@ function SchedulingApp() {
           <Route path="trips/:id" element={<SchedulingTripDetail />} />
           <Route path="trips/:id/sheet" element={<SchedulingTripSheet />} />
           <Route path="people/:id" element={<PersonProfile />} />
+          <Route path="aircraft/:tail" element={<FleetAircraftDetail />} />
+          <Route path="components" element={<FleetComponents />} />
         </Routes>
       </main>
     </div>

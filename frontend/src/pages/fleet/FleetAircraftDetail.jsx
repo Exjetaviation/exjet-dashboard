@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import AircraftBasicInfoForm from '../../components/fleet/AircraftBasicInfoForm';
 import AircraftPerformanceForm from '../../components/fleet/AircraftPerformanceForm';
@@ -11,6 +11,7 @@ const SECTIONS = ['Basic Info', 'Performance', 'Components'];
 export default function FleetAircraftDetail() {
   const { tail } = useParams();
   const navigate = useNavigate();
+  const base = useLocation().pathname.startsWith('/scheduling') ? '/scheduling' : '/fleet';
   const [aircraft, setAircraft] = useState(null);
   const [components, setComponents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +44,7 @@ export default function FleetAircraftDetail() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
         <button
-          onClick={() => navigate('/fleet')}
+          onClick={() => navigate(`${base}?section=aircraft`)}
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}
         >
           ← Fleet

@@ -9,7 +9,7 @@ import Calendar from './Calendar';
 import SchedulingOverview from './scheduling/Overview';
 import SchedulingRequests from './scheduling/Requests';
 import SchedulingCrew from './scheduling/Crew';
-import SchedulingAircraft from './scheduling/Aircraft';
+import FleetAircraftList from './fleet/FleetAircraftList';
 import SchedulingClients from './scheduling/Clients';
 import SchedulingPeople from './scheduling/People';
 import RateCards from './RateCards';
@@ -69,7 +69,7 @@ export default function Scheduling() {
       {section === 'trips' && <TripsView />}
       {section === 'requests' && <SchedulingRequests />}
       {section === 'crew' && <SchedulingCrew />}
-      {section === 'aircraft' && <SchedulingAircraft />}
+      {section === 'aircraft' && <FleetAircraftList basePath="/scheduling" />}
       {section === 'clients' && <SchedulingClients />}
       {section === 'people' && <SchedulingPeople />}
       {section === 'ratecards' && <RateCards />}
