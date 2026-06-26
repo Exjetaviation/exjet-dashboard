@@ -22,9 +22,12 @@ let started = false;
 // approximate first/last airborne) and record them. recordLegActual's source
 // precedence means this never overwrites a live recorder reading. Returns true if
 // anything was recorded.
-async function deriveAndRecordActuals(positions, leg, tail) {
-  const exact = deriveActualTimes(positions, leg, PAD_MS);
-  const approx = approximateActualTimes(positions, leg, PAD_MS);
+async function deriveAndRecordActuals(positions, leg, tail, minStartMs = null) {
+  // minStartMs floors the derive window at the previous leg's arrival so a prior leg
+  // that ran long (and is still airborne into this leg's window) can't have its
+  // takeoff/airborne samples mis-derived as this leg's departure.
+  const exact = deriveActualTimes(positions, leg, PAD_MS, { minStartMs });
+  const approx = approximateActualTimes(positions, leg, PAD_MS, { minStartMs });
   const actualDep = exact.actualDep ?? approx.actualDep;
   const actualArr = exact.actualArr ?? approx.actualArr;
   if (actualDep == null && actualArr == null) return false;
@@ -64,14 +67,29 @@ export async function runReconcile({ days = RECONCILE_LOOKBACK_DAYS } = {}) {
       if (!byTail.has(leg.tail)) byTail.set(leg.tail, []);
       byTail.get(leg.tail).push(leg);
     }
+    // All completed legs per tail (sorted by departure) so we can floor each leg's
+    // derive at its PREDECESSOR's scheduled arrival — even when the predecessor was
+    // already snapshotted (and thus not in `todo`).
+    const completedByTail = new Map();
+    for (const leg of completed) {
+      if (!leg.tail) continue;
+      if (!completedByTail.has(leg.tail)) completedByTail.set(leg.tail, []);
+      completedByTail.get(leg.tail).push(leg);
+    }
+    for (const arr of completedByTail.values()) arr.sort((a, b) => a.depTime - b.depTime);
     for (const [tail, legs] of byTail.entries()) {
       const lo = Math.min(...legs.map((l) => l.depTime)) - PAD_MS;
       const hi = Math.max(...legs.map((l) => l.arrTime)) + PAD_MS;
       const positions = await queryTrack(tail, new Date(lo).toISOString(), new Date(hi).toISOString());
+      const ordered = completedByTail.get(tail) || [];
       for (const leg of legs) {
+        // Floor at the previous leg's scheduled arrival (a leg can't depart before
+        // the one before it lands), so a late predecessor isn't mis-attributed here.
+        const idx = ordered.findIndex((l) => l.id === leg.id);
+        const minStartMs = idx > 0 ? ordered[idx - 1].arrTime : null;
         // Actuals don't need the 2-point track gate — record from whatever exists.
-        await deriveAndRecordActuals(positions, leg, tail);
-        const track = clipTrackToLeg(positions, leg, PAD_MS);
+        await deriveAndRecordActuals(positions, leg, tail, minStartMs);
+        const track = clipTrackToLeg(positions, leg, PAD_MS, { minStartMs });
         // Don't store an empty snapshot — it would be marked "stored" and never
         // retried, locking the flight out even if positions land later. Skipping
         // leaves it to be re-attempted on the next pass within its window.
