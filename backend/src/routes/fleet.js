@@ -36,6 +36,39 @@ router.post('/aircraft/import', requireEditor, async (_req, res) => {
   res.json(result);
 });
 
+const AIRCRAFT_FIELDS = ['serial', 'color', 'call_sign', 'cbp_decal_number', 'year', 'amenities',
+  'base_icao', 'fbo_name', 'is_91_only', 'owner_company', 'foreflight_enabled', 'pax_seats',
+  'aircraft_type', 'engines_count', 'cruise_speed_kt', 'fuel_burn_1_lbs', 'fuel_burn_2_lbs',
+  'fuel_burn_3_lbs', 'max_altitude_ft', 'max_landing_weight_lbs', 'min_landing_distance_ft',
+  'max_gross_takeoff_weight_lbs', 'max_fuel_capacity_lbs'];
+
+router.post('/aircraft', requireEditor, async (req, res) => {
+  const b = req.body || {};
+  const tail = String(b.tail || '').trim().toUpperCase();
+  if (!tail) return res.status(400).json({ error: 'tail is required' });
+
+  const existing = await getAircraft(supabase, tail);
+  if (existing) return res.status(409).json({ error: `Aircraft ${tail} already exists` });
+
+  const row = { tail, origin: 'manual', active: true };
+  for (const f of AIRCRAFT_FIELDS) if (b[f] !== undefined && b[f] !== '') row[f] = b[f];
+
+  const ac = await upsertAircraftByTail(supabase, row);
+  if (!ac) return res.status(500).json({ error: 'failed to create aircraft' });
+
+  // auto-create the airframe component so the new plane is immediately trackable
+  await upsertComponent(supabase, {
+    aircraft_id: ac.id, component_type: 'airframe', position: 'airframe',
+    serial: ac.serial || null, model: ac.aircraft_type || null,
+    accrues_flight_time: true, tracks_cycles: true,
+    baseline_hours: Number(b.baseline_hours || 0), baseline_cycles: Number(b.baseline_cycles || 0),
+    baseline_at: new Date().toISOString(),
+  });
+
+  const components = await listComponents(supabase, ac.id);
+  res.status(201).json({ ...ac, components });
+});
+
 router.get('/components', async (_req, res) => res.json(await listComponents(supabase)));
 router.post('/aircraft/:id/components', requireEditor, async (req, res) =>
   res.json(await upsertComponent(supabase, { ...req.body, aircraft_id: req.params.id })));
