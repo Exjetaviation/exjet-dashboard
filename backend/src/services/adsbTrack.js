@@ -48,8 +48,8 @@ export function firstAirborneTime(positions, leg, padMs) {
 
 // Clip a time-ordered position list to a leg's [depTime - pad, arrTime + pad]
 // window and return [[lat, lon], ...] for a Leaflet polyline.
-export function clipTrackToLeg(positions, leg, padMs) {
-  const lo = leg.depTime - padMs;
+export function clipTrackToLeg(positions, leg, padMs, { minStartMs = null } = {}) {
+  const lo = minStartMs != null ? Math.max(leg.depTime - padMs, minStartMs) : leg.depTime - padMs;
   const hi = leg.arrTime + padMs;
   return positions
     .filter((p) => p.t >= lo && p.t <= hi)
@@ -64,8 +64,12 @@ export function clipTrackToLeg(positions, leg, padMs) {
 // Requires a real transition, so a track that starts mid-air (we booted/began logging
 // after takeoff) yields actualDep=null rather than a fabricated time — honest over
 // guessing, matching detectTakeoff. ~20s precision (the poll interval).
-export function deriveActualTimes(positions, leg, padMs) {
-  const lo = leg.depTime - padMs;
+export function deriveActualTimes(positions, leg, padMs, { minStartMs = null } = {}) {
+  // `minStartMs` raises the window's lower bound so a still-airborne PRIOR leg's
+  // takeoff (which can fall inside this leg's padded window when the prior leg ran
+  // long) isn't mis-derived as this leg's departure. The reconciler passes the
+  // previous leg's actual/scheduled arrival as the floor.
+  const lo = minStartMs != null ? Math.max(leg.depTime - padMs, minStartMs) : leg.depTime - padMs;
   const hi = leg.arrTime + padMs;
   const pts = (positions || []).filter((p) => p.t >= lo && p.t <= hi).sort((a, b) => a.t - b.t);
   let actualDep = null;
@@ -107,8 +111,8 @@ export function recoverDepFromPositions(positions, leg, padMs) {
 // of the scheduled duration. A tiny sliver of coverage (e.g. a few samples just after
 // takeoff before the plane leaves receiver range) does NOT bracket the flight, and its
 // "last airborne" would fake a wildly-early arrival — so we return nulls instead.
-export function approximateActualTimes(positions, leg, padMs, { minCoverage = 0.5 } = {}) {
-  const lo = leg.depTime - padMs;
+export function approximateActualTimes(positions, leg, padMs, { minCoverage = 0.5, minStartMs = null } = {}) {
+  const lo = minStartMs != null ? Math.max(leg.depTime - padMs, minStartMs) : leg.depTime - padMs;
   const hi = leg.arrTime + padMs;
   const air = (positions || [])
     .filter((p) => p.t >= lo && p.t <= hi && p.on_ground === false)
@@ -139,15 +143,23 @@ export function crewActualsFromLeg(leg) {
   };
 }
 
-// Match a live takeoff/landing observed at `now` to the tail's scheduled leg: the leg
-// whose [depTime - preMs, arrTime + postMs] window contains `now`, preferring the most
-// recent departure (mirrors the calendar's airborne-leg match). null if none.
+// Match a live takeoff/landing observed at `now` to the tail's scheduled leg: among
+// legs whose [depTime - preMs, arrTime + postMs] window contains `now`, pick the
+// EARLIEST (by scheduled departure) that has NOT yet actually arrived. Legs operate
+// in sequence and an aircraft is on one leg at a time, so a leg that already landed
+// (actualArr set) is no longer active, and a still-in-progress earlier leg keeps the
+// flight even after a later leg's pre-window opens — preventing a late leg 1 from
+// being mis-attributed to leg 2. null if none.
+//
+// Edge case: if a leg's landing was never captured (ADS-B gap) it stays "not arrived"
+// and remains the candidate until its window expires (≤ postMs past scheduled arrival).
 export function matchActiveLeg(legs, now, { preMs = 2 * 3600000, postMs = 6 * 3600000 } = {}) {
   let best = null;
   for (const l of legs || []) {
     if (l?.depTime == null || l?.arrTime == null) continue;
+    if (l.actualArr != null) continue; // already landed → no longer the active leg
     if (now >= l.depTime - preMs && now <= l.arrTime + postMs) {
-      if (!best || l.depTime > best.depTime) best = l;
+      if (!best || l.depTime < best.depTime) best = l; // earliest not-yet-arrived in window
     }
   }
   return best;

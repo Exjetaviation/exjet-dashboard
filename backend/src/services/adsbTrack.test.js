@@ -139,7 +139,7 @@ test('crewActualsFromLeg returns null when no block times entered', () => {
   assert.equal(crewActualsFromLeg({ _id: { $oid: 'L1' }, block: {} }), null);
 });
 
-test('matchActiveLeg picks the leg whose window contains now, preferring latest departure', () => {
+test('matchActiveLeg picks the earliest not-yet-arrived leg whose window contains now', () => {
   const legs = [
     { legId: 'a', depTime: 1000, arrTime: 2000 },
     { legId: 'b', depTime: 5000, arrTime: 6000 },
@@ -148,6 +148,38 @@ test('matchActiveLeg picks the leg whose window contains now, preferring latest 
   assert.equal(matchActiveLeg(legs, 5200, { preMs: 0, postMs: 0 })?.legId, 'b'); // mid leg b
   assert.equal(matchActiveLeg(legs, 900, { preMs: 200, postMs: 0 })?.legId, 'a'); // within pre-window
   assert.equal(matchActiveLeg(legs, 3500, { preMs: 0, postMs: 0 }), null);        // gap between legs
+});
+
+test('matchActiveLeg: a late leg 1 (not arrived) keeps the flight even after leg 2 window opens', () => {
+  // Leg 1 running long; leg 2's pre-window has opened so BOTH windows contain now.
+  // The still-in-progress leg 1 must win, not leg 2 (the old "latest departure" bug).
+  const legs = [
+    { legId: 'leg1', depTime: 1000, arrTime: 2000, actualArr: null },
+    { legId: 'leg2', depTime: 2500, arrTime: 3500, actualArr: null },
+  ];
+  assert.equal(matchActiveLeg(legs, 2600, { preMs: 500, postMs: 2000 })?.legId, 'leg1');
+});
+
+test('matchActiveLeg: once leg 1 has actually arrived, leg 2 becomes active', () => {
+  const legs = [
+    { legId: 'leg1', depTime: 1000, arrTime: 2000, actualArr: 2700 }, // landed
+    { legId: 'leg2', depTime: 2500, arrTime: 3500, actualArr: null },
+  ];
+  assert.equal(matchActiveLeg(legs, 2800, { preMs: 500, postMs: 2000 })?.legId, 'leg2');
+});
+
+test('deriveActualTimes: minStartMs floor excludes a prior late leg’s takeoff', () => {
+  const leg2 = { depTime: 3000, arrTime: 9000 };
+  const pts = [
+    { t: 1000, on_ground: true }, { t: 1100, on_ground: false }, // leg 1 takeoff (inside leg2's padded window)
+    { t: 4800, on_ground: true },                                 // leg 1 lands late
+    { t: 5000, on_ground: true }, { t: 5100, on_ground: false },  // leg 2 real takeoff
+    { t: 8900, on_ground: true },                                 // leg 2 lands
+  ];
+  // Without a floor, leg 2 would steal leg 1's 1100 departure:
+  assert.equal(deriveActualTimes(pts, leg2, 2500).actualDep, 1100);
+  // With the floor at leg 1's arrival (4800), leg 2 derives its own takeoff/landing:
+  assert.deepEqual(deriveActualTimes(pts, leg2, 2500, { minStartMs: 4800 }), { actualDep: 5100, actualArr: 8900 });
 });
 
 test('monthAnchors covers the window plus the prior month', () => {

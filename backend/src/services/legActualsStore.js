@@ -72,6 +72,26 @@ export async function getLegIdsWithActuals(legIds) {
   } catch (e) { console.warn('[legActualsStore] getIds error (soft):', e?.message || e); return new Set(); }
 }
 
+// Map(legId -> actual_arr_time ms) for the legs in `legIds` that have actually
+// arrived. Lets matchActiveLeg skip completed legs so a still-in-progress earlier
+// leg keeps the flight. Empty Map on soft-fail.
+export async function getActualArrByLeg(legIds) {
+  const ids = (legIds || []).filter(Boolean);
+  if (!ids.length) return new Map();
+  const client = getClient();
+  if (!client) return new Map();
+  try {
+    const { data, error } = await client
+      .from('leg_actuals')
+      .select('leg_id, actual_arr_time')
+      .in('leg_id', ids);
+    if (error) { console.warn('[legActualsStore] getActualArr failed (soft):', error.message); return new Map(); }
+    const m = new Map();
+    for (const r of data || []) { if (r.actual_arr_time) m.set(r.leg_id, Date.parse(r.actual_arr_time)); }
+    return m;
+  } catch (e) { console.warn('[legActualsStore] getActualArr error (soft):', e?.message || e); return new Map(); }
+}
+
 // Actuals for legs whose SCHEDULED departure falls in [fromIso, toIso]. Rows
 // { leg_id, actual_dep_time, actual_arr_time, dep_source, arr_source }. Soft-fails to [].
 export async function getLegActualsInRange(fromIso, toIso) {
