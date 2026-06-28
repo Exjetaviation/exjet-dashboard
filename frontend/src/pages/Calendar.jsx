@@ -740,7 +740,14 @@ useEffect(() => {
                       if(d.type!==11) return [];
                       const inf=info(d);
                       if(!inf) return [];
-                      const matches=ac.legs.some(leg=>leg.departure?.time&&leg.arrival?.time&&inf.start<=leg.arrival.time+7200000&&inf.end>=leg.departure.time-7200000);
+                      const userId=d.user?.$oid||d.user;
+                      // Attribute the duty to THIS aircraft only when its pilot actually
+                      // crews a time-overlapping leg OF THIS tail — not merely any leg in the
+                      // same time window (that cross-contaminated the two tails' duties).
+                      const matches=ac.legs.some(leg=>
+                        leg.departure?.time&&leg.arrival?.time
+                        &&inf.start<=leg.arrival.time+7200000&&inf.end>=leg.departure.time-7200000
+                        &&(leg.pilots||[]).some(p=>(p.user?._id?.$oid||p.user)===userId));
                       return matches?[{...d,_start:inf.start,_end:inf.end,_open:inf.open}]:[];
                     });
                     const dutyWithRole=type11.map(d=>{
