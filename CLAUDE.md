@@ -735,7 +735,12 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   translucent **scheduled** block + solid **actual** bar that grows live; **blue=completed, green=in-flight,
   grey=future** via `legStateColor`; delay math `lib/delaySegments.js`; crew **duty brackets** group flight
   duties within 15 min (`lib/dutyGroups.js`) and mark them **top bar = PIC, bottom bar = SIC** (both when
-  grouped) — hover lists each crew member's exact time). `Map.jsx` (FleetMap — live ADS-B,
+  grouped) — hover lists each crew member's exact time. **Day/12h are CONTINUOUS:** the timeline spans
+  **all flights** (earliest leg → latest leg, always incl. today) and scrolls straight through — no
+  per-day paging; offset is ignored, Prev/Next smooth-scroll a day, drill-down focuses the clicked day
+  (`dayFocusRef`). Gridlines are a CSS gradient (header+body share it so lines align); the day **date**
+  sits in a scroll-synced strip **above** the grid; 24-hour hour axis drops `:00` when columns get
+  narrow. `cols` is memoized so the 60s tick doesn't rebuild the (wide) column set). `Map.jsx` (FleetMap — live ADS-B,
   **"Awaiting signal"** when no fix, persisted trail toggle, history replay). `Quotes.jsx`, `Finances.jsx`
   (QB, 6 tabs), `FuelPrices.jsx`, `SchedulingTripDetail.jsx` (tabbed native editor — **Fees tab renamed
   "Pricing"**, tab `id` still `fees`), `QuoteEditor.jsx` (streamlined quote page: inline legs + live
