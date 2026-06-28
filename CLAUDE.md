@@ -740,7 +740,13 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   per-day paging; offset is ignored, Prev/Next smooth-scroll a day, drill-down focuses the clicked day
   (`dayFocusRef`). Gridlines are a CSS gradient (header+body share it so lines align); the day **date**
   sits in a scroll-synced strip **above** the grid; 24-hour hour axis drops `:00` when columns get
-  narrow. `cols` is memoized so the 60s tick doesn't rebuild the (wide) column set). `Map.jsx` (FleetMap — live ADS-B,
+  narrow. `cols` is memoized so the 60s tick doesn't rebuild the (wide) column set. **On-ground**
+  blocks are drawn between legs AND a trailing "parked" block after the last leg (so the plane's
+  current airport always shows); airport labels are **sticky** (stay visible across a wide block);
+  the display helper `arrShown(dep,arr)` trusts an arrival unless it's before a known departure
+  (arr-without-dep still renders). A **departed-but-not-confirmed-landed** leg shows a **dashed/amber
+  "unconfirmed"** bar (estimate to scheduled arrival) — covers ADS-B coverage gaps AND diversions;
+  confirming the actual landing / a future "Divert" mark replaces it). `Map.jsx` (FleetMap — live ADS-B,
   **"Awaiting signal"** when no fix, persisted trail toggle, history replay). `Quotes.jsx`, `Finances.jsx`
   (QB, 6 tabs), `FuelPrices.jsx`, `SchedulingTripDetail.jsx` (tabbed native editor — **Fees tab renamed
   "Pricing"**, tab `id` still `fees`), `QuoteEditor.jsx` (streamlined quote page: inline legs + live
