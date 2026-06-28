@@ -25,6 +25,7 @@ const PROVIDERS = {
 const PROVIDER = PROVIDERS[process.env.ADSB_PROVIDER || 'airplanes_live'];
 const FLEET = (process.env.ADSB_FLEET || 'N69FP,N408JS')
   .split(',').map(s => s.trim()).filter(Boolean);
+export function getFleet() { return FLEET; }
 const CACHE_TTL_MS = Number(process.env.ADSB_CACHE_TTL_MS || 20000);
 
 const TRAIL_MAX_POINTS = Number(process.env.ADSB_TRAIL_MAX_POINTS || 1200);

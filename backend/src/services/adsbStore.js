@@ -70,6 +70,30 @@ export async function queryRecentTrails(sinceIso, gapMs = 30 * 60 * 1000) {
   } catch (e) { console.warn('[adsbStore] queryRecentTrails error (soft):', e?.message || e); return {}; }
 }
 
+// Most recent firehose fix per registration — the last-known position when there's no
+// live fix, so the map can show where the plane actually last was instead of snapping to
+// its scheduled arrival. { reg: { lat, lon, on_ground, t (ms) } }. Soft: {} on any miss.
+export async function getLastPositions(regs) {
+  const ids = (regs || []).filter(Boolean);
+  const client = getClient();
+  if (!client || !ids.length) return {};
+  const out = {};
+  await Promise.all(ids.map(async (reg) => {
+    try {
+      const { data, error } = await client
+        .from('adsb_positions')
+        .select('lat, lon, on_ground, t')
+        .eq('registration', reg)
+        .order('t', { ascending: false })
+        .limit(1);
+      if (error) return;
+      const r = data?.[0];
+      if (r) out[reg] = { lat: r.lat, lon: r.lon, on_ground: r.on_ground, t: Date.parse(r.t) };
+    } catch { /* soft */ }
+  }));
+  return out;
+}
+
 export async function queryTrack(registration, startIso, endIso) {
   const client = getClient();
   if (!client) return [];

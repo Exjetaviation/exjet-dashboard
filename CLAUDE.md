@@ -431,7 +431,10 @@ without Supabase.
 - **Pure helpers** (`services/adsbTrack.js`, unit-tested): `detectTakeoff`, `deriveActualTimes`,
   `approximateActualTimes`, `matchActiveLeg`, `crewActualsFromLeg`, `clipTrackToLeg`, `firstAirborneTime`,
   `normReg` (tail canonicalization — everything `normReg`s tails on both sides before matching).
-- **Endpoints** (`routes/adsb.js`, `/api/adsb`, guarded): `GET /positions` (+`airborneSinceMs`),
+- **Endpoints** (`routes/adsb.js`, `/api/adsb`, guarded): `GET /positions` (+`airborneSinceMs`; for fleet
+  tails with NO current live fix it also returns the **last-known firehose fix** flagged `stale:true` +
+  `lastSeenMs`, via `adsbStore.getLastPositions` — so the map shows where a plane actually last was, not its
+  scheduled arrival. A `stale` fix is NOT treated as live/airborne by the map or calendar),
   `/trail` (persisted firehose, last 12h), `/actuals?from&to` → `{legId:{actualDep,actualArr,depSource,
   arrSource}}` (backs the calendar overlay), `/previous-flights?tail&days`, `/flight-track/:legId`.
 - **`weather.js`** (NOT part of ADS-B): Open-Meteo **daily forecast** by lat/lng for the itinerary/trip-sheet

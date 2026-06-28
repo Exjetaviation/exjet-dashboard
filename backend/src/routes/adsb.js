@@ -1,8 +1,8 @@
 import express from 'express';
-import { getLivePositions, getTrails } from '../services/adsb.js';
+import { getLivePositions, getTrails, getFleet } from '../services/adsb.js';
 import { getAirborneSince } from '../services/adsbRecorder.js';
 import * as lf from '../services/levelflight.js';
-import { queryTrack, queryRecentTrails } from '../services/adsbStore.js';
+import { queryTrack, queryRecentTrails, getLastPositions } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
 import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
 import { getLegActualsInRange } from '../services/legActualsStore.js';
@@ -17,6 +17,18 @@ router.get('/positions', async (req, res) => {
     for (const [reg, p] of Object.entries(positions)) {
       merged[reg] = { ...p, airborneSinceMs: airborne[reg] ?? null };
     }
+    // Fleet tails with NO current live fix: surface their last-known firehose fix
+    // (flagged stale) so the map shows where the plane actually last was rather than
+    // snapping to its scheduled arrival. Soft — skips silently if the store is absent.
+    try {
+      const missing = getFleet().filter((reg) => !merged[reg]);
+      if (missing.length) {
+        const last = await getLastPositions(missing);
+        for (const [reg, p] of Object.entries(last)) {
+          merged[reg] = { lat: p.lat, lon: p.lon, onGround: p.on_ground, stale: true, lastSeenMs: p.t, airborneSinceMs: null };
+        }
+      }
+    } catch { /* soft */ }
     res.json({ positions: merged });
   } catch (e) {
     res.status(502).json({ error: e.message, positions: {} });
