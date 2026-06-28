@@ -72,7 +72,7 @@ const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime
 // zone reads correctly — e.g. KMKC 23:30 (Central) shows as 00:30 ET · 23:30 local.
 const ET = 'America/New_York';
 const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{timeZone:ET,month:'short',day:'numeric',year:'numeric'});
-const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'—';
 const fmtLocal = (ms,tz)=>{ if(!ms||!tz) return null; try { return new Date(ms).toLocaleString('en-US',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return null; } };
 
 // --- Fleet simulation (the "Simulate fleet" toggle) -------------------------
@@ -416,12 +416,14 @@ useEffect(() => {
     const isMonthStart=d.getDate()===1;
     let label='';
     const isDayStart = (view==='day'||view==='12h') && i>0 && d.getHours()===0; // interior midnight
+    // Hourly TIME labels (day/12h, not the midnight date marker) are drawn centered
+    // ON their gridline at the actual hour; everything else stays centered in its column.
+    const isTimeLabel = (view==='day'||view==='12h') && !isDayStart;
     if (view==='day'||view==='12h') {
       if (isDayStart) {
         label=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); // e.g. "Wed, Jun 18"
       } else {
-        const h=d.getHours();
-        label=h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
+        label=`${String(d.getHours()).padStart(2,'0')}:00`; // 24-hour, e.g. "14:00"
       }
     } else if (view==='week') {
       label=`${d.toLocaleDateString('en-US',{weekday:'short'})} ${d.getDate()}`;
@@ -430,7 +432,7 @@ useEffect(() => {
     } else {
       label=isMonthStart?d.toLocaleDateString('en-US',{month:'short'}):'';
     }
-    return {i,ts,label,isToday,isMonthStart,isDayStart,d};
+    return {i,ts,label,isToday,isMonthStart,isDayStart,isTimeLabel,d};
   });
 
   const navBtn=(label,onClick)=>(
@@ -514,6 +516,9 @@ useEffect(() => {
                             <span style={{fontSize:'12px',fontWeight:'700',color:'#dde',whiteSpace:'nowrap'}}>{col.d.toLocaleDateString('en-US',{month:'long'})}</span>
                           </div>
                         )
+                      ) : col.isTimeLabel ? (
+                        // Centered ON the gridline (the column's left edge = its actual hour).
+                        <span style={{position:'absolute',left:0,top:'50%',transform:'translate(-50%,-50%)',fontSize:'12px',fontWeight:col.isToday?'700':'400',color:col.isToday?'var(--accent)':'var(--text-secondary)',whiteSpace:'nowrap',pointerEvents:'none'}}>{col.label}</span>
                       ) : (
                         col.label && <span style={{fontSize:view==='month'?'11px':'12px',fontWeight:col.isToday||col.isMonthStart||col.isDayStart?'700':'400',color:col.isToday?'var(--accent)':col.isMonthStart||col.isDayStart?'#dde':'var(--text-secondary)',whiteSpace:'nowrap'}}>{col.label}</span>
                       )}
