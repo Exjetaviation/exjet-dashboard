@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import DivertModal from '../components/DivertModal';
 import { apiFetch, API_BASE } from '../lib/api';
 import ItinerarySendModal from '../components/ItinerarySendModal';
 import AgentReviewPanel from '../components/AgentReviewPanel';
@@ -47,6 +48,8 @@ export default function FlightDetail() {
   const leg = state?.leg;
 
   const [itinCopied, setItinCopied] = useState(false);
+  const [showDivert, setShowDivert] = useState(false);
+  const [diverted, setDiverted] = useState(false);
   const dispatchId = leg?.dispatch?._id?.$oid || leg?.dispatch?._id || null;
   const itineraryUrl = dispatchId ? `${API_BASE}/itinerary/${dispatchId}` : null;
 
@@ -143,10 +146,15 @@ export default function FlightDetail() {
   return (
     <div>
       {aiOpen && <AgentReviewPanel flight={aiFlight} onClose={() => setAiOpen(false)} />}
+      {showDivert && <DivertModal leg={leg} onClose={() => setShowDivert(false)} onSaved={() => setDiverted(true)} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
         <button onClick={() => navigate('/flights')} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>
           ← Flights
+        </button>
+        <button onClick={() => setShowDivert(true)} title="Mark this leg as diverted (landed elsewhere)"
+          style={{ background: diverted ? 'rgba(239,68,68,0.18)' : 'var(--bg-card)', border: `1px solid ${diverted ? '#ef4444' : 'var(--border)'}`, borderRadius: '8px', padding: '8px 14px', color: diverted ? '#ef4444' : '#f59e0b', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+          {diverted ? '⚠ Diverted' : '⚠ Mark diverted'}
         </button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '24px', fontWeight: '600', color: 'var(--text-primary)' }}>

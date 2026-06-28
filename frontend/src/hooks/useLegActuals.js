@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 
 // Polls persisted actual departure/arrival times for legs whose SCHEDULED departure
@@ -9,6 +9,8 @@ import { apiFetch } from '../lib/api';
 // visible range changes and every `intervalMs`.
 export function useLegActuals(rangeStart, rangeEnd, intervalMs = 60000) {
   const [actuals, setActuals] = useState({});
+  const [nonce, setNonce] = useState(0);
+  const refetch = useCallback(() => setNonce((n) => n + 1), []); // force an immediate re-poll (e.g. after a divert)
   useEffect(() => {
     if (rangeStart == null || rangeEnd == null) return undefined;
     let alive = true;
@@ -24,6 +26,6 @@ export function useLegActuals(rangeStart, rangeEnd, intervalMs = 60000) {
     const onVis = () => { if (document.visibilityState === 'visible') tick(); };
     document.addEventListener('visibilitychange', onVis);
     return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
-  }, [rangeStart, rangeEnd, intervalMs]);
-  return { actuals };
+  }, [rangeStart, rangeEnd, intervalMs, nonce]);
+  return { actuals, refetch };
 }
