@@ -62,6 +62,27 @@ export async function recordLegActual(legId, fields = {}) {
   } catch (e) { console.warn('[legActualsStore] record error (soft):', e?.message || e); return false; }
 }
 
+// Manual diversion mark: the leg landed at `divertedToIcao` (not its scheduled arrival).
+// Single-row upsert on leg_id (preserves other fields). Optional `actualArr` sets the
+// landing time at source 'crew' (authoritative). Soft-fails (e.g. until migration 023 is
+// applied the `actual_arr_icao`/`divert_*` columns don't exist and the upsert errors).
+export async function recordDivert(legId, { divertedToIcao, note = null, status = 'diverted', actualArr = null, scheduledDep = null, registration = null } = {}) {
+  const client = getClient();
+  if (!client || !legId) return null;
+  try {
+    const row = {
+      leg_id: legId, updated_at: new Date().toISOString(),
+      actual_arr_icao: divertedToIcao || null, divert_note: note ?? null, divert_status: status ?? 'diverted',
+    };
+    if (scheduledDep != null) row.dep_time = iso(scheduledDep);
+    if (registration) row.registration = registration;
+    if (actualArr != null) { row.actual_arr_time = iso(actualArr); row.arr_source = 'crew'; }
+    const { error } = await client.from('leg_actuals').upsert(row, { onConflict: 'leg_id' });
+    if (error) { console.warn('[legActualsStore] recordDivert failed (soft):', error.message); return false; }
+    return true;
+  } catch (e) { console.warn('[legActualsStore] recordDivert error (soft):', e?.message || e); return false; }
+}
+
 // Which of `legIds` already have a stored row. Set (empty on soft-fail). Lets the
 // backfill skip legs the live recorder already captured.
 export async function getLegIdsWithActuals(legIds) {
@@ -101,15 +122,17 @@ export async function getActualsByLeg(legIds) {
   } catch (e) { console.warn('[legActualsStore] getActuals error (soft):', e?.message || e); return new Map(); }
 }
 
-// Actuals for legs whose SCHEDULED departure falls in [fromIso, toIso]. Rows
-// { leg_id, actual_dep_time, actual_arr_time, dep_source, arr_source }. Soft-fails to [].
+// Actuals for legs whose SCHEDULED departure falls in [fromIso, toIso]. Rows include
+// actual dep/arr + sources, plus divert fields (actual_arr_icao/divert_note/divert_status)
+// when migration 023 is applied. `select('*')` so it works both before AND after 023
+// (selecting a not-yet-created column would error the whole query). Soft-fails to [].
 export async function getLegActualsInRange(fromIso, toIso) {
   const client = getClient();
   if (!client) return [];
   try {
     const { data, error } = await client
       .from('leg_actuals')
-      .select('leg_id, actual_dep_time, actual_arr_time, dep_source, arr_source')
+      .select('*')
       .gte('dep_time', fromIso).lte('dep_time', toIso);
     if (error) { console.warn('[legActualsStore] getInRange failed (soft):', error.message); return []; }
     return data || [];
