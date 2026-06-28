@@ -710,6 +710,11 @@ useEffect(() => {
                         ?(timeRemaining<120?'#ef4444':timeRemaining<240?'#f59e0b':'#4f8ef7')
                         :'#4f8ef7';
                       const hasPIC=group.some(d=>d.role==='PIC');
+                      const hasSIC=group.some(d=>d.role==='SIC');
+                      const noRole=!hasPIC&&!hasSIC; // unknown crew → keep the bottom bar so it stays visible
+                      // Top bar = PIC, bottom bar = SIC; a grouped PIC+SIC shows both.
+                      const topBar=hasPIC, bottomBar=hasSIC||noRole;
+                      const members=group.map(d=>({role:d.role,start:d._start,end:d._end}));
                       const startDuration=groupOpen?onDutyLabel:totalLabel;
                       const startLimit=groupOpen?remainingLabel:'';
                       const endLabel=groupOpen?'14hr Limit':`Flight Duty OFF · ${totalLabel}`;
@@ -718,20 +723,20 @@ useEffect(() => {
                       return(
                         <React.Fragment key={`dg-${gi}`}>
                           {startBlk&&(
-                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Flight Duty START',time:earliest,duration:startDuration,limit:startLimit,tail:ac.tail,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Flight Duty START',time:earliest,duration:startDuration,limit:startLimit,tail:ac.tail,members,which:'start'});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
                               style={{position:'absolute',left:startBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',left:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
-                              {hasPIC&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
-                              <div style={{position:'absolute',left:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
+                              {topBar&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
+                              {bottomBar&&<div style={{position:'absolute',left:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',left:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:'#22c55e',fontWeight:'700',lineHeight:1}}>▶</div>
                             </div>
                           )}
                           {endBlk&&(
-                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:endLabel,time:groupEnd,duration:startDuration,limit:endLimit,tail:ac.tail,isLimit:groupOpen,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:endLabel,time:groupEnd,duration:startDuration,limit:endLimit,tail:ac.tail,isLimit:groupOpen,members,which:'end'});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
                               style={{position:'absolute',left:endBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',right:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
-                              {hasPIC&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
-                              <div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
+                              {topBar&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
+                              {bottomBar&&<div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',right:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:endTriangleColor,fontWeight:'700',lineHeight:1}}>◀</div>
                             </div>
                           )}
@@ -841,8 +846,9 @@ useEffect(() => {
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Aircraft: {hovered.tail}</p>
-                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Time: {fmtTime(hovered.time)}</p>
-                {hovered.group&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Crew: {hovered.group.join(' + ')}</p>}
+                {hovered.members?.length
+                  ? hovered.members.map((m,i)=>(<p key={i} style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{m.role}: {fmtTime(hovered.which==='end'?m.end:m.start)}</p>))
+                  : <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Time: {fmtTime(hovered.time)}</p>}
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.duration}</p>
                 {hovered.limit && <p style={{fontSize:'12px',fontWeight:'600',color:hovered.limit?.includes('REACHED')?'var(--danger)':'#f59e0b',margin:0}}>{hovered.limit}</p>}
               </div>
