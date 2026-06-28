@@ -157,12 +157,20 @@ export function matchActiveLeg(legs, now, { preMs = 2 * 3600000, postMs = 6 * 36
   let best = null;
   for (const l of legs || []) {
     if (l?.depTime == null || l?.arrTime == null) continue;
-    if (l.actualArr != null) continue; // already landed → no longer the active leg
+    if (coherentArrival(l.actualDep, l.actualArr)) continue; // truly landed → no longer active
     if (now >= l.depTime - preMs && now <= l.arrTime + postMs) {
       if (!best || l.depTime < best.depTime) best = l; // earliest not-yet-arrived in window
     }
   }
   return best;
+}
+
+// A leg counts as truly completed only when it BOTH departed and arrived and the
+// arrival is after the departure. Corrupt rows (arrival before departure, or an
+// arrival with no departure) are NOT a completion — guards the matcher and the
+// calendar against stale/garbage actuals marking a leg "done" or "started".
+export function coherentArrival(actualDep, actualArr) {
+  return actualDep != null && actualArr != null && actualArr > actualDep;
 }
 
 // Months (UTC, 1st of month) spanning [startMs, endMs], plus the prior month, as

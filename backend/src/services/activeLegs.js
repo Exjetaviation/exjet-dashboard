@@ -5,7 +5,7 @@
 
 import * as lf from './levelflight.js';
 import { legTail, monthAnchors } from './adsbTrack.js';
-import { getActualArrByLeg } from './legActualsStore.js';
+import { getActualsByLeg } from './legActualsStore.js';
 
 const TTL_MS = 5 * 60 * 1000;
 let cache = new Map(); // normalized tail -> [{ legId, depTime, arrTime }] (scheduled, from LF)
@@ -42,16 +42,20 @@ export async function getActiveLegsByTail(nowMs = Date.now()) {
     }
   }
 
-  // Clone + enrich with fresh actual arrivals so a just-landed leg drops out of the
-  // active match. Soft-fails to actualArr=null (matcher falls back to earliest-in-window).
+  // Clone + enrich with fresh actual dep/arr so a truly-completed leg (coherent
+  // dep+arr) drops out of the active match — and a leg carrying only a corrupt
+  // arrival does NOT. Soft-fails to nulls (matcher falls back to earliest-in-window).
   const out = new Map();
   const allIds = [];
-  for (const [tail, legs] of cache) { out.set(tail, legs.map((l) => ({ ...l, actualArr: null }))); for (const l of legs) allIds.push(l.legId); }
+  for (const [tail, legs] of cache) { out.set(tail, legs.map((l) => ({ ...l, actualDep: null, actualArr: null }))); for (const l of legs) allIds.push(l.legId); }
   try {
-    const arrByLeg = await getActualArrByLeg(allIds);
-    for (const legs of out.values()) for (const l of legs) l.actualArr = arrByLeg.get(l.legId) ?? null;
+    const actualsByLeg = await getActualsByLeg(allIds);
+    for (const legs of out.values()) for (const l of legs) {
+      const a = actualsByLeg.get(l.legId);
+      if (a) { l.actualDep = a.dep ?? null; l.actualArr = a.arr ?? null; }
+    }
   } catch (e) {
-    console.warn('[activeLegs] actual-arr enrich failed (soft):', e?.message || e);
+    console.warn('[activeLegs] actuals enrich failed (soft):', e?.message || e);
   }
   return out;
 }
