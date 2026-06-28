@@ -21,14 +21,16 @@ const VIEWS = {
 // Block colour by flight STATE (uses actuals when known): completed/landed = blue,
 // in-flight = green, future/not-yet-departed = grey.
 const STATE_COLORS = { completed:'#4f8ef7', inflight:'#22c55e', future:'#64748b' };
-// A leg only counts as truly arrived when it has BOTH an actual departure and an
-// actual arrival AFTER it — corrupt rows (arr before dep, or arr with no dep) must
-// not mark a leg "complete". Mirrors backend adsbTrack.coherentArrival.
-const coherentArr = (dep, arr) => dep != null && arr != null && arr > dep;
+// Whether to TRUST/show an actual arrival: present, and not before a known departure
+// (arr <= dep = corrupt → ignore). An arrival with NO recorded departure is still valid
+// — ADS-B routinely misses the wheels-up — so a flight that lands without a captured
+// takeoff still renders (scheduled departure as the bar start) instead of vanishing on
+// landing. (The backend matcher's coherentArrival stays stricter on purpose.)
+const arrShown = (dep, arr) => arr != null && (dep == null || arr > dep);
 function legStateColor(leg, isAirborne, act, now) {
   const dep = leg?.departure?.time, arr = leg?.arrival?.time;
   const aDep = act?.actualDep ?? null;
-  const aArr = coherentArr(act?.actualDep, act?.actualArr) ? act.actualArr : null; // ignore corrupt arrivals
+  const aArr = arrShown(act?.actualDep, act?.actualArr) ? act.actualArr : null; // ignore only corrupt arrivals (arr<=dep)
   if (isAirborne) return STATE_COLORS.inflight;                                   // ADS-B says airborne
   if (aArr != null) return aArr <= now ? STATE_COLORS.completed : STATE_COLORS.inflight; // truly landed
   if (aDep != null) {
@@ -639,27 +641,42 @@ useEffect(() => {
                   {/* Ground time blocks */}
                   {(()=>{
                     const sorted=[...ac.legs].filter(l=>l.departure?.time&&l.arrival?.time).sort((a,b)=>a.departure.time-b.departure.time);
-                    return sorted.slice(0,-1).map((leg,i)=>{
-                      const next=sorted[i+1];
-                      // Ground time reflects ACTUAL arrival/departure when known (a late
-                      // arrival or late next-departure shifts/shrinks the time on the ground).
-                      const aPrev=actuals[leg._id?.$oid]||{}, aNext=actuals[next._id?.$oid]||{};
-                      const gStart=aPrev.actualArr??leg.arrival.time, gEnd=aNext.actualDep??next.departure.time;
-                      if(gEnd-gStart<600000) return null;
-                      const blk=getBlock(gStart,gEnd); if(!blk) return null;
-                      const airport=leg.arrival?.airport||'?';
-                      const gMins=Math.round((gEnd-gStart)/60000);
-                      const durLabel=gMins>=60?`${Math.floor(gMins/60)}h ${gMins%60}m`:`${gMins}m`;
+                    if(!sorted.length) return null;
+                    // Ground segments = the gaps BETWEEN consecutive legs, PLUS a trailing
+                    // "parked" segment after the LAST leg: the plane stays at its arrival
+                    // airport until its next flight (none in view), so it runs to the range's
+                    // future edge. Without it, the final parked location showed nothing.
+                    // ACTUAL arrival/departure (when known) shifts/shrinks each gap.
+                    const segs=[];
+                    for(let i=0;i<sorted.length-1;i++){
+                      const leg=sorted[i],next=sorted[i+1];
+                      const aPrev=actuals[leg._id?.$oid]||{},aNext=actuals[next._id?.$oid]||{};
+                      segs.push({gStart:aPrev.actualArr??leg.arrival.time,gEnd:aNext.actualDep??next.departure.time,airport:leg.arrival?.airport||'?'});
+                    }
+                    const last=sorted[sorted.length-1],aLast=actuals[last._id?.$oid]||{};
+                    segs.push({gStart:aLast.actualArr??last.arrival.time,gEnd:rangeEnd,airport:last.arrival?.airport||'?',parked:true});
+                    return segs.map((s,i)=>{
+                      if(s.gEnd-s.gStart<600000) return null;
+                      const blk=getBlock(s.gStart,s.gEnd); if(!blk) return null;
+                      const airport=s.airport;
+                      const gMins=Math.round((s.gEnd-s.gStart)/60000);
+                      // Parked blocks run to an arbitrary future edge — show no bogus total on the
+                      // bar; the tooltip reports how long it's been on the ground instead.
+                      const durLabel=s.parked?null:(gMins>=60?`${Math.floor(gMins/60)}h ${gMins%60}m`:`${gMins}m`);
+                      const parkedMins=Math.max(0,Math.round((Date.now()-s.gStart)/60000));
+                      const parkedLabel=parkedMins>=60?`${Math.floor(parkedMins/60)}h ${parkedMins%60}m on ground`:`${parkedMins}m on ground`;
                       return(
                         <div key={`g-${i}`}
-                          onMouseEnter={e=>{setHovered({_isGround:true,airport,duration:durLabel,start:gStart,end:gEnd});setTipPos({x:e.clientX,y:e.clientY});}}
+                          onMouseEnter={e=>{setHovered({_isGround:true,airport,duration:s.parked?parkedLabel:durLabel,start:s.gStart,end:s.parked?null:s.gEnd,parked:!!s.parked});setTipPos({x:e.clientX,y:e.clientY});}}
                           onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})}
                           onMouseLeave={()=>setHovered(null)}
-                          style={{position:'absolute',left:blk.left,top:0,width:blk.width,height:GROUND_H,background:'repeating-linear-gradient(45deg,rgba(255,255,255,0.025) 0px,rgba(255,255,255,0.025) 4px,transparent 4px,transparent 10px)',borderLeft:'1px solid rgba(255,255,255,0.08)',borderRight:'1px solid rgba(255,255,255,0.08)',zIndex:1,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',cursor:'default'}}>
+                          style={{position:'absolute',left:blk.left,top:0,width:blk.width,height:GROUND_H,background:'repeating-linear-gradient(45deg,rgba(255,255,255,0.025) 0px,rgba(255,255,255,0.025) 4px,transparent 4px,transparent 10px)',borderLeft:'1px solid rgba(255,255,255,0.08)',borderRight:'1px solid rgba(255,255,255,0.08)',zIndex:1,cursor:'default'}}>
                           {blk.width>50&&(
-                            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'1px'}}>
-                              <span style={{fontSize:'10px',fontWeight:'700',color:'rgba(255,255,255,0.4)'}}>{airport}</span>
-                              {blk.width>90&&<span style={{fontSize:'9px',color:'rgba(255,255,255,0.25)'}}>{durLabel}</span>}
+                            // Sticky so the airport rides along and stays visible no matter how wide
+                            // the block is (a long sit, or the parked tail running to the future edge).
+                            <div style={{position:'sticky',left:6,width:'fit-content',height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'1px',pointerEvents:'none'}}>
+                              <span style={{fontSize:'10px',fontWeight:'700',color:'rgba(255,255,255,0.4)',whiteSpace:'nowrap'}}>{airport}</span>
+                              {blk.width>90&&durLabel&&<span style={{fontSize:'9px',color:'rgba(255,255,255,0.25)',whiteSpace:'nowrap'}}>{durLabel}</span>}
                             </div>
                           )}
                         </div>
@@ -841,11 +858,23 @@ useEffect(() => {
                     // time, else (airborne but we picked it up mid-air with no wheels-up) the
                     // scheduled departure as a placeholder — so the bar still appears the moment
                     // ADS-B confirms the flight is airborne, and grows with the now-bar.
-                    const aStart=act.actualDep??(isAirborne?(la?.airborneSinceMs??dep):null);
-                    // Only close the bar on a COHERENT arrival; a corrupt arr (<= dep) is
-                    // ignored so the bar grows live instead of collapsing/back-deleting.
-                    const aEnd=coherentArr(act.actualDep,act.actualArr)?act.actualArr:(isAirborne?nowTs:null);
+                    // Start = recorded actual_dep; else the live wheels-up; else (airborne mid-air
+                    // pickup, OR landed with an arrival but no captured takeoff) the scheduled departure.
+                    const aStart=act.actualDep??(isAirborne?(la?.airborneSinceMs??dep):(arrShown(act.actualDep,act.actualArr)?dep:null));
+                    // Bar end: a shown arrival (corrupt arr<=dep ignored); else, while airborne,
+                    // it grows with the now-bar; else if it has DEPARTED but we never captured the
+                    // landing (ADS-B lost it near the ground — arr backfills hourly), fall back to
+                    // the scheduled arrival so the bar doesn't vanish on landing.
+                    const aEnd=arrShown(act.actualDep,act.actualArr)?act.actualArr
+                      :isAirborne?nowTs
+                      :(act.actualDep!=null&&arr!=null&&arr>act.actualDep)?arr
+                      :null;
                     const actBlk=(aStart!=null&&aEnd!=null&&aEnd>aStart)?getBlock(aStart,aEnd):null;
+                    // Departed but NOT confirmed landed (no actual arrival, not airborne) → the bar
+                    // is only an ESTIMATE to the scheduled arrival. Render it dashed/amber
+                    // "unconfirmed" so a coverage gap — or a diversion — isn't shown as a normal
+                    // completed flight (until the arrival backfills or a dispatcher marks a divert).
+                    const unconfirmed=actBlk!=null&&act.actualDep!=null&&!isAirborne&&!arrShown(act.actualDep,act.actualArr);
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
                     // hov/hovA fire on BOTH enter and move, so the tooltip mode always tracks
                     // whichever block is under the cursor (switch through them freely).
@@ -859,7 +888,7 @@ useEffect(() => {
                         {/* Actual flight — solid bar at 60% height, vertically centred. Always ABOVE
                             the scheduled block (even when hovered) so it can be hovered directly. */}
                         {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hovA} onMouseMove={hovA} onMouseLeave={()=>setHovered(null)}
-                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:color,borderRadius:'4px',cursor:'pointer',border:isAirborne?`2px solid ${darker}`:'none',...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isHov?8:(isAirborne?7:4),boxSizing:'border-box'}}/>}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:unconfirmed?'rgba(245,158,11,0.18)':color,borderRadius:'4px',cursor:'pointer',border:unconfirmed?'1.5px dashed #f59e0b':(isAirborne?`2px solid ${darker}`:'none'),...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isHov?8:(isAirborne?7:4),boxSizing:'border-box'}}/>}
                         {/* Route, centred in the solid actual bar (or the scheduled block if not yet flown) */}
                         {(()=>{
                           const lb=actBlk||blk; if(lb.width<40) return null;
@@ -930,12 +959,12 @@ useEffect(() => {
             <>
               <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
                 <div style={{width:'10px',height:'10px',borderRadius:'2px',background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.3)'}}/>
-                <p style={{fontSize:'14px',fontWeight:'700',color:'var(--text-primary)',margin:0}}>On Ground · {hovered.airport}</p>
+                <p style={{fontSize:'14px',fontWeight:'700',color:'var(--text-primary)',margin:0}}>{hovered.parked?'Parked':'On Ground'} · {hovered.airport}</p>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
-                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Duration: {hovered.duration}</p>
-                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>From: {fmtTime(hovered.start)}</p>
-                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Until: {fmtTime(hovered.end)}</p>
+                {hovered.duration&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.parked?'':'Duration: '}{hovered.duration}</p>}
+                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.parked?'Since':'From'}: {fmtTime(hovered.start)}</p>
+                {!hovered.parked&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Until: {fmtTime(hovered.end)}</p>}
               </div>
             </>
           ):(
