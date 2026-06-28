@@ -201,16 +201,26 @@ export default function FleetMap() {
     const heading = (hasLive ? livePos.track : undefined) ?? 0;
     const isAirborne = hasLive ? !livePos.onGround : (ac.statusLabel === 'In Flight');
     if (hasLive) {
+      // `stale` = no current fix, this is the LAST-KNOWN firehose position. Show the
+      // plane where it actually last was (not its scheduled arrival), clearly labelled.
+      const stale = !!livePos.stale;
+      const agoMin = stale && livePos.lastSeenMs ? Math.max(0, Math.round((Date.now() - livePos.lastSeenMs) / 60000)) : 0;
+      const ago = agoMin >= 60 ? `${Math.floor(agoMin / 60)}h ${agoMin % 60}m ago` : `${agoMin}m ago`;
       return {
         ...ac,
         position: { lat: markerLat, lng: markerLng },
         heading,
-        isFlying: isAirborne,
-        statusLabel: livePos.onGround ? 'On Ground · live' : 'In Flight · live',
-        statusColor: livePos.onGround ? '#22c55e' : '#f59e0b',
+        isFlying: stale ? false : isAirborne,
+        // A stale fix is at a lat/lon, not necessarily the scheduled airport — clear the
+        // airport label so it doesn't mislabel the last-known spot as HOU (the scheduled
+        // arrival). (Phase 2c will resolve the nearest airport.)
+        airport: stale ? null : ac.airport,
+        currentLeg: stale ? null : ac.currentLeg,
+        statusLabel: stale ? `Last seen · ${ago}` : (livePos.onGround ? 'On Ground · live' : 'In Flight · live'),
+        statusColor: stale ? '#94a3b8' : (livePos.onGround ? '#22c55e' : '#f59e0b'),
         track: livePos.track,
         live: livePos,
-        source: 'adsb',
+        source: stale ? 'stale' : 'adsb',
       };
     }
     return { ...ac, position: { lat: markerLat, lng: markerLng }, heading, isFlying: isAirborne, source: 'scheduled' };
@@ -333,11 +343,11 @@ export default function FleetMap() {
           .bindTooltip(ac.airport, { permanent: true, direction: 'top', offset: [0, -12], className: 'exjet-tooltip' });
       }
 
-      const liveLine = ac.live
+      const liveLine = ac.live && !ac.live.stale
         ? `<br/>${ac.live.altitudeFt != null ? `${ac.live.altitudeFt.toLocaleString()} ft` : '—'} · ${ac.live.groundSpeedKt != null ? `${Math.round(ac.live.groundSpeedKt)} kt` : '—'}${ac.live.callsign ? ` · ${ac.live.callsign}` : ''}`
         : '';
-      const srcLine = `<br/><span style="opacity:0.6">${ac.source === 'adsb' ? 'Live (ADS-B)' : 'Scheduled'}</span>`;
-      marker.bindTooltip(`<strong>${ac.tail}</strong><br/>${ac.statusLabel} · ${ac.airport || ''}${liveLine}${srcLine}`, {
+      const srcLine = `<br/><span style="opacity:0.6">${ac.source === 'adsb' ? 'Live (ADS-B)' : ac.source === 'stale' ? 'Last known (ADS-B)' : 'Scheduled'}</span>`;
+      marker.bindTooltip(`<strong>${ac.tail}</strong><br/>${ac.statusLabel}${ac.airport ? ` · ${ac.airport}` : ''}${liveLine}${srcLine}`, {
         permanent: false,
         className: 'exjet-tooltip',
         offset: [0, -10],

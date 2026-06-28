@@ -437,7 +437,7 @@ useEffect(() => {
   const airborneLegId = {}; // { tail: leg._id.$oid }
   aircraft.forEach(ac => {
     const la = live[ac.tail];
-    if (!la || la.onGround !== false) return; // only when ADS-B says airborne
+    if (!la || la.stale || la.onGround !== false) return; // only a CURRENT live fix counts (a stale last-known fix is not "airborne")
     let cur = null;      // most-recently-departed leg (its scheduled dep has already passed)
     let upcoming = null; // soonest leg about to depart — used only when the plane took off EARLY
     ac.legs.forEach(l => {
