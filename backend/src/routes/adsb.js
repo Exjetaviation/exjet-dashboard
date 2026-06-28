@@ -5,7 +5,8 @@ import * as lf from '../services/levelflight.js';
 import { queryTrack, queryRecentTrails, getLastPositions } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
 import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
-import { getLegActualsInRange } from '../services/legActualsStore.js';
+import { getLegActualsInRange, recordDivert } from '../services/legActualsStore.js';
+import { canEditScheduling } from '../scheduling/canEdit.js';
 
 const router = express.Router();
 
@@ -65,11 +66,38 @@ router.get('/actuals', async (req, res) => {
         actualArr: r.actual_arr_time ? Date.parse(r.actual_arr_time) : null,
         depSource: r.dep_source || null,
         arrSource: r.arr_source || null,
+        // Diversion mark (migration 023; undefined pre-migration → null).
+        divertedTo: r.actual_arr_icao || null,
+        divertNote: r.divert_note || null,
+        divertStatus: r.divert_status || null,
       };
     }
     res.json({ actuals });
   } catch (e) {
     res.status(200).json({ actuals: {}, error: e.message });
+  }
+});
+
+// POST /api/adsb/legs/:legId/divert — dispatcher marks a leg as diverted to a different
+// airport (incomplete flight). Body: { divertedToIcao, note?, status?, actualArr? (ms),
+// scheduledDep? (ms), registration? }. Editor-gated. Needs migration 023.
+router.post('/legs/:legId/divert', async (req, res) => {
+  try {
+    if (!canEditScheduling(req.user?.role)) return res.status(403).json({ error: 'forbidden' });
+    const { legId } = req.params;
+    const { divertedToIcao, note, status, actualArr, scheduledDep, registration } = req.body || {};
+    if (!legId || !divertedToIcao) return res.status(400).json({ error: 'legId and divertedToIcao are required' });
+    const ok = await recordDivert(legId, {
+      divertedToIcao: String(divertedToIcao).toUpperCase().replace(/[^A-Z0-9]/g, ''),
+      note: note ?? null, status: status ?? 'diverted',
+      actualArr: actualArr != null ? Number(actualArr) : null,
+      scheduledDep: scheduledDep != null ? Number(scheduledDep) : null,
+      registration: registration ?? null,
+    });
+    if (!ok) return res.status(500).json({ error: 'could not record divert (is migration 023 applied?)' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

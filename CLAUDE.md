@@ -428,6 +428,12 @@ without Supabase.
   (`legStateColor`/actual bar) ignore incoherent actuals — so a corrupt row can't mark a leg "started"/"done"
   or mis-advance to the next leg. `matchActiveLeg` reads each leg's actual dep+arr via `activeLegs` →
   `legActualsStore.getActualsByLeg`. Real corruption self-heals once `crew` block times are logged.
+- **Diversions** (migration `023`): a flight can land somewhere other than its scheduled arrival. A
+  dispatcher marks it via `POST /api/adsb/legs/:legId/divert` (editor-gated → `legActualsStore.recordDivert`
+  → `leg_actuals.actual_arr_icao`/`divert_note`/`divert_status`); `/actuals` returns `divertedTo`. The
+  calendar shows the leg's actual bar **red "⤳ C"** and parks the plane at C; `DivertModal.jsx` is opened
+  from the calendar leg popover (Open / Mark diverted) and the flight-detail page. A departed-but-not-yet-
+  confirmed leg (coverage gap, before any divert mark) shows the **amber dashed "unconfirmed"** bar.
 - **Pure helpers** (`services/adsbTrack.js`, unit-tested): `detectTakeoff`, `deriveActualTimes`,
   `approximateActualTimes`, `matchActiveLeg`, `crewActualsFromLeg`, `clipTrackToLeg`, `firstAirborneTime`,
   `normReg` (tail canonicalization — everything `normReg`s tails on both sides before matching).
@@ -635,8 +641,9 @@ Catalog (table → what a row is → key columns):
   `on_ground`, `t`.
 - `flight_tracks` (007) — permanent per-leg track snapshot. `leg_id` PK (LF leg id), `registration`,
   `from/to_airport`, `dep/arr_time`, `track jsonb`.
-- `leg_actuals` (017, supersedes 016) — actual dep/arr per leg. `leg_id` PK, `dep_time` (SCHEDULED, for range
-  queries), `actual_dep_time/actual_arr_time`, `dep_source/arr_source` (`crew`/`live`/`exact`/`approx`).
+- `leg_actuals` (017, supersedes 016; **023** adds diversion cols) — actual dep/arr per leg. `leg_id` PK,
+  `dep_time` (SCHEDULED, for range queries), `actual_dep_time/actual_arr_time`, `dep_source/arr_source`
+  (`crew`/`live`/`exact`/`approx`), and `actual_arr_icao`/`divert_note`/`divert_status` (manual diversion mark).
 
 **Scheduling (008 + later)**
 - `scheduling_trips` — a trip across its lifecycle. `id` uuid PK, `lf_oid` UNIQUE, `status`, `trip_number`/
@@ -692,7 +699,7 @@ Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuote
 |---|---|---|
 | `scheduling.js` | `/api/scheduling` | the native scheduling/quoting API — trips CRUD, legs, `/quote-preview`, `/price`, `/price-lines`, `/people`, `/passengers`, `/documents`, `/crew-roster`, `/airport-search`, `/airport/:icao/fbos`, `/leg-estimate`, `/revert`, itinerary send. `GET /quotes` list includes `quote_number`. `GET /quotes/:quoteNumber` resolves a quote by Quote # → `{ trip, legs }`. `GET /trips/:id` now also accepts a `trip_number` (read-only; mutations still require uuid/lf_oid via `tripColumn`). `PATCH /trips/:id/details` also persists `purpose`/`company_name`/`contact` and returns `{ ok, pricing }`. Reprice (`priceAndStore`/`repriceFromBase`) preserves manual ad-hoc fees, FET-off, total override, and `overrides` map. `PATCH /price-lines` persists `costPerHr`/`posRate`/`overrides` and recomputes per-leg flight cost when those rates change (skipped if flight line is pinned); `POST /price` = Recalculate: fresh rate-card price, drops all `overrides`. Mutations gated by `requireSchedulingEditor`. |
 | `levelflight.js` | `/api/levelflight` | live LF read-through: `/legs` (2mo back/3mo fwd, pax-count corrected), `/duty`, `/aircraft`, `/pilots`, `/trip/:oid`, `/pilot-calendar`, `/aircraft-status/:oid`. |
-| `adsb.js` | `/api/adsb` | `/positions`, `/trail`, `/actuals`, `/previous-flights`, `/flight-track/:legId`. |
+| `adsb.js` | `/api/adsb` | `/positions` (live + last-known stale fix), `/trail`, `/actuals` (incl. `divertedTo`), `/previous-flights`, `/flight-track/:legId`, `POST /legs/:legId/divert` (editor-gated diversion mark). |
 | `quotes.js` | `/api/quotes` | OLD email-AI quotes (`/scan`, CRUD, `/:id/send`) + LF quote read-through (`/list`, `/dispatch/:id/preview\|pdf\|send-link`). |
 | `rateCards.js` | `/api/rate-cards` | rate-card CRUD. |
 | `tripSheet.js` | `/api/tripsheet` | `/:id`, `/:id/pdf` (auth — PII). |

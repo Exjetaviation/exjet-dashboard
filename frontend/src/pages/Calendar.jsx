@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib/calendarRange';
 import { easternParts, zuluParts } from '../lib/easternTime';
 import { groupDutiesByStart } from '../lib/dutyGroups';
+import DivertModal from '../components/DivertModal';
 const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
 const VIEWS = {
   '12h': { label:'12 hr', colMs:3600000,  cols:12,  baseColW:160, stepMs:43200000    },
@@ -194,6 +195,8 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const [hovered,setHovered]   = useState(null);
   const [hoverMode,setHoverMode] = useState('sched'); // 'sched' | 'actual' — which block is hovered
   const [tipPos,setTipPos]     = useState({x:0,y:0});
+  const [legMenu,setLegMenu]   = useState(null); // {leg,x,y} — leg-click popover (Open / Divert)
+  const [divertLeg,setDivertLeg] = useState(null); // leg whose divert modal is open
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
   const [sim, setSim] = useState(false); // "Simulate fleet" — preview a busy 10-aircraft day (mock data)
   const [,forceTick] = useState(0);
@@ -275,7 +278,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
 
   // Persisted actual dep/arr for legs in view (settled delays); live in-progress
   // delays come from the ADS-B feed below.
-  const { actuals: liveActuals } = useLegActuals(rangeStart, rangeEnd);
+  const { actuals: liveActuals, refetch: refetchActuals } = useLegActuals(rangeStart, rangeEnd);
   const actuals = sim ? SIM.actuals : liveActuals;
 
   const getBlock = (dep,arr) => {
@@ -651,10 +654,10 @@ useEffect(() => {
                     for(let i=0;i<sorted.length-1;i++){
                       const leg=sorted[i],next=sorted[i+1];
                       const aPrev=actuals[leg._id?.$oid]||{},aNext=actuals[next._id?.$oid]||{};
-                      segs.push({gStart:aPrev.actualArr??leg.arrival.time,gEnd:aNext.actualDep??next.departure.time,airport:leg.arrival?.airport||'?'});
+                      segs.push({gStart:aPrev.actualArr??leg.arrival.time,gEnd:aNext.actualDep??next.departure.time,airport:aPrev.divertedTo||leg.arrival?.airport||'?'});
                     }
                     const last=sorted[sorted.length-1],aLast=actuals[last._id?.$oid]||{};
-                    segs.push({gStart:aLast.actualArr??last.arrival.time,gEnd:rangeEnd,airport:last.arrival?.airport||'?',parked:true});
+                    segs.push({gStart:aLast.actualArr??last.arrival.time,gEnd:rangeEnd,airport:aLast.divertedTo||last.arrival?.airport||'?',parked:true});
                     return segs.map((s,i)=>{
                       if(s.gEnd-s.gStart<600000) return null;
                       const blk=getBlock(s.gStart,s.gEnd); if(!blk) return null;
@@ -875,7 +878,9 @@ useEffect(() => {
                     // "unconfirmed" so a coverage gap — or a diversion — isn't shown as a normal
                     // completed flight (until the arrival backfills or a dispatcher marks a divert).
                     const unconfirmed=actBlk!=null&&act.actualDep!=null&&!isAirborne&&!arrShown(act.actualDep,act.actualArr);
+                    const diverted=!!act.divertedTo; // dispatcher marked it landed elsewhere
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
+                    const legClick=e=>{e.stopPropagation();setLegMenu({leg,x:e.clientX,y:e.clientY});};
                     // hov/hovA fire on BOTH enter and move, so the tooltip mode always tracks
                     // whichever block is under the cursor (switch through them freely).
                     const hov=e=>{setHovered(leg);setHoverMode('sched');setTipPos({x:e.clientX,y:e.clientY});};
@@ -883,18 +888,18 @@ useEffect(() => {
                     return(
                       <React.Fragment key={legId||li}>
                         {/* Scheduled flight — transparent, covers the whole planned span */}
-                        <div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hov} onMouseMove={hov} onMouseLeave={()=>setHovered(null)}
+                        <div onPointerDown={e=>e.stopPropagation()} onClick={legClick} onMouseEnter={hov} onMouseMove={hov} onMouseLeave={()=>setHovered(null)}
                           style={{position:'absolute',left:blk.left+1,top:FLIGHT_TOP,width:Math.max(blk.width-2,3),height:FLIGHT_H,background:`${color}33`,border:`1px solid ${color}99`,borderRadius:'5px',cursor:'pointer',boxShadow:isHov?`0 2px 12px ${color}66`:'none',zIndex:isHov?5:2,boxSizing:'border-box'}}/>
                         {/* Actual flight — solid bar at 60% height, vertically centred. Always ABOVE
                             the scheduled block (even when hovered) so it can be hovered directly. */}
-                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={open} onMouseEnter={hovA} onMouseMove={hovA} onMouseLeave={()=>setHovered(null)}
-                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:unconfirmed?'rgba(245,158,11,0.18)':color,borderRadius:'4px',cursor:'pointer',border:unconfirmed?'1.5px dashed #f59e0b':(isAirborne?`2px solid ${darker}`:'none'),...(isAirborne?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isHov?8:(isAirborne?7:4),boxSizing:'border-box'}}/>}
+                        {actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={legClick} onMouseEnter={hovA} onMouseMove={hovA} onMouseLeave={()=>setHovered(null)}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.2),width:Math.max(actBlk.width-2,3),height:Math.round(FLIGHT_H*0.6),background:diverted?'rgba(239,68,68,0.28)':(unconfirmed?'rgba(245,158,11,0.18)':color),borderRadius:'4px',cursor:'pointer',border:diverted?'1.5px solid #ef4444':(unconfirmed?'1.5px dashed #f59e0b':(isAirborne?`2px solid ${darker}`:'none')),...(isAirborne&&!diverted?{'--ab':darker,animation:'exjetAirbornePulse 1.6s ease-in-out infinite'}:null),zIndex:isHov?8:(isAirborne?7:4),boxSizing:'border-box'}}/>}
                         {/* Route, centred in the solid actual bar (or the scheduled block if not yet flown) */}
                         {(()=>{
                           const lb=actBlk||blk; if(lb.width<40) return null;
                           const onBar=!!actBlk;
                           return <div style={{position:'absolute',left:lb.left+1,top:onBar?FLIGHT_TOP+Math.round(FLIGHT_H*0.2):FLIGHT_TOP,width:Math.max(lb.width-2,3),height:onBar?Math.round(FLIGHT_H*0.6):FLIGHT_H,zIndex:9,pointerEvents:'none',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',padding:'0 4px'}}>
-                            <span style={{fontSize:'10px',fontWeight:'600',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 1px rgba(0,0,0,0.35)'}}>{origin}→{dest}</span>
+                            <span style={{fontSize:'10px',fontWeight:'600',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 1px rgba(0,0,0,0.35)'}}>{diverted?`⤳ ${act.divertedTo}`:`${origin}→${dest}`}</span>
                           </div>;
                         })()}
                         {/* Live in-flight: plane just to the RIGHT of the now-bar, leading the growing actual bar */}
@@ -1068,6 +1073,17 @@ useEffect(() => {
     </div>
   </div>
 )}
+      {/* Leg click → small popover: Open (navigate) or Mark diverted */}
+      {legMenu && (
+        <>
+          <div onClick={()=>setLegMenu(null)} style={{position:'fixed',inset:0,zIndex:9998}}/>
+          <div style={{position:'fixed',left:Math.min(legMenu.x,window.innerWidth-170),top:legMenu.y+8,zIndex:9999,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',boxShadow:'0 8px 24px rgba(0,0,0,0.5)',overflow:'hidden',minWidth:'150px'}}>
+            <button onClick={()=>{const l=legMenu.leg;setLegMenu(null);tripBasePath?navigate(`${tripBasePath}/${l.dispatch?._id?.$oid}`):navigate(`/flights/${l._id?.$oid}`,{state:{leg:l}});}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',color:'var(--text-primary)',fontSize:'13px',cursor:'pointer'}}>Open</button>
+            <button onClick={()=>{setDivertLeg(legMenu.leg);setLegMenu(null);}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',borderTop:'1px solid var(--border)',color:'#f59e0b',fontSize:'13px',cursor:'pointer'}}>⚠ Mark diverted</button>
+          </div>
+        </>
+      )}
+      {divertLeg && <DivertModal leg={divertLeg} onClose={()=>setDivertLeg(null)} onSaved={()=>{ if(refetchActuals) refetchActuals(); }} />}
       <style>{`
         @keyframes exjetAirbornePulse {
           0%, 100% { box-shadow: 0 0 2px 0 var(--ab); }
