@@ -225,8 +225,11 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
     return { min: isFinite(min) ? min : null, max: isFinite(max) ? max : null };
   }, [legs]);
   const todayMid = floorDay(Date.now());
+  // Always extend the forward edge to at least 3 months past today, so there's future
+  // room to scroll/schedule into even when no flights are booked out there yet.
+  const futureMid = (() => { const d = new Date(); d.setHours(0,0,0,0); d.setMonth(d.getMonth() + 3); return d.getTime(); })();
   const contStart = floorDay(Math.min(flightBounds.min ?? todayMid, todayMid));
-  const contEnd = floorDay(Math.max(flightBounds.max ?? todayMid, todayMid)) + DAY_MS; // through the full last day
+  const contEnd = floorDay(Math.max(flightBounds.max ?? todayMid, futureMid)) + DAY_MS; // through the later of the last flight / +3mo
   const contSpanDays = Math.max(1, Math.round((contEnd - contStart) / DAY_MS));
 
   const getRangeStart = useCallback(() => {
