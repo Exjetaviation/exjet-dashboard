@@ -47,8 +47,12 @@ export async function recordLegActual(legId, fields = {}) {
       row.actual_dep_time = iso(fields.actualDep); row.dep_source = fields.depSource;
     } else { row.actual_dep_time = cur?.actual_dep_time ?? null; row.dep_source = cur?.dep_source ?? null; }
 
-    // Arrival: same rule.
-    if (fields.actualArr != null && prio(fields.arrSource) >= prio(cur?.arr_source)) {
+    // Arrival: same priority rule, PLUS a coherence guard — an arrival is only valid
+    // if the leg has a departure (incoming-or-stored) and arrives AFTER it. This
+    // rejects corrupt writes (arr before dep, or arr with no dep) at the source.
+    const effDepMs = row.actual_dep_time != null ? Date.parse(row.actual_dep_time) : null;
+    const arrCoherent = fields.actualArr != null && effDepMs != null && fields.actualArr > effDepMs;
+    if (arrCoherent && prio(fields.arrSource) >= prio(cur?.arr_source)) {
       row.actual_arr_time = iso(fields.actualArr); row.arr_source = fields.arrSource;
     } else { row.actual_arr_time = cur?.actual_arr_time ?? null; row.arr_source = cur?.arr_source ?? null; }
 
@@ -72,10 +76,10 @@ export async function getLegIdsWithActuals(legIds) {
   } catch (e) { console.warn('[legActualsStore] getIds error (soft):', e?.message || e); return new Set(); }
 }
 
-// Map(legId -> actual_arr_time ms) for the legs in `legIds` that have actually
-// arrived. Lets matchActiveLeg skip completed legs so a still-in-progress earlier
-// leg keeps the flight. Empty Map on soft-fail.
-export async function getActualArrByLeg(legIds) {
+// Map(legId -> { dep, arr } ms) of stored actuals for `legIds`. Lets matchActiveLeg
+// decide which legs are truly completed (coherentArrival needs both dep and arr).
+// Empty Map on soft-fail.
+export async function getActualsByLeg(legIds) {
   const ids = (legIds || []).filter(Boolean);
   if (!ids.length) return new Map();
   const client = getClient();
@@ -83,13 +87,18 @@ export async function getActualArrByLeg(legIds) {
   try {
     const { data, error } = await client
       .from('leg_actuals')
-      .select('leg_id, actual_arr_time')
+      .select('leg_id, actual_dep_time, actual_arr_time')
       .in('leg_id', ids);
-    if (error) { console.warn('[legActualsStore] getActualArr failed (soft):', error.message); return new Map(); }
+    if (error) { console.warn('[legActualsStore] getActuals failed (soft):', error.message); return new Map(); }
     const m = new Map();
-    for (const r of data || []) { if (r.actual_arr_time) m.set(r.leg_id, Date.parse(r.actual_arr_time)); }
+    for (const r of data || []) {
+      m.set(r.leg_id, {
+        dep: r.actual_dep_time ? Date.parse(r.actual_dep_time) : null,
+        arr: r.actual_arr_time ? Date.parse(r.actual_arr_time) : null,
+      });
+    }
     return m;
-  } catch (e) { console.warn('[legActualsStore] getActualArr error (soft):', e?.message || e); return new Map(); }
+  } catch (e) { console.warn('[legActualsStore] getActuals error (soft):', e?.message || e); return new Map(); }
 }
 
 // Actuals for legs whose SCHEDULED departure falls in [fromIso, toIso]. Rows

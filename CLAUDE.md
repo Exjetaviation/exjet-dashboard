@@ -422,6 +422,12 @@ without Supabase.
 - **Source priority** (`services/legActualsStore.js`): **`crew` > `live` > `exact` > `approx`**, applied
   **per field**, **never downgraded** (`recordLegActual` upserts on `leg_id`, keeping the higher-priority
   value). `crew` = pilot OOOI = the only true actuals LF exposes.
+- **Coherence invariant** (`adsbTrack.coherentArrival`): a leg counts as truly arrived/complete ONLY when it
+  has both an actual dep AND an actual arr with **arr > dep**. `recordLegActual` rejects an arr ≤ dep (or an
+  arr with no dep); `matchActiveLeg` (earliest not-yet-*coherently*-arrived leg) and the calendar
+  (`legStateColor`/actual bar) ignore incoherent actuals — so a corrupt row can't mark a leg "started"/"done"
+  or mis-advance to the next leg. `matchActiveLeg` reads each leg's actual dep+arr via `activeLegs` →
+  `legActualsStore.getActualsByLeg`. Real corruption self-heals once `crew` block times are logged.
 - **Pure helpers** (`services/adsbTrack.js`, unit-tested): `detectTakeoff`, `deriveActualTimes`,
   `approximateActualTimes`, `matchActiveLeg`, `crewActualsFromLeg`, `clipTrackToLeg`, `firstAirborneTime`,
   `normReg` (tail canonicalization — everything `normReg`s tails on both sides before matching).
@@ -727,7 +733,14 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   focus), `useLegActuals(…,60000)` (the settled delay overlay).
 - **Notable pages:** `Calendar.jsx` (the scheduling Gantt — views 12h/day/week/month/year; each leg =
   translucent **scheduled** block + solid **actual** bar that grows live; **blue=completed, green=in-flight,
-  grey=future** via `legStateColor`; delay math `lib/delaySegments.js`). `Map.jsx` (FleetMap — live ADS-B,
+  grey=future** via `legStateColor`; delay math `lib/delaySegments.js`; crew **duty brackets** group flight
+  duties within 15 min (`lib/dutyGroups.js`) and mark them **top bar = PIC, bottom bar = SIC** (both when
+  grouped) — hover lists each crew member's exact time. **Day/12h are CONTINUOUS:** the timeline spans
+  **all flights** (earliest leg → latest leg, always incl. today) and scrolls straight through — no
+  per-day paging; offset is ignored, Prev/Next smooth-scroll a day, drill-down focuses the clicked day
+  (`dayFocusRef`). Gridlines are a CSS gradient (header+body share it so lines align); the day **date**
+  sits in a scroll-synced strip **above** the grid; 24-hour hour axis drops `:00` when columns get
+  narrow. `cols` is memoized so the 60s tick doesn't rebuild the (wide) column set). `Map.jsx` (FleetMap — live ADS-B,
   **"Awaiting signal"** when no fix, persisted trail toggle, history replay). `Quotes.jsx`, `Finances.jsx`
   (QB, 6 tabs), `FuelPrices.jsx`, `SchedulingTripDetail.jsx` (tabbed native editor — **Fees tab renamed
   "Pricing"**, tab `id` still `fees`), `QuoteEditor.jsx` (streamlined quote page: inline legs + live
@@ -823,7 +836,8 @@ Native **`node:test`** throughout (no framework). Tests live **next to source** 
 - **Backend renders all documents** — quote/itinerary/trip-sheet data + rendering stay server-side; the
   frontend gets finished HTML/PDF, never raw JSON.
 - **ADS-B: never interpolate a fake mid-route position** ("Awaiting signal" instead). Actuals source priority
-  `crew > live > exact > approx`, never downgraded.
+  `crew > live > exact > approx`, never downgraded. A leg is "arrived" only on a **coherent** actual
+  (dep present AND arr > dep) — corrupt actuals are ignored, never mark a leg started/complete (`coherentArrival`).
 - **Supabase JWT is ES256** — verify via `supabase.auth.getUser`, never HS256 `jwt.verify`.
 - **Pricing source of truth is the backend**; keep `feesMath.recomputeInputs` (frontend) in lockstep with
   `pricing.recomputeFromInputs` (backend), including the per-line `overrides` map and `effectiveHourly`.

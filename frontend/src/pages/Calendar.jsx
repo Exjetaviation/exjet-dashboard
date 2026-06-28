@@ -14,17 +14,32 @@ const VIEWS = {
   month: { label:'Month', colMs:86400000, cols:31,  baseColW:40,  stepMs:2592000000  },
   year:  { label:'Year',  colMs:86400000, cols:365, baseColW:16,  stepMs:31536000000 },
 };
+// Day / 12h are CONTINUOUS: instead of paging one day at a time, the timeline spans
+// every flight (earliest → latest, always including today) and you scroll straight
+// through it — no per-day reload. See the range computation in the component.
 
 // Block colour by flight STATE (uses actuals when known): completed/landed = blue,
 // in-flight = green, future/not-yet-departed = grey.
 const STATE_COLORS = { completed:'#4f8ef7', inflight:'#22c55e', future:'#64748b' };
+// A leg only counts as truly arrived when it has BOTH an actual departure and an
+// actual arrival AFTER it — corrupt rows (arr before dep, or arr with no dep) must
+// not mark a leg "complete". Mirrors backend adsbTrack.coherentArrival.
+const coherentArr = (dep, arr) => dep != null && arr != null && arr > dep;
 function legStateColor(leg, isAirborne, act, now) {
   const dep = leg?.departure?.time, arr = leg?.arrival?.time;
-  const effDep = act?.actualDep ?? dep, effArr = act?.actualArr ?? arr;
+  const aDep = act?.actualDep ?? null;
+  const aArr = coherentArr(act?.actualDep, act?.actualArr) ? act.actualArr : null; // ignore corrupt arrivals
   if (isAirborne) return STATE_COLORS.inflight;                                   // ADS-B says airborne
-  if (effArr != null && effArr <= now) return STATE_COLORS.completed;            // landed
-  if (effDep != null && effDep > now) return STATE_COLORS.future;                // not departed
-  if (effDep != null && effArr != null && effDep <= now && now < effArr) return STATE_COLORS.inflight; // mid-flight by clock
+  if (aArr != null) return aArr <= now ? STATE_COLORS.completed : STATE_COLORS.inflight; // truly landed
+  if (aDep != null) {
+    // Departed but no coherent arrival: in-flight, never "complete" on a corrupt
+    // arrival. Assume landed only well past schedule (ADS-B missed the arrival).
+    return (arr != null && now > arr + 3 * 3600000) ? STATE_COLORS.completed : STATE_COLORS.inflight;
+  }
+  // No actual departure recorded → fall back to the schedule clock.
+  if (dep != null && dep > now) return STATE_COLORS.future;                       // not yet departed
+  if (dep != null && arr != null && dep <= now && now < arr) return STATE_COLORS.inflight; // mid-flight by clock
+  if (arr != null && arr <= now) return STATE_COLORS.completed;
   return STATE_COLORS.future;
 }
 // Row geometry — derived top-down so every row is uniform and nothing floats:
@@ -60,7 +75,7 @@ const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime
 // zone reads correctly — e.g. KMKC 23:30 (Central) shows as 00:30 ET · 23:30 local.
 const ET = 'America/New_York';
 const fmt = ts=>new Date(ts).toLocaleDateString('en-US',{timeZone:ET,month:'short',day:'numeric',year:'numeric'});
-const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+const fmtTime = ms=>ms?new Date(ms).toLocaleString('en-US',{timeZone:ET,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'—';
 const fmtLocal = (ms,tz)=>{ if(!ms||!tz) return null; try { return new Date(ms).toLocaleString('en-US',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch { return null; } };
 
 // --- Fleet simulation (the "Simulate fleet" toggle) -------------------------
@@ -186,22 +201,36 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   }, []);
   const bodyRef = useRef(null);
   const hdrRef  = useRef(null);
+  const dateRef = useRef(null); // continuous views: the day-date strip above the calendar
+  const dayFocusRef = useRef(null); // Day view: which day's 00:00 sits at the left edge (null = today)
   const nowLineRef = useRef(null); // continuous now-line overlay (spans header + body)
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
 
   const cfg = VIEWS[view];
+  const continuous = view === 'day' || view === '12h'; // continuous-scroll views
+
+  const SIM = useMemo(() => (sim ? buildSimFleet(Date.now()) : SIM_EMPTY), [sim]);
+  const legs = sim ? SIM.legs : (data?.legs || []);
+
+  // Continuous (Day/12h): the timeline spans ALL flights — from the earliest leg's day
+  // through the day after the latest leg's — always including today, so nothing is cut off.
+  const DAY_MS = 86400000;
+  const flightBounds = useMemo(() => {
+    let min = Infinity, max = -Infinity;
+    for (const l of legs) {
+      const dep = l?.departure?.time, arr = l?.arrival?.time;
+      if (dep != null) { if (dep < min) min = dep; if (dep > max) max = dep; }
+      if (arr != null) { if (arr < min) min = arr; if (arr > max) max = arr; }
+    }
+    return { min: isFinite(min) ? min : null, max: isFinite(max) ? max : null };
+  }, [legs]);
+  const todayMid = floorDay(Date.now());
+  const contStart = floorDay(Math.min(flightBounds.min ?? todayMid, todayMid));
+  const contEnd = floorDay(Math.max(flightBounds.max ?? todayMid, todayMid)) + DAY_MS; // through the full last day
+  const contSpanDays = Math.max(1, Math.round((contEnd - contStart) / DAY_MS));
 
   const getRangeStart = useCallback(() => {
     const now = new Date();
-    if (view === '12h') {
-      // 24h window CENTERED on now: now sits in the middle, 12h scrollable either side.
-      const d = new Date(now); d.setMinutes(0,0,0); // floor to the hour (stable grid)
-      return d.getTime() - 12 * 3600000 + offset * 43200000;
-    }
-    if (view === 'day') {
-      const d = new Date(now); d.setHours(0,0,0,0);
-      return d.getTime() + offset * 86400000;
-    }
     if (view === 'week') {
       const d = new Date(now);
       const day = d.getDay();
@@ -216,27 +245,28 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
     return new Date(now.getFullYear() + offset, 0, 1).getTime();
   }, [view, offset]);
 
-  const rangeStart = getRangeStart();
+  const rangeStart = continuous ? contStart : getRangeStart();
 
-  const SIM = useMemo(() => (sim ? buildSimFleet(Date.now()) : SIM_EMPTY), [sim]);
-  const legs = sim ? SIM.legs : (data?.legs || []);
-
-  // Columns that should FILL the viewport (drives autoFit). Day view fits the focused
-  // 24h; month fits its day-count; week/year fit cfg.cols.
+  // Columns that FILL the viewport (drives autoFit): Day fits a 24h day, month fits its
+  // day-count, week/year fit cfg.cols. The continuous range itself is far wider (all flights).
   const fitCols = view === 'month'
     ? new Date(new Date(rangeStart).getFullYear(), new Date(rangeStart).getMonth()+1, 0).getDate()
     : cfg.cols;
-  // Day view only: extra hourly columns past midnight to fully contain overnight
-  // flights (0 on a normal day -> identical to before). These render but are NOT
-  // counted in the fit, so the focused day stays full-size and the tail scrolls.
-  const dayExtraCols = view === 'day' ? overnightExtraCols(legs, rangeStart, cfg.colMs) : 0;
-  // 12h view: render a full 24h (scrollable) while only fitCols (12) fill the viewport.
-  const effectiveCols = view === '12h' ? 24 : fitCols + dayExtraCols;
+  const effectiveCols = continuous ? contSpanDays * 24 : fitCols;
 
   const colW    = Math.max(8, Math.round(cfg.baseColW * zoom));
   const totalMs = effectiveCols * cfg.colMs;
   const totalW  = effectiveCols * colW;
   const rangeEnd = rangeStart + totalMs;
+
+  // Continuous views draw gridlines as a CSS background (per row) instead of
+  // ~1,000 DOM nodes × tails, so scrolling/zoom stay smooth: faint hour lines +
+  // stronger day lines, plus a single "today" band positioned over today's 24h.
+  const dayPx = 24 * colW;
+  const gridBg = continuous
+    ? `repeating-linear-gradient(to right, rgba(255,255,255,0.13) 0 2px, transparent 2px ${dayPx}px), repeating-linear-gradient(to right, rgba(255,255,255,0.03) 0 1px, transparent 1px ${colW}px)`
+    : undefined;
+  const todayLeft = continuous ? ((floorDay(Date.now()) - rangeStart) / totalMs) * totalW : 0;
 
   // Persisted actual dep/arr for legs in view (settled delays); live in-progress
   // delays come from the ADS-B feed below.
@@ -256,15 +286,34 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
     el.scrollLeft = Math.max(0, nowPx - el.clientWidth/2);
   }, [rangeStart,totalMs,totalW]);
 
-  const goToToday = useCallback(() => { setOffset(0); setTimeout(scrollToCenter,80); }, [scrollToCenter]);
+  // Continuous views: Prev/Next smooth-scroll by one day instead of reloading a new day.
+  const scrollByDay = useCallback((dir) => {
+    const el = bodyRef.current; if (!el) return;
+    el.scrollBy({ left: dir * 24 * colW, behavior: 'smooth' });
+  }, [colW]);
+  // Default scroll position: Day view shows one FULL day (today's 00:00 at the left
+  // edge); 12h (and Today on other views) centers the now-line.
+  const scrollToDefault = useCallback(() => {
+    const el = bodyRef.current; if (!el) return;
+    if (view === 'day') {
+      // Show one full day at the left edge: the focused day (from a drill-down) or today.
+      const focus = floorDay(dayFocusRef.current ?? Date.now());
+      el.scrollLeft = Math.max(0, ((focus - rangeStart) / totalMs) * totalW);
+    } else scrollToCenter();
+  }, [view, rangeStart, totalMs, totalW, scrollToCenter]);
+  const goToToday = useCallback(() => { dayFocusRef.current = null; if (!continuous) setOffset(0); setTimeout(scrollToDefault,80); }, [scrollToDefault, continuous]);
   // Drill down one level from a clicked header column: Week/Month day -> Day view of
   // that day; Year month -> Month view of that month. Offset mirrors getRangeStart.
   const drillTo = useCallback((targetView, ts) => {
-    const off = targetView === 'month'
-      ? monthOffsetFromNow(Date.now(), ts)
-      : dayOffsetFromNow(Date.now(), ts);
+    if (targetView === 'day') {
+      // Continuous Day view ignores offset — focus the clicked day and let the
+      // continuous scroll effect bring it to the left edge.
+      dayFocusRef.current = ts;
+      setView('day');
+      return;
+    }
     setView(targetView);
-    setOffset(off);
+    setOffset(monthOffsetFromNow(Date.now(), ts));
     setTimeout(() => { if (bodyRef.current) bodyRef.current.scrollLeft = 0; }, 0);
   }, []);
   const calcFitZoom = useCallback(() => {
@@ -289,22 +338,22 @@ useEffect(() => {
     const el = bodyRef.current; if (!el) return;
     const s = localStorage.getItem('exjet.calendar.scroll');
     const t = setTimeout(() => {
-      // 12h view centers the now-bar instead of restoring the saved scroll (handled below).
-      if (view !== '12h' && s !== null && !isNaN(+s)) el.scrollLeft = +s;
+      // Continuous views center the now-bar instead of restoring the saved scroll (handled below).
+      if (!continuous && s !== null && !isNaN(+s)) el.scrollLeft = +s;
       didRestoreScroll.current = true;
     }, 160);
     return () => clearTimeout(t);
   }, [loading]);
 
-  // 12h view: keep the now-bar centered — scroll to the middle of the 24h range when the
-  // view/offset/layout changes (re-runs once autoFit settles totalW; not on the 60s tick,
-  // so the user's manual scroll is preserved between changes).
+  // Continuous views (day/12h): keep the now-line in view — center it on load and when
+  // the view/zoom changes. now isn't the middle of the span, so center on nowPx (not totalW/2).
+  // Not on the 60s tick, so the user's manual scroll is preserved between changes.
   useEffect(() => {
-    if (view !== '12h') return undefined;
+    if (!continuous) return undefined;
     const el = bodyRef.current; if (!el) return undefined;
-    const t = setTimeout(() => { el.scrollLeft = Math.max(0, totalW / 2 - el.clientWidth / 2); }, 80);
+    const t = setTimeout(() => scrollToDefault(), 80);
     return () => clearTimeout(t);
-  }, [view, offset, totalW]);
+  }, [continuous, view, totalW, scrollToDefault]);
 
   const onPD = useCallback(e => {
     const el=bodyRef.current; if(!el) return;
@@ -397,20 +446,18 @@ useEffect(() => {
   });
   if (sim) Object.assign(airborneLegId, SIM.airborne); // sim has no ADS-B; mark its in-progress legs airborne directly
 
-  const cols = Array.from({length:effectiveCols},(_,i) => {
+  const cols = useMemo(() => Array.from({length:effectiveCols},(_,i) => {
     const ts=rangeStart+i*cfg.colMs;
     const d=new Date(ts);
     const isToday=floorDay(ts)===floorDay(Date.now());
     const isMonthStart=d.getDate()===1;
     let label='';
-    const isDayStart = (view==='day'||view==='12h') && i>0 && d.getHours()===0; // interior midnight
+    const isDayStart = (view==='day'||view==='12h') && i>0 && d.getHours()===0; // interior midnight (day boundary)
+    // Continuous views: every column is an hour label drawn ON its gridline; the day
+    // DATE is rendered in a separate strip above the calendar (below), never inline.
+    const isTimeLabel = (view==='day'||view==='12h');
     if (view==='day'||view==='12h') {
-      if (isDayStart) {
-        label=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); // e.g. "Wed, Jun 18"
-      } else {
-        const h=d.getHours();
-        label=h===0?'12am':h===12?'12pm':h<12?`${h}am`:`${h-12}pm`;
-      }
+      label=`${String(d.getHours()).padStart(2,'0')}:00`; // 24-hour, e.g. "14:00"
     } else if (view==='week') {
       label=`${d.toLocaleDateString('en-US',{weekday:'short'})} ${d.getDate()}`;
     } else if (view==='month') {
@@ -418,8 +465,8 @@ useEffect(() => {
     } else {
       label=isMonthStart?d.toLocaleDateString('en-US',{month:'short'}):'';
     }
-    return {i,ts,label,isToday,isMonthStart,isDayStart,d};
-  });
+    return {i,ts,label,isToday,isMonthStart,isDayStart,isTimeLabel,d};
+  }), [view, rangeStart, effectiveCols, cfg.colMs]);
 
   const navBtn=(label,onClick)=>(
     <button onClick={onClick} style={{padding:'7px 12px',fontSize:'13px',background:'var(--bg-card)',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:'7px',cursor:'pointer'}}>{label}</button>
@@ -445,7 +492,7 @@ useEffect(() => {
         <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
           <div style={{display:'flex',border:'1px solid var(--border)',borderRadius:'8px',overflow:'hidden'}}>
             {Object.entries(VIEWS).map(([k,{label}])=>(
-              <button key={k} onClick={()=>{setView(k);setOffset(0);setZoom(1);}} style={{padding:'7px 14px',fontSize:'13px',border:'none',cursor:'pointer',background:view===k?'var(--accent)':'var(--bg-card)',color:view===k?'#fff':'var(--text-secondary)',fontWeight:view===k?'600':'400'}}>{label}</button>
+              <button key={k} onClick={()=>{dayFocusRef.current=null;setView(k);setOffset(0);setZoom(1);}} style={{padding:'7px 14px',fontSize:'13px',border:'none',cursor:'pointer',background:view===k?'var(--accent)':'var(--bg-card)',color:view===k?'#fff':'var(--text-secondary)',fontWeight:view===k?'600':'400'}}>{label}</button>
             ))}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
@@ -466,10 +513,25 @@ useEffect(() => {
 
       {/* NAV ROW */}
       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-        {navBtn('← Prev',()=>setOffset(o=>o-1))}
+        {navBtn('← Prev', continuous ? ()=>scrollByDay(-1) : ()=>setOffset(o=>o-1))}
         <span style={{fontSize:'13px',color:'var(--text-secondary)',flex:1,textAlign:'center'}}>{`${fmt(rangeStart)} — ${fmt(rangeEnd)}`}</span>
-        {navBtn('Next →',()=>setOffset(o=>o+1))}
+        {navBtn('Next →', continuous ? ()=>scrollByDay(1) : ()=>setOffset(o=>o+1))}
       </div>
+
+      {/* DAY DATES — a strip above the calendar, each date centered on its day-line
+          (continuous views only), scroll-synced with the timeline. */}
+      {continuous && (
+        <div style={{display:'flex',marginBottom:'-4px'}}>
+          <div style={{width:LABEL_W,minWidth:LABEL_W,flexShrink:0}}/>
+          <div ref={dateRef} style={{flex:1,overflow:'hidden',minWidth:0}}>
+            <div style={{position:'relative',width:totalW,height:18}}>
+              {cols.filter(c=>c.d.getHours()===0).map(col=>(
+                <span key={col.i} style={{position:'absolute',left:col.i*colW,top:0,transform:'translateX(-50%)',fontSize:'12px',fontWeight:700,color:col.isToday?'var(--accent)':'#dde',whiteSpace:'nowrap',pointerEvents:'none'}}>{col.d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CALENDAR */}
       <div style={{border:'1px solid var(--border)',borderRadius:'12px',background:'var(--bg-card)',display:'flex',flexDirection:'column',overflow:'visible',width:'100%',boxSizing:'border-box',position:'relative'}}>
@@ -481,7 +543,12 @@ useEffect(() => {
           </div>
           <div style={{flex:1,overflow:'hidden',minWidth:0}}>
             <div ref={hdrRef} style={{overflowX:'hidden',width:'100%'}}>
-              <div style={{display:'flex',width:totalW,height:HDR_H,position:'relative'}}>
+              <div style={{display:'flex',width:totalW,height:HDR_H,position:'relative',backgroundImage:gridBg}}>
+                {/* Header gridlines as absolute divs (same formula as the body) so header
+                    and body lines line up exactly; continuous views use the CSS gradient. */}
+                {!continuous && cols.map(col=>(
+                  <div key={`hg-${col.i}`} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:col.isMonthStart||col.isDayStart?2:1,background:col.isMonthStart||col.isDayStart?'rgba(255,255,255,0.13)':'rgba(255,255,255,0.03)',pointerEvents:'none'}}/>
+                ))}
                 {cols.map(col=>{
                   const daysInThisMonth = view==='year'&&col.isMonthStart
                     ? new Date(col.d.getFullYear(), col.d.getMonth()+1, 0).getDate()
@@ -495,13 +562,18 @@ useEffect(() => {
                       onMouseEnter={drillTarget ? (e)=>{ e.currentTarget.style.background='rgba(79,142,247,0.22)'; } : undefined}
                       onMouseLeave={drillTarget ? (e)=>{ e.currentTarget.style.background=baseBg; } : undefined}
                       title={drillTarget ? (drillTarget==='month'?'Open month':'Open day') : undefined}
-                      style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:col.isMonthStart||col.isDayStart?'2px solid rgba(255,255,255,0.16)':'1px solid rgba(255,255,255,0.04)',background:baseBg,flexShrink:0,overflow:'visible',position:'relative',cursor:drillTarget?'pointer':'default'}}>
+                      style={{width:colW,minWidth:colW,height:HDR_H,display:'flex',alignItems:'center',justifyContent:'center',borderRight:'none',background:baseBg,flexShrink:0,overflow:'visible',position:'relative',cursor:drillTarget?'pointer':'default'}}>
                       {view==='year' ? (
                         col.isMonthStart && (
                           <div style={{position:'absolute',left:0,width:daysInThisMonth*colW,height:'100%',display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:2}}>
                             <span style={{fontSize:'12px',fontWeight:'700',color:'#dde',whiteSpace:'nowrap'}}>{col.d.toLocaleDateString('en-US',{month:'long'})}</span>
                           </div>
                         )
+                      ) : col.isTimeLabel ? (
+                        // Centered ON the gridline (the column's left edge = its actual hour).
+                        // Narrow columns (small screens / zoomed out) drop the ":00" so the
+                        // numbers don't bunch up — just "14" instead of "14:00".
+                        <span style={{position:'absolute',left:0,top:'50%',transform:'translate(-50%,-50%)',fontSize:'12px',fontWeight:col.isToday?'700':'400',color:col.isToday?'var(--accent)':'var(--text-secondary)',whiteSpace:'nowrap',pointerEvents:'none'}}>{colW < 44 ? col.label.slice(0,2) : col.label}</span>
                       ) : (
                         col.label && <span style={{fontSize:view==='month'?'11px':'12px',fontWeight:col.isToday||col.isMonthStart||col.isDayStart?'700':'400',color:col.isToday?'var(--accent)':col.isMonthStart||col.isDayStart?'#dde':'var(--text-secondary)',whiteSpace:'nowrap'}}>{col.label}</span>
                       )}
@@ -528,6 +600,7 @@ useEffect(() => {
           <div ref={bodyRef} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
             onScroll={e=>{
               if(hdrRef.current)hdrRef.current.scrollLeft=e.target.scrollLeft;
+              if(dateRef.current)dateRef.current.scrollLeft=e.target.scrollLeft;
               const lbl=document.getElementById('lbl-col');
               if(lbl)lbl.scrollTop=e.target.scrollTop;
               if(didRestoreScroll.current) localStorage.setItem('exjet.calendar.scroll', String(e.target.scrollLeft));
@@ -544,17 +617,19 @@ useEffect(() => {
               {loading ? (
                 <div style={{padding:'60px',textAlign:'center',color:'var(--text-secondary)'}}>Loading...</div>
               ) : aircraft.map((ac,rowIdx)=>(
-                <div key={ac.tail} style={{position:'relative',height:ROW_H,borderBottom:'1px solid var(--border)',background:rowIdx%2===0?'var(--bg-card)':'#111119'}}>
+                <div key={ac.tail} style={{position:'relative',height:ROW_H,borderBottom:'1px solid var(--border)',backgroundColor:rowIdx%2===0?'var(--bg-card)':'#111119',backgroundImage:gridBg}}>
 
-                  {/* Grid lines */}
-                  {cols.map(col=>(
+                  {/* Grid lines — CSS background for continuous views (on the row), DOM divs otherwise */}
+                  {!continuous && cols.map(col=>(
                     <div key={col.i} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:col.isMonthStart||col.isDayStart?2:1,background:col.isMonthStart||col.isDayStart?'rgba(255,255,255,0.13)':'rgba(255,255,255,0.03)',pointerEvents:'none'}}/>
                   ))}
 
-                  {/* Today highlight */}
-                  {cols.filter(c=>c.isToday).map(col=>(
-                    <div key={col.i} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:colW,background:'rgba(79,142,247,0.05)',pointerEvents:'none'}}/>
-                  ))}
+                  {/* Today highlight — a single band for continuous, else per-column */}
+                  {continuous
+                    ? <div style={{position:'absolute',left:todayLeft,top:0,bottom:0,width:dayPx,background:'rgba(79,142,247,0.05)',pointerEvents:'none'}}/>
+                    : cols.filter(c=>c.isToday).map(col=>(
+                        <div key={col.i} style={{position:'absolute',left:col.i*colW,top:0,bottom:0,width:colW,background:'rgba(79,142,247,0.05)',pointerEvents:'none'}}/>
+                      ))}
 
                   {/* Now line is drawn ONCE across the whole body (one solid line, no per-row gaps) — see below */}
 
@@ -698,6 +773,11 @@ useEffect(() => {
                         ?(timeRemaining<120?'#ef4444':timeRemaining<240?'#f59e0b':'#4f8ef7')
                         :'#4f8ef7';
                       const hasPIC=group.some(d=>d.role==='PIC');
+                      const hasSIC=group.some(d=>d.role==='SIC');
+                      const noRole=!hasPIC&&!hasSIC; // unknown crew → keep the bottom bar so it stays visible
+                      // Top bar = PIC, bottom bar = SIC; a grouped PIC+SIC shows both.
+                      const topBar=hasPIC, bottomBar=hasSIC||noRole;
+                      const members=group.map(d=>({role:d.role,start:d._start,end:d._end}));
                       const startDuration=groupOpen?onDutyLabel:totalLabel;
                       const startLimit=groupOpen?remainingLabel:'';
                       const endLabel=groupOpen?'14hr Limit':`Flight Duty OFF · ${totalLabel}`;
@@ -706,20 +786,20 @@ useEffect(() => {
                       return(
                         <React.Fragment key={`dg-${gi}`}>
                           {startBlk&&(
-                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Flight Duty START',time:earliest,duration:startDuration,limit:startLimit,tail:ac.tail,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:'Flight Duty START',time:earliest,duration:startDuration,limit:startLimit,tail:ac.tail,members,which:'start'});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
                               style={{position:'absolute',left:startBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',left:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
-                              {hasPIC&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
-                              <div style={{position:'absolute',left:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
+                              {topBar&&<div style={{position:'absolute',left:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
+                              {bottomBar&&<div style={{position:'absolute',left:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',left:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:'#22c55e',fontWeight:'700',lineHeight:1}}>▶</div>
                             </div>
                           )}
                           {endBlk&&(
-                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:endLabel,time:groupEnd,duration:startDuration,limit:endLimit,tail:ac.tail,isLimit:groupOpen,group:group.map(d=>d.role)});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
+                            <div onMouseEnter={e=>{setHovered({_isDuty:true,label:endLabel,time:groupEnd,duration:startDuration,limit:endLimit,tail:ac.tail,isLimit:groupOpen,members,which:'end'});setTipPos({x:e.clientX,y:e.clientY});}} onMouseMove={e=>setTipPos({x:e.clientX,y:e.clientY})} onMouseLeave={()=>setHovered(null)}
                               style={{position:'absolute',left:endBlk.left-1,top:DUTY_TOP,width:16,height:DUTY_H,zIndex:6,cursor:'default',pointerEvents:'auto'}}>
                               <div style={{position:'absolute',right:0,top:0,width:2,height:'100%',background:lineColor,opacity:0.9}}/>
-                              {hasPIC&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
-                              <div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>
+                              {topBar&&<div style={{position:'absolute',right:0,top:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
+                              {bottomBar&&<div style={{position:'absolute',right:0,bottom:0,width:10,height:2,background:lineColor,opacity:0.9}}/>}
                               <div style={{position:'absolute',right:3,top:'50%',transform:'translateY(-50%)',fontSize:'10px',color:endTriangleColor,fontWeight:'700',lineHeight:1}}>◀</div>
                             </div>
                           )}
@@ -752,7 +832,9 @@ useEffect(() => {
                     // scheduled departure as a placeholder — so the bar still appears the moment
                     // ADS-B confirms the flight is airborne, and grows with the now-bar.
                     const aStart=act.actualDep??(isAirborne?(la?.airborneSinceMs??dep):null);
-                    const aEnd=act.actualArr??(isAirborne?nowTs:null);
+                    // Only close the bar on a COHERENT arrival; a corrupt arr (<= dep) is
+                    // ignored so the bar grows live instead of collapsing/back-deleting.
+                    const aEnd=coherentArr(act.actualDep,act.actualArr)?act.actualArr:(isAirborne?nowTs:null);
                     const actBlk=(aStart!=null&&aEnd!=null&&aEnd>aStart)?getBlock(aStart,aEnd):null;
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
                     // hov/hovA fire on BOTH enter and move, so the tooltip mode always tracks
@@ -827,8 +909,9 @@ useEffect(() => {
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Aircraft: {hovered.tail}</p>
-                <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Time: {fmtTime(hovered.time)}</p>
-                {hovered.group&&<p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Crew: {hovered.group.join(' + ')}</p>}
+                {hovered.members?.length
+                  ? hovered.members.map((m,i)=>(<p key={i} style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{m.role}: {fmtTime(hovered.which==='end'?m.end:m.start)}</p>))
+                  : <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Time: {fmtTime(hovered.time)}</p>}
                 <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>{hovered.duration}</p>
                 {hovered.limit && <p style={{fontSize:'12px',fontWeight:'600',color:hovered.limit?.includes('REACHED')?'var(--danger)':'#f59e0b',margin:0}}>{hovered.limit}</p>}
               </div>

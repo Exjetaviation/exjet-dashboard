@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMoved, detectTakeoff, firstAirborneTime, clipTrackToLeg, deriveActualTimes, approximateActualTimes, recoverDepFromPositions, matchActiveLeg, crewActualsFromLeg, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
+import { hasMoved, detectTakeoff, firstAirborneTime, clipTrackToLeg, deriveActualTimes, approximateActualTimes, recoverDepFromPositions, matchActiveLeg, coherentArrival, crewActualsFromLeg, normReg, monthAnchors, legTail, selectCompletedLegs, selectLegsToSnapshot } from './adsbTrack.js';
 
 test('normReg canonicalizes case, dashes, and spaces', () => {
   assert.equal(normReg('n69fp'), 'N69FP');
@@ -162,10 +162,34 @@ test('matchActiveLeg: a late leg 1 (not arrived) keeps the flight even after leg
 
 test('matchActiveLeg: once leg 1 has actually arrived, leg 2 becomes active', () => {
   const legs = [
-    { legId: 'leg1', depTime: 1000, arrTime: 2000, actualArr: 2700 }, // landed
+    { legId: 'leg1', depTime: 1000, arrTime: 2000, actualDep: 1100, actualArr: 2700 }, // coherently landed
     { legId: 'leg2', depTime: 2500, arrTime: 3500, actualArr: null },
   ];
   assert.equal(matchActiveLeg(legs, 2800, { preMs: 500, postMs: 2000 })?.legId, 'leg2');
+});
+
+test('matchActiveLeg: an INCOHERENT arrival (arr <= dep, or no dep) does NOT complete a leg', () => {
+  // Corrupt leftover: leg1 has an arrival stamped earlier than its departure. It must
+  // NOT be treated as completed, so leg 1 (the real current leg) stays active.
+  const legs = [
+    { legId: 'leg1', depTime: 1000, arrTime: 2000, actualDep: 1600, actualArr: 1200 }, // arr < dep (corrupt)
+    { legId: 'leg2', depTime: 2500, arrTime: 3500, actualArr: null },
+  ];
+  assert.equal(matchActiveLeg(legs, 2600, { preMs: 500, postMs: 2000 })?.legId, 'leg1');
+  // An arrival with no departure is also incoherent → not completed.
+  const legs2 = [
+    { legId: 'leg1', depTime: 1000, arrTime: 2000, actualDep: null, actualArr: 1800 },
+    { legId: 'leg2', depTime: 2500, arrTime: 3500, actualArr: null },
+  ];
+  assert.equal(matchActiveLeg(legs2, 2600, { preMs: 500, postMs: 2000 })?.legId, 'leg1');
+});
+
+test('coherentArrival: true only when both times exist and arr is after dep', () => {
+  assert.equal(coherentArrival(1000, 2000), true);
+  assert.equal(coherentArrival(2000, 1000), false); // arr before dep
+  assert.equal(coherentArrival(1000, 1000), false); // equal
+  assert.equal(coherentArrival(null, 2000), false); // arr with no dep
+  assert.equal(coherentArrival(1000, null), false); // dep with no arr
 });
 
 test('deriveActualTimes: minStartMs floor excludes a prior late leg’s takeoff', () => {
