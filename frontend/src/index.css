@@ -18,6 +18,14 @@
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+  /* Spacing scale */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px;
+  /* Type scale */
+  --text-xs: 11px; --text-sm: 13px; --text-base: 14px;
+  --text-lg: 16px; --text-xl: 22px; --text-2xl: 28px;
+  /* Responsive page padding (stepped down for tablet/phone in responsive.css) */
+  --page-pad: 32px;
   /* Paint the <html> canvas dark too — only <body> had a background, so a
      light-mode device showed white in the overscroll / root area. */
   background: var(--bg-primary);

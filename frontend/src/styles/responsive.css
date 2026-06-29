@@ -1,0 +1,26 @@
+/* frontend/src/styles/responsive.css
+   ALL rules are scoped to < 1024px. Desktop (>= 1024px) is never affected. */
+
+/* Step page padding down below desktop. */
+@media (max-width: 1023px) {
+  :root { --page-pad: 20px; }
+}
+@media (max-width: 767px) {
+  :root { --page-pad: 14px; }
+
+  /* iOS zooms when a focused input has font-size < 16px. */
+  input, select, textarea { font-size: 16px; }
+
+  /* Comfortable touch targets on phone. */
+  button { min-height: 44px; }
+}
+
+/* Horizontal-scroll frame for wide content (matrices, tab strips). */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Visibility helpers. */
+@media (max-width: 767px) { .hide-phone { display: none !important; } }
+@media (min-width: 768px) { .only-phone { display: none !important; } }
