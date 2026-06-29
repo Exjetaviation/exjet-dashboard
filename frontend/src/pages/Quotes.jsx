@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, API_BASE } from '../lib/api';
 import FlightsFilterBar from '../components/FlightsFilterBar';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 const money = (n) => n == null ? '—' : '$' + Number(n).toLocaleString('en-US');
 
 export default function Quotes() {
+  const { isPhone } = useBreakpoint();
   const [rows, setRows] = useState([]);
   const [visible, setVisible] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +121,7 @@ export default function Quotes() {
   const shownRows = searching ? legsForFilter : visible;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: isPhone ? 'auto' : 'calc(100vh - 90px)' }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Quotes</h1>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '2px 0 10px' }}>
@@ -137,8 +139,8 @@ export default function Quotes() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', flexDirection: isPhone ? 'column-reverse' : 'row', gap: 16, flex: isPhone ? 'initial' : 1, minHeight: isPhone ? 'auto' : 0 }}>
+        <div style={{ flex: isPhone ? 'none' : 1, height: isPhone ? '70vh' : undefined, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {sel ? (
             <>
               <div style={{ display: 'flex', gap: 8, padding: 10, borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -168,7 +170,7 @@ export default function Quotes() {
           ) : <div style={{ margin: 'auto', color: 'var(--text-secondary)' }}>Select a quote to preview</div>}
         </div>
 
-        <div style={{ flex: '0 0 380px', overflowY: 'auto' }}>
+        <div style={{ flex: isPhone ? 'none' : '0 0 380px', width: isPhone ? '100%' : undefined, overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sort</span>
             {[['date', 'Date'], ['quote', 'Quote #']].map(([k, label]) => (

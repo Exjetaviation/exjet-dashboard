@@ -1,6 +1,7 @@
 // frontend/src/components/TopNav.jsx
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import logo from '../assets/logo.png';
 
 // Global top-level tabs: switch between the existing Dashboard and the separate
 // Scheduling page. Rendered at the top of both layouts.
@@ -19,7 +20,7 @@ export default function TopNav({ compact = false, onMenu }) {
         display: 'flex', alignItems: 'center', gap: 8,
         borderBottom: '1px solid var(--border)', marginBottom: 16, paddingBottom: 8,
       }}>
-        <strong style={{ fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>Exjet</strong>
+        <img src={logo} alt="Exjet Aviation" style={{ height: 26, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
         <div style={{ flex: 1 }} />
         <button onClick={onMenu} aria-label="Open menu" style={{
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,

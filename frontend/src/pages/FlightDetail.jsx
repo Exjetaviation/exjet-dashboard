@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import DivertModal from '../components/DivertModal';
 import { apiFetch, API_BASE } from '../lib/api';
 import ItinerarySendModal from '../components/ItinerarySendModal';
@@ -44,6 +45,7 @@ const formatDateTime = (ms) => {
 export default function FlightDetail() {
   const { state } = useLocation();
   const navigate = useNavigate();
+  const { isPhone } = useBreakpoint();
 
   const leg = state?.leg;
 
@@ -148,7 +150,7 @@ export default function FlightDetail() {
       {aiOpen && <AgentReviewPanel flight={aiFlight} onClose={() => setAiOpen(false)} />}
       {showDivert && <DivertModal leg={leg} onClose={() => setShowDivert(false)} onSaved={() => setDiverted(true)} />}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px', flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/flights')} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>
           ← Flights
         </button>
@@ -217,7 +219,7 @@ export default function FlightDetail() {
         arrLabel={arrLabel}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: '20px' }}>
 
         <div>
           <Section title="Flight Info">

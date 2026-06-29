@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const DUTY_TYPE = {
   3: { label: 'Flight Duty', color: '#4f8ef7' },
@@ -32,6 +33,7 @@ const getTotalMins = (duties) =>
 export default function CrewDetail() {
   const { state } = useLocation();
   const navigate = useNavigate();
+  const { isPhone } = useBreakpoint();
 
   const pilot = state?.pilot;
   const allDuty = state?.dutyTimes || [];
@@ -61,7 +63,7 @@ export default function CrewDetail() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px', flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/crew')} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 14px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}>
           ← Crew
         </button>
@@ -103,7 +105,7 @@ export default function CrewDetail() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 2fr', gap: '20px' }}>
         <div>
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
@@ -159,7 +161,8 @@ export default function CrewDetail() {
               No duty times recorded this month
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <div className="scroll-x">
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: 520 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                   {['Date', 'Type', 'Aircraft / Airport', 'Start', 'End', 'Duration'].map(h => (
@@ -205,6 +208,7 @@ export default function CrewDetail() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
