@@ -5,7 +5,7 @@ import * as lf from '../services/levelflight.js';
 import { queryTrack, queryRecentTrails, getLastPositions } from '../services/adsbStore.js';
 import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsbTrack.js';
 import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
-import { getLegActualsInRange, recordDivert } from '../services/legActualsStore.js';
+import { getLegActualsInRange, recordDivert, clearDivert } from '../services/legActualsStore.js';
 import { canEditScheduling } from '../scheduling/canEdit.js';
 
 const router = express.Router();
@@ -95,6 +95,20 @@ router.post('/legs/:legId/divert', async (req, res) => {
       registration: registration ?? null,
     });
     if (!ok) return res.status(500).json({ error: 'could not record divert (is migration 023 applied?)' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/adsb/legs/:legId/divert — remove a diversion mark. Editor-gated.
+router.delete('/legs/:legId/divert', async (req, res) => {
+  try {
+    if (!canEditScheduling(req.user?.role)) return res.status(403).json({ error: 'forbidden' });
+    const { legId } = req.params;
+    if (!legId) return res.status(400).json({ error: 'legId is required' });
+    const ok = await clearDivert(legId);
+    if (!ok) return res.status(500).json({ error: 'could not clear divert' });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

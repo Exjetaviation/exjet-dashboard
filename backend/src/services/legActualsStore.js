@@ -83,6 +83,20 @@ export async function recordDivert(legId, { divertedToIcao, note = null, status 
   } catch (e) { console.warn('[legActualsStore] recordDivert error (soft):', e?.message || e); return false; }
 }
 
+// Remove a diversion mark from a leg (nulls the divert columns). No-op if the row or
+// columns don't exist. Soft-fails.
+export async function clearDivert(legId) {
+  const client = getClient();
+  if (!client || !legId) return null;
+  try {
+    const { error } = await client.from('leg_actuals')
+      .update({ actual_arr_icao: null, divert_note: null, divert_status: null, updated_at: new Date().toISOString() })
+      .eq('leg_id', legId);
+    if (error) { console.warn('[legActualsStore] clearDivert failed (soft):', error.message); return false; }
+    return true;
+  } catch (e) { console.warn('[legActualsStore] clearDivert error (soft):', e?.message || e); return false; }
+}
+
 // Which of `legIds` already have a stored row. Set (empty on soft-fail). Lets the
 // backfill skip legs the live recorder already captured.
 export async function getLegIdsWithActuals(legIds) {
