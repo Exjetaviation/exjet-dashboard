@@ -908,7 +908,7 @@ useEffect(() => {
                         })()}
                         {/* ADS-B "looks diverted" alert — click to mark (modal prefilled with the nearby airport) */}
                         {possibleDivert&&actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setDivertSuggest(la.nearestIcao);setDivertLeg(leg);}} title={`Last seen near ${la.nearestIcao}, not ${leg.arrival?.airport} — possible diversion. Click to mark.`}
-                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP-9,zIndex:11,fontSize:'9px',fontWeight:'700',color:'#1a1a1a',background:'#f59e0b',borderRadius:'3px',padding:'0 4px',cursor:'pointer',whiteSpace:'nowrap',boxShadow:'0 1px 3px rgba(0,0,0,0.45)'}}>⚠ {la.nearestIcao}?</div>}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP+2,zIndex:12,fontSize:'9px',fontWeight:'700',color:'#1a1a1a',background:'#f59e0b',borderRadius:'3px',padding:'1px 4px',cursor:'pointer',whiteSpace:'nowrap',boxShadow:'0 1px 3px rgba(0,0,0,0.45)'}}>⚠ {la.nearestIcao}?</div>}
                         {/* Live in-flight: plane just to the RIGHT of the now-bar, leading the growing actual bar */}
                         {actBlk&&isAirborne&&act.actualArr==null&&<div style={{position:'absolute',left:nowPx+3,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.5)-11,zIndex:10,pointerEvents:'none',fontSize:'22px',lineHeight:1,color:'#22c55e',textShadow:'0 0 6px rgba(0,0,0,0.9)'}}>✈</div>}
                       </React.Fragment>
