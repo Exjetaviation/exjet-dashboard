@@ -162,6 +162,26 @@ router.get('/previous-flights', async (req, res) => {
         return { legId: leg.id, from: leg.from, to: leg.to, depTime: leg.depTime, arrTime: leg.arrTime, tripId: leg.tripId, track };
       });
 
+    // Apply diversion marks: a diverted leg landed at C, not its scheduled arrival.
+    // Relabel "→ C" and END the track at C — the raw track trails off where ADS-B
+    // coverage was lost (often over water), which read as "the flight ended in the ocean".
+    try {
+      const rows = await getLegActualsInRange(new Date(windowStart - 86400000).toISOString(), endIso);
+      const divertByLeg = {};
+      for (const r of rows) if (r.actual_arr_icao) divertByLeg[r.leg_id] = r.actual_arr_icao;
+      for (const f of flights) {
+        const icao = divertByLeg[f.legId];
+        if (!icao) continue;
+        f.to = icao;
+        f.diverted = true;
+        const c = airportCoords(icao);
+        if (c) {
+          const last = f.track?.[f.track.length - 1];
+          if (!last || last[0] !== c.lat || last[1] !== c.lng) f.track = [...(f.track || []), [c.lat, c.lng]];
+        }
+      }
+    } catch { /* soft: leave scheduled labels/tracks */ }
+
     res.json({ tail, days, flights });
   } catch (e) {
     res.status(500).json({ error: e?.message || 'previous-flights failed', flights: [] });
