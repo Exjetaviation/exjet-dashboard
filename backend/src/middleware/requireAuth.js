@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config();
+import { roleFromUser } from './role.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -36,7 +37,7 @@ export async function requireAuth(req, res, next) {
     req.user = {
       id: data.user.id,
       email: data.user.email,
-      role: data.user.user_metadata?.app_role || 'crew',
+      role: roleFromUser(data.user),
     };
     next();
   } catch (e) {
