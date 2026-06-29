@@ -9,23 +9,75 @@ the right credentials. **Do them in this order.**
 - You have Supabase project admin, Railway project access, and push rights.
 
 ## 1. Rotate the leaked Supabase keys (H3)
-The service-role key was committed in git history (`backend/.env`, commit
-`db03a3d`, reachable from `origin/main`). Treat it as compromised.
-1. Supabase Dashboard → Project Settings → API → roll the **service_role** key
-   and the **anon** key.
-2. Update **Railway** backend env: `SUPABASE_SERVICE_KEY` (= new service key),
-   `SUPABASE_ANON_KEY` (= new anon key).
-3. Update **Vercel** frontend env: `VITE_SUPABASE_ANON_KEY` (= new anon key).
-4. Redeploy backend (Railway) and frontend (Vercel). Verify login still works.
+The **service key** (full-access DB credential) was committed in git history
+(`backend/.env`, commit `db03a3d`). Treat it as compromised. Think of it as a
+leaked master key: cut a new one, give it to the app, then make the old one stop
+working.
 
-## 2. Purge the secret from git history (H3)
-Rotation makes the old key useless, but purge anyway (avoids leaking structure
-and any other historical values).
-1. `git clone --mirror git@github.com:Exjetaviation/exjet-dashboard.git` (fresh).
-2. `git filter-repo --path backend/.env --invert-paths` (or BFG:
-   `bfg --delete-files .env`).
-3. Force-push: `git push --force`.
-4. Tell every collaborator to re-clone (old clones still contain the secret).
+> Rotating these API keys does NOT log users out — sessions use the JWT signing
+> key, which we are not touching.
+
+> **THE ONE RULE (this is what caused the outage the first time):** put the new
+> key into Railway/Vercel and confirm the app works BEFORE disabling/deleting the
+> old key. New key in → test → THEN disable old. If you disable the old key while
+> the deployed app is still using it, the whole app goes down.
+
+> **DO NOT touch "JWT secret" / "JWT signing keys" (a Rotate button under
+> Settings → API).** Different switch — it WOULD log out every user. Not needed.
+
+> **The backend uses TWO keys, not one:** `requireAuth.js` uses an **anon** key
+> (to verify logins) and `services/supabase.js` uses the **service** key (for
+> data). So Railway needs BOTH updated — missing the anon key breaks login.
+
+### A. Replace the backend (service) key — urgent
+1. supabase.com → project → **Settings → API Keys** → create a **new Secret key**
+   (`sb_secret_…`). It bypasses RLS like the old service_role, so migration `024`
+   still holds.
+2. **Railway** → backend → **Variables** → set BOTH:
+   - `SUPABASE_SERVICE_KEY` = new Secret key
+   - `SUPABASE_ANON_KEY` = new Publishable key (from step B)
+   Save → auto-redeploys.
+3. Wait for redeploy, open the dashboard app, confirm data loads.
+4. **Only then:** Supabase → disable/delete the old service_role / legacy keys.
+
+### B. Replace the website (anon) key — defense in depth
+1. Supabase → **API Keys** → create a **new Publishable key** (`sb_publishable_…`).
+2. **Vercel** → project → **Settings → Environment Variables** →
+   `VITE_SUPABASE_ANON_KEY` = new Publishable key → save → redeploy.
+3. Confirm you can still log in.
+4. Then disable the old anon key.
+
+`SUPABASE_URL` / `VITE_SUPABASE_URL` do not change.
+
+### Fallback — older "legacy keys only" dashboard
+If **Settings → API Keys** offers no Secret/Publishable keys (only an older
+anon/service_role screen with no individual revoke), the only way to kill the
+legacy key is to **roll the JWT secret** (Settings → API → JWT Settings). ⚠️ That
+regenerates both keys AND can log out all users. Prefer the new keys above.
+
+## 2. Purge the secret from git history (H3) — DONE 2026-06-29
+Rotation makes the old key useless, but we purged anyway. Steps used:
+1. Fresh `git clone --mirror …`.
+2. `git filter-repo --path backend/.env --invert-paths --force` (the single-file
+   script from github.com/newren/git-filter-repo; no install needed).
+3. Re-add origin (filter-repo drops it), then `git push --force --all` +
+   `git push --force --tags`. Rewrote all 4 origin branches.
+4. Resynced the local dev folder: reset `main` to the rewritten origin, deleted
+   stale local/remote-tracking branches, `git remote prune origin`, reflog
+   expire + `git gc --prune=now`. Verified `git log --all -- backend/.env` is
+   empty on both origin and locally.
+
+> ⚠️ **CAVEAT — GitHub PR refs.** A force-push does NOT remove commits referenced
+> by pull requests: `refs/pull/1..10/head` still pin the old pre-rewrite commits,
+> so the secret remains reachable via direct commit URLs / PR diffs (NOT via a
+> normal `git clone`). You can't delete `refs/pull/*` yourself; only GitHub
+> Support can GC them. **We accepted this residual exposure because the key is
+> already rotated/dead** — the historical credential is useless. If you ever need
+> it fully scrubbed, open a GitHub Support ticket: "remove cached views /
+> unreachable commits after a history rewrite (sensitive data in refs/pull/*)."
+
+> Anyone else with an old clone must re-clone — old clones still contain the
+> secret and have incompatible history.
 
 ## 3. Migrate roles to app_metadata — BEFORE deploying the H2 code change
 The backend now reads the role from `app_metadata.app_role`. Existing grants
