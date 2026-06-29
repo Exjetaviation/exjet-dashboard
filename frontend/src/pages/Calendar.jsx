@@ -189,6 +189,29 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const nowLineRef = useRef(null); // continuous now-line overlay (spans header + body)
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
 
+  // Fullscreen — native Fullscreen API on the calendar wrapper, with a CSS-maximize
+  // fallback (older browsers). Mirrors the Map fullscreen. In fullscreen all chrome is
+  // hidden and only ← Prev / Next → + an exit button remain.
+  const calWrapRef = useRef(null);
+  const [cssFs, setCssFs] = useState(false);   // CSS-maximize fallback when the API is unavailable
+  const [nativeFs, setNativeFs] = useState(false);
+  const isFs = nativeFs || cssFs;
+  const enterFs = () => {
+    const el = calWrapRef.current;
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => setCssFs(true));
+    else setCssFs(true);
+  };
+  const exitFs = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    setCssFs(false);
+  };
+  const toggleFs = () => (isFs ? exitFs() : enterFs());
+  useEffect(() => {
+    const onFs = () => setNativeFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
   // Phone agenda mode — defaulting ON, persisted in localStorage.
   const { isPhone } = useBreakpoint();
   const [agendaMode, setAgendaMode] = useState(() => {
@@ -507,9 +530,10 @@ useEffect(() => {
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:'14px',width:'100%',maxWidth:'100%',overflow:'hidden',boxSizing:'border-box'}}>
+    <div ref={calWrapRef} style={{display:'flex',flexDirection:'column',gap:'14px',width:'100%',maxWidth:'100%',overflow: isFs ? 'auto' : 'hidden',boxSizing:'border-box',...(isFs ? {background:'var(--bg-primary)',padding:'10px 14px',height: cssFs ? '100vh' : '100%'} : {}),...(cssFs ? {position:'fixed',inset:0,zIndex:9999} : {})}}>
 
-      {/* TOP BAR */}
+      {/* TOP BAR — hidden in fullscreen */}
+      {!isFs && (
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'10px'}}>
         <div>
           <h1 style={{fontSize:'22px',fontWeight:'600',color:'var(--text-primary)',margin:0}}>Operations Calendar</h1>
@@ -542,6 +566,10 @@ useEffect(() => {
             style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:sim?'#a855f7':'var(--bg-card)',color:sim?'#fff':'var(--text-secondary)',border:`1px solid ${sim?'#a855f7':'var(--border)'}`,borderRadius:'8px',cursor:'pointer'}}>
             {sim?'● Simulating':'Simulate fleet'}
           </button>
+          <button onClick={toggleFs} title="Fullscreen calendar (Esc to exit)"
+            style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:'var(--bg-card)',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:'8px',cursor:'pointer'}}>
+            ⛶ Fullscreen
+          </button>
           {/* Phone-only: switch back to agenda list view */}
           {isPhone && (
             <div style={{display:'flex',border:'1px solid var(--border)',borderRadius:'8px',overflow:'hidden'}}>
@@ -551,12 +579,17 @@ useEffect(() => {
           )}
         </div>
       </div>
+      )}
 
       {/* NAV ROW */}
       <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
         {navBtn('← Prev', continuous ? ()=>scrollByDay(-1) : ()=>setOffset(o=>o-1))}
         <span style={{fontSize:'13px',color:'var(--text-secondary)',flex:1,textAlign:'center'}}>{`${fmt(rangeStart)} — ${fmt(rangeEnd)}`}</span>
         {navBtn('Next →', continuous ? ()=>scrollByDay(1) : ()=>setOffset(o=>o+1))}
+        {isFs && (
+          <button onClick={exitFs} title="Exit fullscreen (Esc)"
+            style={{padding:'7px 12px',fontSize:'13px',background:'var(--bg-card)',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:'7px',cursor:'pointer'}}>⤢ Exit</button>
+        )}
       </div>
 
       {/* DAY DATES — a strip above the calendar, each date centered on its day-line
