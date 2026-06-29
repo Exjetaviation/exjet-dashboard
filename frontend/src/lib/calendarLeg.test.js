@@ -146,8 +146,19 @@ test('landedAtDestination: live on-ground at destination → true', () => {
   assert.equal(landedAtDestination(la, KHOU), true);
 });
 
-test('landedAtDestination: airborne fix → false', () => {
-  const la = { lat: 29.6454, lon: -95.2789, onGround: false };
+test('landedAtDestination: LIVE airborne fix → false (still flying)', () => {
+  const la = { lat: 29.6454, lon: -95.2789, onGround: false, stale: false };
+  assert.equal(landedAtDestination(la, KHOU), false);
+});
+
+test('landedAtDestination: STALE airborne fix ~2nm out on final → true (lost on approach = landed)', () => {
+  // The real KHOU case: last ADS-B fix airborne ~1.8nm from the field, then coverage dropped.
+  const la = { lat: 29.662388, lon: -95.259758, onGround: false, stale: true };
+  assert.equal(landedAtDestination(la, KHOU), true);
+});
+
+test('landedAtDestination: STALE airborne fix far from destination → false (lost mid-route)', () => {
+  const la = { lat: 30.5, lon: -95.0, onGround: false, stale: true }; // ~55nm away
   assert.equal(landedAtDestination(la, KHOU), false);
 });
 

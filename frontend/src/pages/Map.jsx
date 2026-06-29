@@ -7,6 +7,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import FlyingTimer from '../components/FlyingTimer';
 import { BASEMAP_URL, BASEMAP_OPTS, BASEMAP_CLASS } from '../lib/basemap';
+import { landedAtDestination } from '../lib/calendarLeg';
 
 const STATUS = {
   0: { color: '#4f8ef7', label: 'Scheduled' },
@@ -230,6 +231,12 @@ export default function FleetMap() {
       const stale = !!livePos.stale;
       const agoMin = stale && livePos.lastSeenMs ? Math.max(0, Math.round((Date.now() - livePos.lastSeenMs) / 60000)) : 0;
       const ago = agoMin >= 60 ? `${Math.floor(agoMin / 60)}h ${agoMin % 60}m ago` : `${agoMin}m ago`;
+      // A SETTLED last fix (on the ground, OR stale = coverage lost) within a few nm of
+      // the leg's scheduled arrival ⇒ it landed there, even when ADS-B dropped it on short
+      // final without an on-ground tick. Label "On ground at <icao>" rather than the vague
+      // "last seen near", which reads as uncertain for a jet that has clearly arrived.
+      const landed = landedAtDestination(livePos, ac.currentLeg?._calc?.to?.location);
+      const landedIcao = ac.airport || livePos.nearestIcao;
       return {
         ...ac,
         position: { lat: markerLat, lng: markerLng },
@@ -240,15 +247,12 @@ export default function FleetMap() {
         // arrival). (Phase 2c will resolve the nearest airport.)
         airport: stale ? null : ac.airport,
         currentLeg: stale ? null : ac.currentLeg,
-        // A stale fix that's on the ground is PARKED at that airport — say so plainly
-        // ("On ground at KHOU") rather than the vaguer "last seen near", which reads as
-        // uncertain. A stale airborne fix keeps "last seen near" (it was mid-air).
-        statusLabel: stale
-          ? (livePos.onGround
-              ? `On ground${livePos.nearestIcao ? ` at ${livePos.nearestIcao}` : ''} · ${ago}`
-              : `Last seen · ${ago}${livePos.nearestIcao ? ` · near ${livePos.nearestIcao}` : ''}`)
-          : (livePos.onGround ? 'On Ground · live' : 'In Flight · live'),
-        statusColor: stale ? '#94a3b8' : (livePos.onGround ? '#22c55e' : '#f59e0b'),
+        statusLabel: landed
+          ? `On ground at ${landedIcao}${stale ? ` · ${ago}` : ''}`
+          : (stale
+              ? `Last seen · ${ago}${livePos.nearestIcao ? ` · near ${livePos.nearestIcao}` : ''}`
+              : (livePos.onGround ? 'On Ground · live' : 'In Flight · live')),
+        statusColor: landed ? '#22c55e' : (stale ? '#94a3b8' : (livePos.onGround ? '#22c55e' : '#f59e0b')),
         track: livePos.track,
         live: livePos,
         source: stale ? 'stale' : 'adsb',

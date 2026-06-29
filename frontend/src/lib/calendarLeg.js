@@ -52,20 +52,26 @@ export function nmBetween(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-// How close (nm) an on-ground fix must be to the scheduled arrival airport to
-// count as "landed there" — covers the airport footprint + FBO ramp.
-export const ARR_CONFIRM_NM = 5;
+// How close (nm) a settled fix must be to the scheduled arrival airport to count
+// as "landed there" — wide enough to catch a last fix on short final (ADS-B
+// routinely drops the jet a few nm out, low, before touchdown) yet tight enough
+// that a divert to another field, or signal lost mid-cruise, doesn't qualify.
+export const ARR_CONFIRM_NM = 10;
 
 // A departed leg has effectively LANDED at its scheduled arrival when the
-// aircraft's current OR last-known ADS-B fix shows it on the ground within a few
-// nm of that airport. This rescues the common case where ADS-B never logged the
-// exact air→ground touchdown tick (so no actual_arr was recorded) yet the jet is
-// plainly parked at the destination — without it the leg would show an alarming
-// amber "unconfirmed" bar until crew log OOOI block times or the hourly backfill.
+// aircraft's last ADS-B fix is SETTLED near that airport. "Settled" = on the
+// ground, OR stale (we lost coverage) — because losing the signal on short final
+// into the destination means it landed there. A LIVE airborne fix is still
+// flying and does NOT qualify. This rescues the common case where ADS-B never
+// logged the exact air→ground touchdown (so no actual_arr was recorded) yet the
+// jet is at/over the destination — without it the leg shows an alarming amber
+// "unconfirmed" bar until crew log OOOI block times or the hourly backfill.
 // `la` = the /positions entry for the tail ({lat, lon, onGround, stale?}).
 // `arrLoc` = the scheduled arrival airport coords ({lat, lng}).
 export function landedAtDestination(la, arrLoc, maxNm = ARR_CONFIRM_NM) {
-  if (!la || la.onGround !== true) return false;
+  if (!la) return false;
+  const settled = la.onGround === true || la.stale === true;
+  if (!settled) return false;            // live & airborne ⇒ still flying
   if (!arrLoc || arrLoc.lat == null || la.lat == null) return false;
   const d = nmBetween(la.lat, la.lon, arrLoc.lat, arrLoc.lng);
   return d != null && d <= maxNm;
