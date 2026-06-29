@@ -31,7 +31,7 @@ export default function FleetComponents() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Link
             to={base}
@@ -59,7 +59,8 @@ export default function FleetComponents() {
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No components found.</p>
       ) : (
         <div style={card}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <div className="scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 700 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Tail / Aircraft', 'Type', 'Serial', 'Model', 'Manufacturer', 'Note', 'Total Hrs', 'Total Cycles'].map((h) => (
@@ -88,6 +89,7 @@ export default function FleetComponents() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

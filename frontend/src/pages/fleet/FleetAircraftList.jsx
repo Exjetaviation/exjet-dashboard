@@ -55,9 +55,9 @@ export default function FleetAircraftList({ basePath = '/fleet' }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Fleet Aircraft</h1>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Link to={`${basePath}/components`} style={btnSec}>Components</Link>
           <button onClick={() => setShowAddModal(true)} style={btnSec}>
             + Add Aircraft
@@ -88,7 +88,8 @@ export default function FleetAircraftList({ basePath = '/fleet' }) {
         </p>
       ) : (
         <div style={{ ...card, overflow: 'hidden', padding: 0 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div className="scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 480 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Tail', 'Type', 'Base', 'Seats', 'Status'].map((h) => (
@@ -124,6 +125,7 @@ export default function FleetAircraftList({ basePath = '/fleet' }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

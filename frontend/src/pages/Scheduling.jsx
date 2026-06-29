@@ -33,7 +33,8 @@ export default function Scheduling() {
     <button onClick={() => selectSection(id)}
       style={{ padding: '8px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: 'none', border: 'none',
         color: section === id ? 'var(--accent)' : 'var(--text-secondary)',
-        borderBottom: section === id ? '2px solid var(--accent)' : '2px solid transparent' }}>
+        borderBottom: section === id ? '2px solid var(--accent)' : '2px solid transparent',
+        whiteSpace: 'nowrap', flexShrink: 0 }}>
       {label}
     </button>
   );
@@ -49,7 +50,7 @@ export default function Scheduling() {
           style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New Quote</button>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 16, overflowX: 'auto', flexWrap: 'nowrap' }}>
         <SectionTab id="overview" label="Overview" />
         <SectionTab id="schedule" label="Schedule" />
         <SectionTab id="quotes" label="Quotes" />

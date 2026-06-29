@@ -84,7 +84,8 @@ export default function FuelPrices() {
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 10 }}>Recent imports</div>
         {imports.length ? (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
             <thead><tr><th style={th}>Vendor</th><th style={th}>File</th><th style={th}>Rows</th><th style={th}>Effective</th><th style={th}>Status</th><th style={th}>Imported</th></tr></thead>
             <tbody>
               {imports.map((im) => (
@@ -99,6 +100,7 @@ export default function FuelPrices() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No imports yet. Run a scan, or wait for the weekly worker.</p>}
       </div>
 
@@ -109,7 +111,8 @@ export default function FuelPrices() {
           <button onClick={lookup} disabled={lookingUp} style={{ ...primaryBtn, background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>{lookingUp ? 'Looking up…' : 'Look up'}</button>
         </div>
         {prices != null && (prices.length ? (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
             <thead><tr><th style={th}>Vendor</th><th style={th}>FBO</th><th style={th}>Fuel</th><th style={th}>Tier (gal)</th><th style={th}>Price</th><th style={th}>Total</th><th style={th}>Exp</th></tr></thead>
             <tbody>
               {prices.map((p, i) => (
@@ -125,6 +128,7 @@ export default function FuelPrices() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No prices stored for that airport yet.</p>)}
       </div>
     </div>

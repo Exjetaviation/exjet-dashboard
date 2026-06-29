@@ -99,7 +99,7 @@ export default function Maintenance() {
         {events.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>No maintenance events scheduled</div>
         ) : events.map(ev => (
-          <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: typeColor(ev.type), flexShrink: 0 }} />
             <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent)', width: '70px' }}>{ev.aircraft_tail}</span>
             <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1 }}>{ev.title}</span>
