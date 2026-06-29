@@ -26,12 +26,10 @@ function dayHeader(dayTs, todayMid) {
  * Props:
  *   legs            – same legs array Calendar renders
  *   actuals         – actuals map keyed by leg._id.$oid
- *   live            – ADS-B positions (passed through; airborne logic uses isAirborneForLeg)
- *   tripBasePath    – prop forwarded from Calendar (unused here; reserved for context)
  *   onOpenLeg(leg)  – tap handler; navigates to the leg's detail page
  *   isAirborneForLeg(leg) → boolean – Calendar's own airborne determination
  */
-export default function CalendarAgenda({ legs, actuals, live, tripBasePath, onOpenLeg, isAirborneForLeg }) {
+export default function CalendarAgenda({ legs, actuals, onOpenLeg, isAirborneForLeg }) {
   const now = Date.now();
   const todayMid = floorDay(now);
 

@@ -483,32 +483,21 @@ useEffect(() => {
   // falls through to the Gantt below. Placed AFTER all hooks so React rules
   // are satisfied.
   if (isPhone && agendaMode) {
-    const AgendaToggle = () => (
-      <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-        <button
-          onClick={() => setAgendaMode(true)}
-          style={{ padding: '7px 16px', fontSize: '13px', border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', fontWeight: '600' }}>
-          List
-        </button>
-        <button
-          onClick={() => setAgendaMode(false)}
-          style={{ padding: '7px 16px', fontSize: '13px', border: 'none', cursor: 'pointer', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontWeight: '400' }}>
-          Gantt
-        </button>
-      </div>
-    );
     return (
       <div style={{ width: '100%', boxSizing: 'border-box' }}>
-        {/* Compact header */}
+        {/* Compact header with the List/Gantt toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0 }}>Calendar</h1>
-          <AgendaToggle />
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <button onClick={() => setAgendaMode(true)}
+              style={{ padding: '7px 16px', fontSize: '13px', border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', fontWeight: '600' }}>List</button>
+            <button onClick={() => setAgendaMode(false)}
+              style={{ padding: '7px 16px', fontSize: '13px', border: 'none', cursor: 'pointer', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontWeight: '400' }}>Gantt</button>
+          </div>
         </div>
         <CalendarAgenda
           legs={legs}
           actuals={actuals}
-          live={live}
-          tripBasePath={tripBasePath}
           onOpenLeg={onOpenLeg}
           isAirborneForLeg={isAirborneForLeg}
         />
