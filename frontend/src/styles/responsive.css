@@ -1,5 +1,8 @@
 /* frontend/src/styles/responsive.css
-   ALL rules are scoped to < 1024px. Desktop (>= 1024px) is never affected. */
+   Every rule that changes how something looks (padding, font-size, touch
+   targets, visibility) is gated to < 1024px, so desktop (>= 1024px) rendering
+   is never altered. The only ungated rules are inert layout utilities
+   (.scroll-x) and phone/desktop visibility toggles that nothing uses yet. */
 
 /* Step page padding down below desktop. */
 @media (max-width: 1023px) {

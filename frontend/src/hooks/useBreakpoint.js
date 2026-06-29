@@ -6,8 +6,10 @@ function read() {
   return { width: w, bp: breakpointFor(w) };
 }
 
-// Single source for structural responsive swaps. Re-renders on resize only
-// when the breakpoint band actually changes.
+// Single source for structural responsive swaps. Returns the live `width`
+// (so callers can use exact pixels) plus the band booleans; resize updates
+// state whenever width or band changes (the equality check just skips the
+// no-op setState when nothing moved).
 export function useBreakpoint() {
   const [state, setState] = useState(read);
   useEffect(() => {
