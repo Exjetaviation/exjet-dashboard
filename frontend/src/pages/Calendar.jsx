@@ -7,7 +7,11 @@ import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib
 import { easternParts, zuluParts } from '../lib/easternTime';
 import { groupDutiesByStart } from '../lib/dutyGroups';
 import DivertModal from '../components/DivertModal';
-const STATUS = { 0:{label:'Scheduled'},1:{label:'Active'},2:{label:'Booked'},3:{label:'Completed'} };
+import { STATE_COLORS, STATUS, arrShown, legStateColor, floorDay } from '../lib/calendarLeg';
+import { useBreakpoint } from '../hooks/useBreakpoint';
+import CalendarAgenda from '../components/CalendarAgenda';
+// STATUS, STATE_COLORS, arrShown, legStateColor, and floorDay are imported from
+// ../lib/calendarLeg (shared with CalendarAgenda).
 const VIEWS = {
   '12h': { label:'12 hr', colMs:3600000,  cols:12,  baseColW:160, stepMs:43200000    },
   day:   { label:'Day',   colMs:3600000,  cols:24,  baseColW:80,  stepMs:86400000    },
@@ -18,33 +22,6 @@ const VIEWS = {
 // Day / 12h are CONTINUOUS: instead of paging one day at a time, the timeline spans
 // every flight (earliest → latest, always including today) and you scroll straight
 // through it — no per-day reload. See the range computation in the component.
-
-// Block colour by flight STATE (uses actuals when known): completed/landed = blue,
-// in-flight = green, future/not-yet-departed = grey.
-const STATE_COLORS = { completed:'#4f8ef7', inflight:'#22c55e', future:'#64748b' };
-// Whether to TRUST/show an actual arrival: present, and not before a known departure
-// (arr <= dep = corrupt → ignore). An arrival with NO recorded departure is still valid
-// — ADS-B routinely misses the wheels-up — so a flight that lands without a captured
-// takeoff still renders (scheduled departure as the bar start) instead of vanishing on
-// landing. (The backend matcher's coherentArrival stays stricter on purpose.)
-const arrShown = (dep, arr) => arr != null && (dep == null || arr > dep);
-function legStateColor(leg, isAirborne, act, now) {
-  const dep = leg?.departure?.time, arr = leg?.arrival?.time;
-  const aDep = act?.actualDep ?? null;
-  const aArr = arrShown(act?.actualDep, act?.actualArr) ? act.actualArr : null; // ignore only corrupt arrivals (arr<=dep)
-  if (isAirborne) return STATE_COLORS.inflight;                                   // ADS-B says airborne
-  if (aArr != null) return aArr <= now ? STATE_COLORS.completed : STATE_COLORS.inflight; // truly landed
-  if (aDep != null) {
-    // Departed but no coherent arrival: in-flight, never "complete" on a corrupt
-    // arrival. Assume landed only well past schedule (ADS-B missed the arrival).
-    return (arr != null && now > arr + 3 * 3600000) ? STATE_COLORS.completed : STATE_COLORS.inflight;
-  }
-  // No actual departure recorded → fall back to the schedule clock.
-  if (dep != null && dep > now) return STATE_COLORS.future;                       // not yet departed
-  if (dep != null && arr != null && dep <= now && now < arr) return STATE_COLORS.inflight; // mid-flight by clock
-  if (arr != null && arr <= now) return STATE_COLORS.completed;
-  return STATE_COLORS.future;
-}
 // Row geometry — derived top-down so every row is uniform and nothing floats:
 //   ┌───────────────────────────┐  y=0
 //   │ ······· (13px gap) ······· │
@@ -71,7 +48,7 @@ const darken = (hex, f=0.55) => {
   const r = Math.round(((n>>16)&255)*f), g = Math.round(((n>>8)&255)*f), b = Math.round((n&255)*f);
   return `#${((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1)}`;
 };
-const floorDay  = ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
+// floorDay is imported from ../lib/calendarLeg.
 // The calendar reads in Eastern (operator home base). Flight times are shown in
 // ET, with each airport's local time alongside (LevelFlight gives us the airport
 // timezone in leg._calc.from/to.timezone) so a near-midnight departure in another
@@ -211,6 +188,16 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const dayFocusRef = useRef(null); // Day view: which day's 00:00 sits at the left edge (null = today)
   const nowLineRef = useRef(null); // continuous now-line overlay (spans header + body)
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
+
+  // Phone agenda mode — defaulting ON, persisted in localStorage.
+  const { isPhone } = useBreakpoint();
+  const [agendaMode, setAgendaMode] = useState(() => {
+    const s = localStorage.getItem('cal_agenda_mode');
+    return s === null ? true : s === '1';
+  });
+  useEffect(() => {
+    localStorage.setItem('cal_agenda_mode', agendaMode ? '1' : '0');
+  }, [agendaMode]);
 
   const cfg = VIEWS[view];
   const continuous = view === 'day' || view === '12h'; // continuous-scroll views
@@ -481,6 +468,55 @@ useEffect(() => {
     <button onClick={onClick} style={{padding:'7px 12px',fontSize:'13px',background:'var(--bg-card)',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:'7px',cursor:'pointer'}}>{label}</button>
   );
 
+  // Shared helpers for the agenda view — reuse Calendar's own airborne detection and
+  // navigation logic so the two views stay in perfect sync.
+  const isAirborneForLeg = leg =>
+    !!leg._id?.$oid && airborneLegId[leg.dispatch?.aircraft?.tailNumber] === leg._id?.$oid;
+  const onOpenLeg = leg => {
+    tripBasePath
+      ? navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`)
+      : navigate(`/flights/${leg._id?.$oid}`, { state: { leg } });
+  };
+
+  // ─── Phone agenda early return ───────────────────────────────────────────
+  // Rendered ONLY on phone (<768 px) in agenda mode. Tablet/desktop always
+  // falls through to the Gantt below. Placed AFTER all hooks so React rules
+  // are satisfied.
+  if (isPhone && agendaMode) {
+    const AgendaToggle = () => (
+      <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        <button
+          onClick={() => setAgendaMode(true)}
+          style={{ padding: '7px 16px', fontSize: '13px', border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', fontWeight: '600' }}>
+          List
+        </button>
+        <button
+          onClick={() => setAgendaMode(false)}
+          style={{ padding: '7px 16px', fontSize: '13px', border: 'none', cursor: 'pointer', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontWeight: '400' }}>
+          Gantt
+        </button>
+      </div>
+    );
+    return (
+      <div style={{ width: '100%', boxSizing: 'border-box' }}>
+        {/* Compact header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text-primary)', flex: 1, margin: 0 }}>Calendar</h1>
+          <AgendaToggle />
+        </div>
+        <CalendarAgenda
+          legs={legs}
+          actuals={actuals}
+          live={live}
+          tripBasePath={tripBasePath}
+          onOpenLeg={onOpenLeg}
+          isAirborneForLeg={isAirborneForLeg}
+        />
+      </div>
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'14px',width:'100%',maxWidth:'100%',overflow:'hidden',boxSizing:'border-box'}}>
 
@@ -517,6 +553,13 @@ useEffect(() => {
             style={{padding:'7px 16px',fontSize:'13px',fontWeight:'600',background:sim?'#a855f7':'var(--bg-card)',color:sim?'#fff':'var(--text-secondary)',border:`1px solid ${sim?'#a855f7':'var(--border)'}`,borderRadius:'8px',cursor:'pointer'}}>
             {sim?'● Simulating':'Simulate fleet'}
           </button>
+          {/* Phone-only: switch back to agenda list view */}
+          {isPhone && (
+            <div style={{display:'flex',border:'1px solid var(--border)',borderRadius:'8px',overflow:'hidden'}}>
+              <button onClick={()=>setAgendaMode(true)} style={{padding:'7px 14px',fontSize:'13px',border:'none',cursor:'pointer',background:'var(--bg-card)',color:'var(--text-secondary)',fontWeight:'400'}}>List</button>
+              <button onClick={()=>setAgendaMode(false)} style={{padding:'7px 14px',fontSize:'13px',border:'none',cursor:'pointer',background:'var(--accent)',color:'#fff',fontWeight:'600'}}>Gantt</button>
+            </div>
+          )}
         </div>
       </div>
 
