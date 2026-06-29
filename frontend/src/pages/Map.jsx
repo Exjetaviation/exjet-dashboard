@@ -322,6 +322,10 @@ export default function FleetMap() {
     Object.entries(trails || {}).forEach(([tail, pts]) => {
       if (!pts || pts.length < 2) return;
       const ac = aircraft.find(a => a.tail === tail);
+      // A marked-diverted plane is parked at C; its recent trail is whatever it did
+      // AFTER (e.g. a later test hop), not the diversion — so don't draw it (it reads
+      // as "the diverted flight path"). Just the red "Diverted · C" marker remains.
+      if (ac?.source === 'diverted') return;
       const color = ac?.statusColor || '#4f8ef7';
       L.polyline(pts, { color, weight: 2.5, opacity: 0.65 }).addTo(layer);
     });
