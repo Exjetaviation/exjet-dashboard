@@ -14,14 +14,17 @@ router.get('/auth-url', (req, res) => {
   res.json({ url: getAuthUrl() });
 });
 
-router.get('/auth-callback', async (req, res) => {
+// Gmail OAuth redirect target. Mounted as a single PUBLIC exact-path route in
+// index.js (Google cannot send a login token). It must NOT be part of the
+// guarded quotes router's surface — see audit finding C2. Behavior unchanged.
+export async function gmailOauthCallback(req, res) {
   try {
     const tokens = await getTokensFromCode(req.query.code);
     res.json({ tokens, message: 'Copy the refresh_token to your .env as GMAIL_REFRESH_TOKEN' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}
 
 router.post('/scan', async (req, res) => {
   try {
