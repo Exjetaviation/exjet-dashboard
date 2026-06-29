@@ -7,7 +7,7 @@ import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsb
 import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
 import { getLegActualsInRange, recordDivert, clearDivert } from '../services/legActualsStore.js';
 import { canEditScheduling } from '../scheduling/canEdit.js';
-import { nearestAirport } from '../services/nearestAirport.js';
+import { nearestAirport, airportCoords } from '../services/nearestAirport.js';
 
 const router = express.Router();
 
@@ -68,8 +68,11 @@ router.get('/actuals', async (req, res) => {
         actualArr: r.actual_arr_time ? Date.parse(r.actual_arr_time) : null,
         depSource: r.dep_source || null,
         arrSource: r.arr_source || null,
-        // Diversion mark (migration 023; undefined pre-migration → null).
+        // Diversion mark (migration 023; undefined pre-migration → null). Resolve the
+        // divert airport's coords so the map can park the plane there (not its last fix).
         divertedTo: r.actual_arr_icao || null,
+        divertedToLat: r.actual_arr_icao ? (airportCoords(r.actual_arr_icao)?.lat ?? null) : null,
+        divertedToLng: r.actual_arr_icao ? (airportCoords(r.actual_arr_icao)?.lng ?? null) : null,
         divertNote: r.divert_note || null,
         divertStatus: r.divert_status || null,
       };

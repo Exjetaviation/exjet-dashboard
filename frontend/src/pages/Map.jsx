@@ -1,5 +1,6 @@
 import { useApi } from '../hooks/useApi';
 import { useAdsb, fetchPreviousFlights } from '../hooks/useAdsb';
+import { useLegActuals } from '../hooks/useLegActuals';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
@@ -190,9 +191,32 @@ export default function FleetMap() {
   const legs = data?.legs || [];
   const scheduled = getAircraftPositions(legs);
 
+  // Diversion marks: a plane that landed elsewhere should show AT the divert airport,
+  // not its last raw ADS-B fix (which can be mid-ocean if it lost coverage). Hour-rounded
+  // range keeps the poll stable. Build tail -> {icao,lat,lng} from the most-recent diverted leg.
+  const HOUR = 3600000;
+  const actTo = Math.ceil(Date.now() / HOUR) * HOUR + HOUR;
+  const actFrom = actTo - 5 * 86400000;
+  const { actuals: legActuals } = useLegActuals(actFrom, actTo);
+  const tailDivert = {};
+  for (const l of legs) {
+    const a = legActuals[l?._id?.$oid];
+    if (a?.divertedTo && a.divertedToLat != null && a.divertedToLng != null) {
+      const t = l?.dispatch?.aircraft?.tailNumber;
+      const dep = l?.departure?.time || 0;
+      if (t && (!tailDivert[t] || dep > tailDivert[t].dep)) tailDivert[t] = { icao: a.divertedTo, lat: a.divertedToLat, lng: a.divertedToLng, dep };
+    }
+  }
+
   // Live ADS-B wins; aircraft with no live position keep their scheduled-leg
   // position (parked / transponder off), so they still show at last airport.
   const aircraft = scheduled.map(ac => {
+    // A dispatcher-marked diversion is authoritative: park the plane at the divert
+    // airport, not its last (possibly mid-ocean) ADS-B fix.
+    const dv = tailDivert[ac.tail];
+    if (dv) {
+      return { ...ac, position: { lat: dv.lat, lng: dv.lng }, heading: 0, isFlying: false, airport: dv.icao, currentLeg: null, statusLabel: `Diverted · ${dv.icao}`, statusColor: '#ef4444', live: null, source: 'diverted' };
+    }
     // Prefer the live ADS-B fix; fall back to the scheduled-leg position.
     const livePos = live[ac.tail];
     const hasLive = !!(livePos && livePos.lat != null && livePos.lon != null);
@@ -346,7 +370,7 @@ export default function FleetMap() {
       const liveLine = ac.live && !ac.live.stale
         ? `<br/>${ac.live.altitudeFt != null ? `${ac.live.altitudeFt.toLocaleString()} ft` : '—'} · ${ac.live.groundSpeedKt != null ? `${Math.round(ac.live.groundSpeedKt)} kt` : '—'}${ac.live.callsign ? ` · ${ac.live.callsign}` : ''}`
         : '';
-      const srcLine = `<br/><span style="opacity:0.6">${ac.source === 'adsb' ? 'Live (ADS-B)' : ac.source === 'stale' ? 'Last known (ADS-B)' : 'Scheduled'}</span>`;
+      const srcLine = `<br/><span style="opacity:0.6">${ac.source === 'adsb' ? 'Live (ADS-B)' : ac.source === 'stale' ? 'Last known (ADS-B)' : ac.source === 'diverted' ? 'Diverted (marked)' : 'Scheduled'}</span>`;
       marker.bindTooltip(`<strong>${ac.tail}</strong><br/>${ac.statusLabel}${ac.airport ? ` · ${ac.airport}` : ''}${liveLine}${srcLine}`, {
         permanent: false,
         className: 'exjet-tooltip',

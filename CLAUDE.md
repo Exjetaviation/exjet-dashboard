@@ -431,7 +431,9 @@ without Supabase.
 - **Diversions** (migration `023`): a flight can land somewhere other than its scheduled arrival. A
   dispatcher marks it via `POST /api/adsb/legs/:legId/divert` (editor-gated → `legActualsStore.recordDivert`
   → `leg_actuals.actual_arr_icao`/`divert_note`/`divert_status`); `/actuals` returns `divertedTo`. The
-  calendar shows the leg's actual bar **red "⤳ C"** and parks the plane at C; `DivertModal.jsx` is opened
+  calendar shows the leg's actual bar **red "⤳ C"** and parks the plane at C; the **fleet map** parks a
+  diverted plane at C (red "Diverted · C") via `/actuals` `divertedToLat/Lng` (resolved from `airports.json`),
+  authoritative over its last raw ADS-B fix (which can be mid-ocean); `DivertModal.jsx` is opened
   from the calendar leg popover (Open / Mark diverted) and the flight-detail page. A departed-but-not-yet-
   confirmed leg (coverage gap, before any divert mark) shows the **amber dashed "unconfirmed"** bar.
   **ADS-B "looks diverted" alert:** `/positions` resolves each stale fix's `nearestIcao`
