@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
 import { apiFetch } from '../lib/api';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const FIELDS = [
   { key: 'aircraft_tail',        label: 'Tail Number',                  type: 'text',   placeholder: 'N69FP' },
@@ -29,6 +30,7 @@ const EMPTY = FIELDS.reduce((acc, f) => ({
 }), {});
 
 export default function RateCards() {
+  const { isPhone } = useBreakpoint();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -201,7 +203,7 @@ export default function RateCards() {
               <button onClick={cancel} style={{ background: 'none', border: 'none', fontSize: '20px', color: 'var(--text-secondary)', cursor: 'pointer' }}>✕</button>
             </div>
 
-            <div style={{ overflowY: 'auto', padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div style={{ overflowY: 'auto', padding: '20px', display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: '14px' }}>
               {FIELDS.map(f => (
                 <div key={f.key} style={f.key === 'notes' ? { gridColumn: '1 / -1' } : {}}>
                   <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>

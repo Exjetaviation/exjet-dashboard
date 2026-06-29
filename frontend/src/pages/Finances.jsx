@@ -1,5 +1,6 @@
 import React, { Fragment, useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const fmt  = (n) => `$${Math.round(n || 0).toLocaleString()}`;
 const fmtK = (n) => {
@@ -19,6 +20,7 @@ const plVal = (rows, group) => {
 const TABS = ['overview','monthly','expenses','clients','aircraft','trips'];
 
 export default function Finances() {
+  const { isPhone } = useBreakpoint();
   const [tab, setTab]           = useState('overview');
   const [summary, setSummary]   = useState(null);
   const [aircraft, setAircraft] = useState([]);
@@ -196,7 +198,7 @@ export default function Finances() {
     sub:   { fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' },
     tabs:  { display: 'flex', gap: '4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '10px', padding: '4px', flexWrap: 'wrap' },
     tab:   (a) => ({ padding: '7px 14px', fontSize: '13px', fontWeight: a ? '600' : '400', background: a ? 'var(--accent)' : 'transparent', color: a ? '#fff' : 'var(--text-secondary)', border: 'none', borderRadius: '7px', cursor: 'pointer' }),
-    grid:  (n) => ({ display: 'grid', gridTemplateColumns: `repeat(${n}, 1fr)`, gap: '14px' }),
+    grid:  (n) => ({ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : `repeat(${n}, 1fr)`, gap: '14px' }),
     card:  { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px 22px' },
     sec:   { marginTop: '22px' },
     stl:   { fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '10px' },
@@ -251,7 +253,7 @@ export default function Finances() {
       <div>
         <p style={s.stl}>{title} · {fmt(total)} total · as of {aging.asOf}</p>
         <div style={s.card}>
-          <div style={{ display: 'grid', gridTemplateColumns: '78px 1fr 120px', columnGap: 10, rowGap: 7, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '78px 1fr 120px', columnGap: 10, rowGap: 7, alignItems: 'center' }}>
             {BUCKETS.map(b => {
               const amt = aging.totals[b.key] || 0;
               const pct = total > 0 ? (amt / total) * 100 : 0;
@@ -373,7 +375,8 @@ export default function Finances() {
       <div style={{ ...s.sec }}>
         <p style={s.stl}>{title} · {fmtK(total)}</p>
         <div style={s.card}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '540px' }}>
             <thead>
               <tr>
                 <th style={s.th}>Category</th>
@@ -437,6 +440,7 @@ export default function Finances() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     );
@@ -503,7 +507,8 @@ export default function Finances() {
             <div style={s.sec}>
               <p style={s.stl}>Outstanding Invoices</p>
               <div style={s.card}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="scroll-x">
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '480px' }}>
                   <thead>
                     <tr>
                       <th style={s.th}>Invoice</th>
@@ -530,6 +535,7 @@ export default function Finances() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -543,14 +549,14 @@ export default function Finances() {
 
           {/* A/R + A/P aging side by side */}
           {(arAging || apAging) && (
-            <div style={{ ...s.sec, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div style={{ ...s.sec, display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: '14px' }}>
               <AgingPanel title="A/R Aging — what's owed to us" aging={arAging} nameLabel="Customers" emptyHint="No open invoices. Nothing outstanding." />
               <AgingPanel title="A/P Aging — what we owe vendors" aging={apAging} nameLabel="Vendors" emptyHint="No open bills." />
             </div>
           )}
 
           {/* Clients + Expenses side by side */}
-          <div style={{ ...s.sec, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div style={{ ...s.sec, display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: '14px' }}>
             <div>
               <p style={s.stl}>Top Clients</p>
               <div style={s.card}>
@@ -625,7 +631,8 @@ export default function Finances() {
           {/* Monthly table */}
           {revByMonth.length > 0 && (
             <div style={{ ...s.card, marginTop: '14px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="scroll-x">
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '380px' }}>
                 <thead>
                   <tr>
                     <th style={s.th}>Month</th>
@@ -657,6 +664,7 @@ export default function Finances() {
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -719,7 +727,8 @@ export default function Finances() {
               {clientList.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>No client data from QuickBooks.</p>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="scroll-x">
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '460px' }}>
                   <thead>
                     <tr>
                       <th style={{ ...s.th, width: '40px' }}>#</th>
@@ -743,6 +752,7 @@ export default function Finances() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>
@@ -831,7 +841,8 @@ export default function Finances() {
           <div style={{ marginTop: '16px' }}>
             <p style={s.stl}>Per-Trip P&L · QuickBooks ProfitAndLoss by Customer (Trip sub-customers)</p>
             <div style={s.card}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="scroll-x">
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
                 <thead>
                   <tr>
                     <th style={s.th}>Trip</th>
@@ -945,6 +956,7 @@ export default function Finances() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12, fontStyle: 'italic' }}>
               Each trip is a QB sub-customer (e.g. "Trip 25079"). Revenue / Costs are pulled from QB's ProfitAndLoss summarized by Customer — they include every transaction tagged to that sub-customer. "Planes outside of fleet" rolls up every parent customer billed directly without a trip sub-customer. Per-trip profit is shown only where the cost data is complete enough to compute it.

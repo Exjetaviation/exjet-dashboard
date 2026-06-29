@@ -64,7 +64,8 @@ export default function Clients() {
       </div>
 
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <div className="scroll-x">
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '520px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
               {['Client', 'Type', 'Legs', 'Last Flight', 'Routes', 'Score'].map(h => (
@@ -129,6 +130,7 @@ export default function Clients() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

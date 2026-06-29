@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import { useApi } from '../hooks/useApi';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const fmtDate = (ms) => {
   if (!ms) return '—';
@@ -12,6 +13,7 @@ const fmtTime = (ms) => {
 };
 
 export default function Overview() {
+  const { isPhone } = useBreakpoint();
   const { data: ffAircraft } = useApi('/api/foreflight/aircraft');
   const { data: ffCrew } = useApi('/api/foreflight/crew');
   const { data: lfLegs } = useApi('/api/levelflight/legs');
@@ -100,7 +102,7 @@ export default function Overview() {
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '160px 160px 1fr 1fr',
+                    gridTemplateColumns: isPhone ? '1fr' : '160px 160px 1fr 1fr',
                     alignItems: 'center',
                     gap: '12px',
                     padding: '12px 18px',

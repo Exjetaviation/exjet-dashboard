@@ -78,7 +78,7 @@ export default function ClientDetail() {
           <h2 style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Flight History</h2>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '620px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                 {['Date', 'Route', 'Aircraft', 'Flight Time', 'Pilots', 'Pax', 'Status'].map(h => (

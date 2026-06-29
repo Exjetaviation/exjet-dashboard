@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 export default function Aircraft() {
+  const { isPhone } = useBreakpoint();
   const { data: ffAircraft, loading } = useApi('/api/foreflight/aircraft');
   const { data: lfLegs } = useApi('/api/levelflight/legs');
   const navigate = useNavigate();
@@ -74,7 +76,7 @@ export default function Aircraft() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0', }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: '0', }}>
                   <div style={{ padding: '20px 24px', borderRight: '1px solid var(--border)' }}>
                     <p style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>Last Flight</p>
                     {last ? (
