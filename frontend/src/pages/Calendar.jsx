@@ -197,6 +197,7 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const [tipPos,setTipPos]     = useState({x:0,y:0});
   const [legMenu,setLegMenu]   = useState(null); // {leg,x,y} — leg-click popover (Open / Divert)
   const [divertLeg,setDivertLeg] = useState(null); // leg whose divert modal is open
+  const [divertSuggest,setDivertSuggest] = useState(null); // ICAO to prefill (from an ADS-B "looks diverted" alert)
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
   const [sim, setSim] = useState(false); // "Simulate fleet" — preview a busy 10-aircraft day (mock data)
   const [,forceTick] = useState(0);
@@ -879,6 +880,9 @@ useEffect(() => {
                     // completed flight (until the arrival backfills or a dispatcher marks a divert).
                     const unconfirmed=actBlk!=null&&act.actualDep!=null&&!isAirborne&&!arrShown(act.actualDep,act.actualArr);
                     const diverted=!!act.divertedTo; // dispatcher marked it landed elsewhere
+                    // ADS-B "looks diverted": departed, not confirmed landed, not already
+                    // marked, and the last-known (stale) fix's nearest airport ≠ scheduled arrival.
+                    const possibleDivert=unconfirmed&&!diverted&&la?.stale&&la.nearestIcao&&la.nearestIcao!==leg.arrival?.airport;
                     const open=e=>{e.stopPropagation();tripBasePath?navigate(`${tripBasePath}/${leg.dispatch?._id?.$oid}`):navigate(`/flights/${leg._id?.$oid}`,{state:{leg}});};
                     const legClick=e=>{e.stopPropagation();setLegMenu({leg,x:e.clientX,y:e.clientY});};
                     // hov/hovA fire on BOTH enter and move, so the tooltip mode always tracks
@@ -902,6 +906,9 @@ useEffect(() => {
                             <span style={{fontSize:'10px',fontWeight:'600',color:'#fff',whiteSpace:'nowrap',textShadow:'0 1px 1px rgba(0,0,0,0.35)'}}>{diverted?`⤳ ${act.divertedTo}`:`${origin}→${dest}`}</span>
                           </div>;
                         })()}
+                        {/* ADS-B "looks diverted" alert — click to mark (modal prefilled with the nearby airport) */}
+                        {possibleDivert&&actBlk&&<div onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setDivertSuggest(la.nearestIcao);setDivertLeg(leg);}} title={`Last seen near ${la.nearestIcao}, not ${leg.arrival?.airport} — possible diversion. Click to mark.`}
+                          style={{position:'absolute',left:actBlk.left+1,top:FLIGHT_TOP-9,zIndex:11,fontSize:'9px',fontWeight:'700',color:'#1a1a1a',background:'#f59e0b',borderRadius:'3px',padding:'0 4px',cursor:'pointer',whiteSpace:'nowrap',boxShadow:'0 1px 3px rgba(0,0,0,0.45)'}}>⚠ {la.nearestIcao}?</div>}
                         {/* Live in-flight: plane just to the RIGHT of the now-bar, leading the growing actual bar */}
                         {actBlk&&isAirborne&&act.actualArr==null&&<div style={{position:'absolute',left:nowPx+3,top:FLIGHT_TOP+Math.round(FLIGHT_H*0.5)-11,zIndex:10,pointerEvents:'none',fontSize:'22px',lineHeight:1,color:'#22c55e',textShadow:'0 0 6px rgba(0,0,0,0.9)'}}>✈</div>}
                       </React.Fragment>
@@ -1079,11 +1086,11 @@ useEffect(() => {
           <div onClick={()=>setLegMenu(null)} style={{position:'fixed',inset:0,zIndex:9998}}/>
           <div style={{position:'fixed',left:Math.min(legMenu.x,window.innerWidth-170),top:legMenu.y+8,zIndex:9999,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',boxShadow:'0 8px 24px rgba(0,0,0,0.5)',overflow:'hidden',minWidth:'150px'}}>
             <button onClick={()=>{const l=legMenu.leg;setLegMenu(null);tripBasePath?navigate(`${tripBasePath}/${l.dispatch?._id?.$oid}`):navigate(`/flights/${l._id?.$oid}`,{state:{leg:l}});}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',color:'var(--text-primary)',fontSize:'13px',cursor:'pointer'}}>Open</button>
-            <button onClick={()=>{setDivertLeg(legMenu.leg);setLegMenu(null);}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',borderTop:'1px solid var(--border)',color:actuals[legMenu.leg?._id?.$oid]?.divertedTo?'#ef4444':'#f59e0b',fontSize:'13px',cursor:'pointer'}}>{actuals[legMenu.leg?._id?.$oid]?.divertedTo?'⚠ Edit / remove diversion':'⚠ Mark diverted'}</button>
+            <button onClick={()=>{setDivertSuggest(null);setDivertLeg(legMenu.leg);setLegMenu(null);}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',borderTop:'1px solid var(--border)',color:actuals[legMenu.leg?._id?.$oid]?.divertedTo?'#ef4444':'#f59e0b',fontSize:'13px',cursor:'pointer'}}>{actuals[legMenu.leg?._id?.$oid]?.divertedTo?'⚠ Edit / remove diversion':'⚠ Mark diverted'}</button>
           </div>
         </>
       )}
-      {divertLeg && <DivertModal leg={divertLeg} currentDivert={actuals[divertLeg?._id?.$oid]?.divertedTo||null} onClose={()=>setDivertLeg(null)} onSaved={()=>{ if(refetchActuals) refetchActuals(); }} />}
+      {divertLeg && <DivertModal leg={divertLeg} currentDivert={actuals[divertLeg?._id?.$oid]?.divertedTo||null} suggestedIcao={divertSuggest} onClose={()=>{setDivertLeg(null);setDivertSuggest(null);}} onSaved={()=>{ if(refetchActuals) refetchActuals(); }} />}
       <style>{`
         @keyframes exjetAirbornePulse {
           0%, 100% { box-shadow: 0 0 2px 0 var(--ab); }

@@ -434,6 +434,10 @@ without Supabase.
   calendar shows the leg's actual bar **red "⤳ C"** and parks the plane at C; `DivertModal.jsx` is opened
   from the calendar leg popover (Open / Mark diverted) and the flight-detail page. A departed-but-not-yet-
   confirmed leg (coverage gap, before any divert mark) shows the **amber dashed "unconfirmed"** bar.
+  **ADS-B "looks diverted" alert:** `/positions` resolves each stale fix's `nearestIcao`
+  (`services/nearestAirport.js` over `airports.json`); when it differs from a departed-unconfirmed leg's
+  scheduled arrival, the calendar shows an amber **"⚠ <icao>?"** badge (click → divert modal prefilled) and
+  the map labels it "near <icao>". It's a prompt only — the dispatcher still confirms via the modal.
 - **Pure helpers** (`services/adsbTrack.js`, unit-tested): `detectTakeoff`, `deriveActualTimes`,
   `approximateActualTimes`, `matchActiveLeg`, `crewActualsFromLeg`, `clipTrackToLeg`, `firstAirborneTime`,
   `normReg` (tail canonicalization — everything `normReg`s tails on both sides before matching).
