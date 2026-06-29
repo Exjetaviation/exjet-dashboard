@@ -240,7 +240,14 @@ export default function FleetMap() {
         // arrival). (Phase 2c will resolve the nearest airport.)
         airport: stale ? null : ac.airport,
         currentLeg: stale ? null : ac.currentLeg,
-        statusLabel: stale ? `Last seen · ${ago}${livePos.nearestIcao ? ` · near ${livePos.nearestIcao}` : ''}` : (livePos.onGround ? 'On Ground · live' : 'In Flight · live'),
+        // A stale fix that's on the ground is PARKED at that airport — say so plainly
+        // ("On ground at KHOU") rather than the vaguer "last seen near", which reads as
+        // uncertain. A stale airborne fix keeps "last seen near" (it was mid-air).
+        statusLabel: stale
+          ? (livePos.onGround
+              ? `On ground${livePos.nearestIcao ? ` at ${livePos.nearestIcao}` : ''} · ${ago}`
+              : `Last seen · ${ago}${livePos.nearestIcao ? ` · near ${livePos.nearestIcao}` : ''}`)
+          : (livePos.onGround ? 'On Ground · live' : 'In Flight · live'),
         statusColor: stale ? '#94a3b8' : (livePos.onGround ? '#22c55e' : '#f59e0b'),
         track: livePos.track,
         live: livePos,
