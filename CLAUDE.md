@@ -738,6 +738,7 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   - **`Dashboard`** at `/*` — left `Sidebar` + `TopNav` + pages.
   - **`SchedulingApp`** at `/scheduling/*` — full-width (no sidebar) + `TopNav`.
   - `TopNav` switches between the two shells + Sign out.
+- **Responsive foundation (mobile/iPad):** `hooks/useBreakpoint.js` (phone <768 / tablet 768–1023 / desktop ≥1024, from `lib/breakpoints.js`) drives structural swaps. `components/AppShell.jsx` owns both shells' layout: desktop = existing sidebar (unchanged); iPad-portrait = 64px icon-rail `Sidebar collapsed`; phone = `BottomTabBar` (Calendar/Flights/Quotes/Overview + Menu) + `NavDrawer` (full nav incl. hidden Rate Cards/Maintenance + shell switch + Sign out), nav list shared via `lib/navConfig.js`. Primitives `Sheet` (modal/drawer→full-screen on phone) and `ResponsiveTable` (records→cards, matrix→frozen-first-column scroll) exist for later tiers. Utility CSS in `styles/responsive.css` + spacing/type/`--page-pad` tokens in `index.css`. **Invariant: desktop (≥1024px) is unchanged.**
 - **Dashboard routes:** `/` Overview, `/map` Map (Leaflet fleet), `/calendar` Calendar (the Gantt),
   `/flights` + `/flights/:id`, `/trips/:id`, `/crew` + `/crew/:id`, `/aircraft` + `/aircraft/:tail`,
   `/clients` + `/clients/:id`, `/rate-cards`, `/finances`, `/maintenance`, `/assistant`, `/crew-calendar`,
