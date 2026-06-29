@@ -1,42 +1,29 @@
+// frontend/src/components/Sidebar.jsx
 import { NavLink } from 'react-router-dom';
 import logo from '../assets/logo.png';
+import { sidebarLinks } from '../lib/navConfig';
 
-
-const links = [
-  { to: '/', label: 'Overview', icon: '◈' },
-  { to: '/map', label: 'Fleet Map', icon: '🗺' },
-  { to: '/calendar', label: 'Calendar', icon: '▦' },
-  { to: '/flights', label: 'Flights', icon: '✈' },
-  { to: '/crew', label: 'Crew', icon: '👤' },
-  { to: '/aircraft', label: 'Aircraft', icon: '🛩' },
-  { to: '/clients', label: 'Clients', icon: '◎' },
-  { to: '/quotes', label: 'Quotes', icon: '📋' },
-  { to: '/finances', label: 'Finances', icon: '💰' },
-  // Hidden from sidebar — pages and routes still live at /rate-cards and /maintenance.
-  // { to: '/rate-cards', label: 'Rate Cards', icon: '＄' },
-  // { to: '/maintenance', label: 'Maintenance', icon: '🔧' },
-  { to: '/assistant', label: 'AI Assistant', icon: '✦' },
-  { to: '/crew-calendar', label: 'Crew Calendar', icon: '📅' },
-];
-
-export default function Sidebar({ open = true }) {
+export default function Sidebar({ open = true, collapsed = false }) {
+  const width = collapsed ? 64 : 220;
   return (
     <aside style={{
-      width: '220px', height: '100vh',
+      width, height: '100vh',
       background: 'var(--bg-secondary)',
       borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column',
       position: 'fixed', top: 0, left: 0, zIndex: 100,
-      transform: open ? 'translateX(0)' : 'translateX(-220px)',
+      transform: open ? 'translateX(0)' : `translateX(-${width}px)`,
       transition: 'transform 0.2s ease',
     }}>
-      <div style={{ padding: '24px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img src={logo} alt="Exjet Aviation" style={{ width: '200px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+      <div style={{ padding: collapsed ? '20px 0' : '24px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <img src={logo} alt="Exjet Aviation" style={{ width: collapsed ? 36 : 200, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
       </div>
       <nav style={{ padding: '12px 0', flex: 1, overflowY: 'auto' }}>
-        {links.map(({ to, label, icon }) => (
-          <NavLink key={to} to={to} end={to === '/'} style={({ isActive }) => ({
-            display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 20px',
+        {sidebarLinks().map(({ to, label, icon }) => (
+          <NavLink key={to} to={to} end={to === '/'} title={collapsed ? label : undefined} style={({ isActive }) => ({
+            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : '12px',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            padding: collapsed ? '11px 0' : '11px 20px',
             color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
             background: isActive ? 'rgba(79,142,247,0.08)' : 'transparent',
             borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
@@ -44,13 +31,15 @@ export default function Sidebar({ open = true }) {
             fontWeight: isActive ? '500' : '400', transition: 'all 0.15s',
           })}>
             <span style={{ fontSize: '15px' }}>{icon}</span>
-            {label}
+            {!collapsed && label}
           </NavLink>
         ))}
       </nav>
-      <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', fontSize: '11px', color: 'var(--text-secondary)' }}>
-        Exjet Aviation · Ops Dashboard
-      </div>
+      {!collapsed && (
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', fontSize: '11px', color: 'var(--text-secondary)' }}>
+          Exjet Aviation · Ops Dashboard
+        </div>
+      )}
     </aside>
   );
 }
