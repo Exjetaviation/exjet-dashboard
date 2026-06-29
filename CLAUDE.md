@@ -82,9 +82,12 @@ flow that we fully own) plus the supporting ops features below. Recent/active wo
 
 - **Just merged to `main`:** fuel-price email ingestion (WFS + Everest vendor CSVs → `fuel_prices` +
   a Fuel admin tab). Calendar "simulate fleet" demo + always-on NOW pill.
-- **Uncommitted in the working tree (on `main`):** `adsbRecorder.js` / `adsbTrack.js` — **firehose-based
-  departure recovery** so a server that boots mid-flight (or a plane picked up mid-climb) recovers
-  `actual_dep` from the persisted track instead of stamping a late "now". See §9.
+- **Recently merged to `main`:** a large **calendar + fleet-map overhaul** — continuous Day/12h scroll
+  (spans all flights + ≥3 months ahead), 24-hour clock, duty bars (top=PIC/bottom=SIC), on-ground/parked
+  airports; **ADS-B coherence guards** (`coherentArrival` — corrupt actuals can't mark a leg started/done);
+  **last-known position** on the map; and the **diversion** feature (mark/edit/remove a leg's actual
+  landing airport, an ADS-B "looks-diverted" alert, and DIVERTED rendering across calendar + map —
+  migration `023`). See §9 and §20.
 - **Awaiting rollout (opt-in, dark until enabled):**
   - **Slack per-trip channels** (§11) — needs migration `020` applied, a Slack app + `SLACK_BOT_TOKEN`
     + member-group env vars on Railway, and `SLACK_TRIP_CHANNELS=on`.
@@ -129,13 +132,14 @@ flow that we fully own) plus the supporting ops features below. Recent/active wo
 - **CORS** is locked to `http://localhost:5173` and `https://exjet-dashboard.vercel.app`.
 
 ### Migrations — applied MANUALLY
-Numbered SQL in `backend/migrations/` (**`001` … `022`**, latest `022_fleet.sql`). There is **no
+Numbered SQL in `backend/migrations/` (**`001` … `023`**, latest `023_divert.sql`). There is **no
 migration runner and no `psql`/DDL access** — Claude only has the Supabase PostgREST client (service
 key). **Migrations are applied by hand in the Supabase SQL editor.** Every migration is idempotent
 (`IF NOT EXISTS` guards). After writing one, **ask the user to run it.** Stores are written to
 **soft-fail** when a table/column is absent, so code can deploy before its migration is applied.
 The latest migrations gate in-flight features: `018` quoting revamp, `019` quote-accept, `020` Slack,
-`021` fuel, `022` fleet (aircraft profiles + components + time ledger + flight info).
+`021` fuel, `022` fleet (aircraft profiles + components + time ledger + flight info), `023` diversion
+marks (`leg_actuals.actual_arr_icao`/`divert_note`/`divert_status`).
 
 ---
 
@@ -629,7 +633,7 @@ no-op), so local boots and tests never touch LF/Slack/Gmail unless explicitly en
 
 ## 18. Database schema (Supabase Postgres)
 
-Migrations `001`–`021` in `backend/migrations/`, applied **manually** (§3). Two tables are created
+Migrations `001`–`023` in `backend/migrations/`, applied **manually** (§3). Two tables are created
 **out-of-band** in Supabase (no migration file): `rate_cards` (only ALTERed by migrations) and
 `app_config` (a simple `key`/`value` table, currently holding only `QB_REFRESH_TOKEN` — see §12).
 Catalog (table → what a row is → key columns):
@@ -900,7 +904,7 @@ exjet-dashboard/
 │   │   ├── slack/                # per-trip Slack channels (§11)
 │   │   ├── agent/                # AI Operations Copilot (§14) + providers/, tools/
 │   │   └── assets/quote/         # logos + N69FP photos for documents
-│   ├── migrations/               # 001–021, applied MANUALLY in Supabase
+│   ├── migrations/               # 001–023, applied MANUALLY in Supabase
 │   ├── scripts/                  # operational scripts (§22)
 │   ├── manuals/GOM.pdf           # RAG corpus (gitignored)
 │   └── railway.toml
