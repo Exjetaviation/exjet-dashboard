@@ -7,6 +7,7 @@ import { clipTrackToLeg, normReg, monthAnchors, legTail } from '../services/adsb
 import { getFlightTrack, getFlightTracksByLegIds } from '../services/flightTrackStore.js';
 import { getLegActualsInRange, recordDivert, clearDivert } from '../services/legActualsStore.js';
 import { canEditScheduling } from '../scheduling/canEdit.js';
+import { nearestAirport } from '../services/nearestAirport.js';
 
 const router = express.Router();
 
@@ -26,7 +27,8 @@ router.get('/positions', async (req, res) => {
       if (missing.length) {
         const last = await getLastPositions(missing);
         for (const [reg, p] of Object.entries(last)) {
-          merged[reg] = { lat: p.lat, lon: p.lon, onGround: p.on_ground, stale: true, lastSeenMs: p.t, airborneSinceMs: null };
+          const near = nearestAirport(p.lat, p.lon); // for the "looks diverted" check on the client
+          merged[reg] = { lat: p.lat, lon: p.lon, onGround: p.on_ground, stale: true, lastSeenMs: p.t, nearestIcao: near?.icao || null, airborneSinceMs: null };
         }
       }
     } catch { /* soft */ }

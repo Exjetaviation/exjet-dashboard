@@ -6,10 +6,10 @@ import AirportInput from './AirportInput';
 // scheduled flight is incomplete. Shared by the calendar leg popover and the flight-detail
 // page. Props: leg (LF-shaped: _id.$oid, departure/arrival, dispatch.aircraft.tailNumber),
 // onClose(), onSaved().
-export default function DivertModal({ leg, currentDivert, onClose, onSaved }) {
+export default function DivertModal({ leg, currentDivert, suggestedIcao, onClose, onSaved }) {
   const legId = leg?._id?.$oid;
   const schedArr = (leg?.arrival?.airport || '').toUpperCase();
-  const [icao, setIcao] = useState('');
+  const [icao, setIcao] = useState(suggestedIcao || currentDivert || '');
   const [note, setNote] = useState('');
   const [status, setStatus] = useState('diverted'); // 'diverted' (trip continues) | 'cancelled'
   const [saving, setSaving] = useState(false);

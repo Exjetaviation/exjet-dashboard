@@ -216,7 +216,7 @@ export default function FleetMap() {
         // arrival). (Phase 2c will resolve the nearest airport.)
         airport: stale ? null : ac.airport,
         currentLeg: stale ? null : ac.currentLeg,
-        statusLabel: stale ? `Last seen · ${ago}` : (livePos.onGround ? 'On Ground · live' : 'In Flight · live'),
+        statusLabel: stale ? `Last seen · ${ago}${livePos.nearestIcao ? ` · near ${livePos.nearestIcao}` : ''}` : (livePos.onGround ? 'On Ground · live' : 'In Flight · live'),
         statusColor: stale ? '#94a3b8' : (livePos.onGround ? '#22c55e' : '#f59e0b'),
         track: livePos.track,
         live: livePos,
