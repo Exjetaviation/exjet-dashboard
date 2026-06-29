@@ -734,10 +734,10 @@ Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuote
 objects using CSS variables** (Tailwind is installed but barely used). **Force-dark theme app-wide**
 (`index.css` paints html+body dark; CSS vars `--bg-primary #0a0a0f`, `--accent #4f8ef7`, etc.).
 
-- **Two shells** (`App.jsx`), both behind `RequireAuth`; `/login` public:
-  - **`Dashboard`** at `/*` — left `Sidebar` + `TopNav` + pages.
-  - **`SchedulingApp`** at `/scheduling/*` — full-width (no sidebar) + `TopNav`.
-  - `TopNav` switches between the two shells + Sign out.
+- **Two shells** (`App.jsx`), both behind `RequireAuth`; `/login` public. Both shells render their chrome through `components/AppShell.jsx` (see "Responsive foundation" below) — `App.jsx` itself is now just `<AppShell>` wrapping the `<Routes>`, so `Sidebar`/`TopNav` are no longer direct children of `App.jsx`:
+  - **`Dashboard`** at `/*` — `Sidebar` + `TopNav` + pages (via `AppShell withSidebar`).
+  - **`SchedulingApp`** at `/scheduling/*` — full-width (no sidebar) + `TopNav` (via `AppShell`).
+  - `TopNav` switches between the two shells + Sign out (on phone these move into `NavDrawer`).
 - **Responsive foundation (mobile/iPad):** `hooks/useBreakpoint.js` (phone <768 / tablet 768–1023 / desktop ≥1024, from `lib/breakpoints.js`) drives structural swaps. `components/AppShell.jsx` owns both shells' layout: desktop = existing sidebar (unchanged); iPad-portrait = 64px icon-rail `Sidebar collapsed`; phone = `BottomTabBar` (Calendar/Flights/Quotes/Overview + Menu) + `NavDrawer` (full nav incl. hidden Rate Cards/Maintenance + shell switch + Sign out), nav list shared via `lib/navConfig.js`. Primitives `Sheet` (modal/drawer→full-screen on phone) and `ResponsiveTable` (records→cards, matrix→frozen-first-column scroll) exist for later tiers. Utility CSS in `styles/responsive.css` + spacing/type/`--page-pad` tokens in `index.css`. **Invariant: desktop (≥1024px) is unchanged.**
 - **Dashboard routes:** `/` Overview, `/map` Map (Leaflet fleet), `/calendar` Calendar (the Gantt),
   `/flights` + `/flights/:id`, `/trips/:id`, `/crew` + `/crew/:id`, `/aircraft` + `/aircraft/:tail`,
