@@ -814,7 +814,7 @@ export default function Finances() {
           {plClasses.length === 0 && (
             <div style={{ ...s.card, marginTop: 14 }}>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-                P&amp;L by Class hasn't come back from QuickBooks yet. If this persists, check the debug dump at <code>/api/finances/debug/financials</code>.
+                P&amp;L by Class hasn't come back from QuickBooks yet. If this persists, check the QuickBooks connection on the Finances admin.
               </p>
             </div>
           )}

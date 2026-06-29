@@ -35,7 +35,7 @@ import { listComponents, applyLedgerEntry } from '../fleet/componentStore.js';
 const router = express.Router();
 
 // Authorization gate for mutating scheduling routes (read routes stay open to any
-// authenticated user). req.user.role comes from requireAuth (Supabase app_role).
+// authenticated user). req.user.role comes from requireAuth (app_metadata.app_role).
 function requireSchedulingEditor(req, res, next) {
   if (canEditScheduling(req.user?.role)) return next();
   return res.status(403).json({ error: 'You do not have permission to edit scheduling (requires a dispatcher / scheduler role).' });

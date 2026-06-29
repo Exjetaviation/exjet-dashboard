@@ -132,14 +132,14 @@ flow that we fully own) plus the supporting ops features below. Recent/active wo
 - **CORS** is locked to `http://localhost:5173` and `https://exjet-dashboard.vercel.app`.
 
 ### Migrations — applied MANUALLY
-Numbered SQL in `backend/migrations/` (**`001` … `023`**, latest `023_divert.sql`). There is **no
+Numbered SQL in `backend/migrations/` (**`001` … `024`**, latest `024_enable_rls.sql`). There is **no
 migration runner and no `psql`/DDL access** — Claude only has the Supabase PostgREST client (service
 key). **Migrations are applied by hand in the Supabase SQL editor.** Every migration is idempotent
 (`IF NOT EXISTS` guards). After writing one, **ask the user to run it.** Stores are written to
 **soft-fail** when a table/column is absent, so code can deploy before its migration is applied.
 The latest migrations gate in-flight features: `018` quoting revamp, `019` quote-accept, `020` Slack,
 `021` fuel, `022` fleet (aircraft profiles + components + time ledger + flight info), `023` diversion
-marks (`leg_actuals.actual_arr_icao`/`divert_note`/`divert_status`).
+marks (`leg_actuals.actual_arr_icao`/`divert_note`/`divert_status`). `024` enables RLS + revokes anon/authenticated grants on all public tables (audit C3).
 
 ---
 
@@ -529,8 +529,7 @@ Auto-provisions **two private Slack channels per booked trip** — ops/crew (`tr
 - **Endpoints** (`routes/finances.js`, `/api/finances`): `GET /summary` (the main dashboard batch),
   `/raw-invoices`, `/by-aircraft`, `/by-trips`, `/gl/:aircraft`, `/auth-url`; **`GET /callback` is PUBLIC**
   (OAuth redirect, mounted pre-guard, returns the refresh token + realm to paste into Railway); and
-  temporary **`/debug/*`** endpoints that are **exempted from auth** in `index.js` (TODO: remove with the
-  debug routes). Env: `QB_CLIENT_ID/SECRET/REDIRECT_URI/REFRESH_TOKEN/REALM_ID`.
+  (the former temporary `/debug/*` endpoints and their auth exemption were removed — audit H1). Env: `QB_CLIENT_ID/SECRET/REDIRECT_URI/REFRESH_TOKEN/REALM_ID`.
 
 ---
 
@@ -604,10 +603,8 @@ hard-coded here) merged with manually-entered `maintenance_events` rows. Endpoin
   to `/login`**.
 - **Backend** (`middleware/requireAuth.js`): reads the bearer token and **verifies it via
   `supabase.auth.getUser(token)`**. **Supabase access tokens are ES256 (asymmetric) — NEVER `jwt.verify`
-  with HS256.** Sets `req.user = {id, email, role}` (`role = user_metadata.app_role || 'crew'`).
-- **Mounting** (`index.js`): public (pre-guard) = `/health`, `/api/finances/callback`,
-  `/api/quotes/auth-callback`, **`/quote`**, **`/itinerary`**. Everything else under `/api/*` requires
-  auth, **except `/api/finances/debug/*`** (temporary exemption). The **public quote/itinerary id is the
+  with HS256.** Sets `req.user = {id, email, role}` (`role = app_metadata.app_role || 'crew'` — app_metadata is service-role-only via the Admin API, NOT the user-writable user_metadata; audit H2).
+- **Mounting** (`index.js`): public (pre-guard) = `/health`, the two exact OAuth-redirect routes `/api/finances/callback` and `/api/quotes/auth-callback` (single `app.get` handlers, NOT whole-router mounts — audit C1/C2), **`/quote`**, **`/itinerary`**. Everything else under `/api/*` requires auth (no exemptions; the `/finances/debug/*` bypass was removed — audit H1). The **public quote/itinerary id is the
   bearer token** — don't move the PII-bearing trip sheet to a public route.
 - **Three Supabase clients, different keys/lifecycles:** `services/supabase.js` (service-role, eager),
   `requireAuth.js` (anon key), `agent/serviceClient.js` (service-role, lazy). The service key bypasses RLS.
@@ -633,7 +630,7 @@ no-op), so local boots and tests never touch LF/Slack/Gmail unless explicitly en
 
 ## 18. Database schema (Supabase Postgres)
 
-Migrations `001`–`023` in `backend/migrations/`, applied **manually** (§3). Two tables are created
+Migrations `001`–`024` in `backend/migrations/`, applied **manually** (§3). Two tables are created
 **out-of-band** in Supabase (no migration file): `rate_cards` (only ALTERed by migrations) and
 `app_config` (a simple `key`/`value` table, currently holding only `QB_REFRESH_TOKEN` — see §12).
 Catalog (table → what a row is → key columns):
@@ -704,8 +701,7 @@ Catalog (table → what a row is → key columns):
 ## 19. HTTP API surface (route catalog)
 
 Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuotes.js`), `/itinerary/*`
-(`publicItinerary.js`), `/api/finances/callback`, `/api/quotes/auth-callback`. **Auth-guarded `/api/*`**
-(exempt: `/api/finances/debug/*`):
+(`publicItinerary.js`), `/api/finances/callback`, `/api/quotes/auth-callback`. **Auth-guarded `/api/*`** (no exemptions):
 
 | Router | Mount | Highlights |
 |---|---|---|
@@ -715,7 +711,7 @@ Mounted in `index.js`. **Public** (no auth): `/health`, `/quote/*` (`publicQuote
 | `quotes.js` | `/api/quotes` | OLD email-AI quotes (`/scan`, CRUD, `/:id/send`) + LF quote read-through (`/list`, `/dispatch/:id/preview\|pdf\|send-link`). |
 | `rateCards.js` | `/api/rate-cards` | rate-card CRUD. |
 | `tripSheet.js` | `/api/tripsheet` | `/:id`, `/:id/pdf` (auth — PII). |
-| `finances.js` | `/api/finances` | QuickBooks dashboard (`/summary`, `/by-aircraft`, `/by-trips`, `/gl/:aircraft`); public `/callback`; exempt `/debug/*`. |
+| `finances.js` | `/api/finances` | QuickBooks dashboard (`/summary`, `/by-aircraft`, `/by-trips`, `/gl/:aircraft`); public `/callback` (single exact-path route); debug routes removed. |
 | `maintenance.js` | `/api/maintenance` | work orders + manual events. |
 | `foreflight.js` | `/api/foreflight` | briefing pass-throughs. |
 | `agent.js` | `/api/agent` | readiness review + chat (NDJSON streaming). |

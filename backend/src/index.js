@@ -5,8 +5,8 @@ import foreflightRoutes from './routes/foreflight.js';
 import levelflightRoutes from './routes/levelflight.js';
 import assistantRoutes from './routes/assistant.js';
 import rateCardRoutes from './routes/rateCards.js';
-import quotesRoutes from './routes/quotes.js';
-import financesRoutes from './routes/finances.js';
+import quotesRoutes, { gmailOauthCallback } from './routes/quotes.js';
+import financesRoutes, { financeOauthCallback } from './routes/finances.js';
 import maintenanceRoutes from './routes/maintenance.js';
 import agentRoutes from './routes/agent.js';
 import adsbRoutes from './routes/adsb.js';
@@ -42,23 +42,20 @@ app.use(express.json());
 // Health check stays public so Railway can monitor the service.
 app.get('/health', (req, res) => res.json({ status: 'Exjet backend running' }));
 
-// OAuth callbacks are hit by Google / Intuit, not the browser, so they
-// cannot send a login token. They stay outside the auth guard.
-app.use('/api/finances/callback', financesRoutes);
-app.use('/api/quotes/auth-callback', quotesRoutes);
+// OAuth redirect callbacks are hit by Intuit / Google, not the browser, so they
+// cannot send a login token. ONLY these two exact paths are public — using
+// app.get (exact match) instead of app.use (prefix mount) so sibling finance /
+// quote routes are NOT exposed (audit findings C1, C2).
+app.get('/api/finances/callback', financeOauthCallback);
+app.get('/api/quotes/auth-callback', gmailOauthCallback);
 
 // Public quote pages — unauthenticated access via 24-char dispatch ID.
 app.use('/quote', publicQuotesRoutes);
 // Public passenger-itinerary pages — same unauthenticated dispatch-ID access model.
 app.use('/itinerary', publicItineraryRoutes);
 
-// Everything below this line REQUIRES a valid login token — EXCEPT temporary
-// /finances/debug/* endpoints, so they can be opened directly in a browser.
-// TODO: remove this exemption when the debug routes are deleted.
-app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/finances/debug/')) return next();
-  return requireAuth(req, res, next);
-});
+// Everything below this line REQUIRES a valid login token. No exemptions.
+app.use('/api', requireAuth);
 
 app.use('/api/foreflight', foreflightRoutes);
 app.use('/api/levelflight', levelflightRoutes);
