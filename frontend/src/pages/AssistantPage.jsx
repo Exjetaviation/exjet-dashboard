@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import wings from '../assets/wings.png';
 import { apiFetch } from '../lib/api';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 const SUGGESTIONS = [
   "What flights are scheduled this week?",
@@ -19,6 +20,7 @@ export default function AssistantPage() {
   const [loading, setLoading]   = useState(false);
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
+  const { isPhone } = useBreakpoint();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,7 +49,7 @@ export default function AssistantPage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', gap: '0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: isPhone ? 'calc(100dvh - 200px)' : 'calc(100vh - 64px)', gap: '0' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
