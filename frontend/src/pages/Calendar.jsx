@@ -1079,11 +1079,11 @@ useEffect(() => {
           <div onClick={()=>setLegMenu(null)} style={{position:'fixed',inset:0,zIndex:9998}}/>
           <div style={{position:'fixed',left:Math.min(legMenu.x,window.innerWidth-170),top:legMenu.y+8,zIndex:9999,background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:'8px',boxShadow:'0 8px 24px rgba(0,0,0,0.5)',overflow:'hidden',minWidth:'150px'}}>
             <button onClick={()=>{const l=legMenu.leg;setLegMenu(null);tripBasePath?navigate(`${tripBasePath}/${l.dispatch?._id?.$oid}`):navigate(`/flights/${l._id?.$oid}`,{state:{leg:l}});}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',color:'var(--text-primary)',fontSize:'13px',cursor:'pointer'}}>Open</button>
-            <button onClick={()=>{setDivertLeg(legMenu.leg);setLegMenu(null);}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',borderTop:'1px solid var(--border)',color:'#f59e0b',fontSize:'13px',cursor:'pointer'}}>⚠ Mark diverted</button>
+            <button onClick={()=>{setDivertLeg(legMenu.leg);setLegMenu(null);}} style={{display:'block',width:'100%',textAlign:'left',padding:'9px 14px',background:'transparent',border:'none',borderTop:'1px solid var(--border)',color:actuals[legMenu.leg?._id?.$oid]?.divertedTo?'#ef4444':'#f59e0b',fontSize:'13px',cursor:'pointer'}}>{actuals[legMenu.leg?._id?.$oid]?.divertedTo?'⚠ Edit / remove diversion':'⚠ Mark diverted'}</button>
           </div>
         </>
       )}
-      {divertLeg && <DivertModal leg={divertLeg} onClose={()=>setDivertLeg(null)} onSaved={()=>{ if(refetchActuals) refetchActuals(); }} />}
+      {divertLeg && <DivertModal leg={divertLeg} currentDivert={actuals[divertLeg?._id?.$oid]?.divertedTo||null} onClose={()=>setDivertLeg(null)} onSaved={()=>{ if(refetchActuals) refetchActuals(); }} />}
       <style>{`
         @keyframes exjetAirbornePulse {
           0%, 100% { box-shadow: 0 0 2px 0 var(--ab); }
