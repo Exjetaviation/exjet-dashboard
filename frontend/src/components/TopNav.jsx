@@ -1,3 +1,4 @@
+// frontend/src/components/TopNav.jsx
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
@@ -8,9 +9,25 @@ const TABS = [
   { label: 'Scheduling', to: '/scheduling', isActive: (p) => p.startsWith('/scheduling') },
 ];
 
-export default function TopNav() {
+export default function TopNav({ compact = false, onMenu }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+
+  if (compact) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        borderBottom: '1px solid var(--border)', marginBottom: 16, paddingBottom: 8,
+      }}>
+        <strong style={{ fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>Exjet</strong>
+        <div style={{ flex: 1 }} />
+        <button onClick={onMenu} aria-label="Open menu" style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+          color: 'var(--text-primary)', fontSize: 18, padding: '4px 12px', cursor: 'pointer',
+        }}>☰</button>
+      </div>
+    );
+  }
 
   return (
     <div style={{
