@@ -40,3 +40,33 @@ export function legStateColor(leg, isAirborne, act, now) {
 }
 
 export const floorDay = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
+
+// Great-circle distance in nautical miles between two lat/lon points (haversine).
+// Returns null if any coordinate is missing.
+export function nmBetween(lat1, lon1, lat2, lon2) {
+  if ([lat1, lon1, lat2, lon2].some(v => v == null || Number.isNaN(v))) return null;
+  const R = 3440.065; // Earth radius in nautical miles
+  const rad = d => (d * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// How close (nm) an on-ground fix must be to the scheduled arrival airport to
+// count as "landed there" — covers the airport footprint + FBO ramp.
+export const ARR_CONFIRM_NM = 5;
+
+// A departed leg has effectively LANDED at its scheduled arrival when the
+// aircraft's current OR last-known ADS-B fix shows it on the ground within a few
+// nm of that airport. This rescues the common case where ADS-B never logged the
+// exact air→ground touchdown tick (so no actual_arr was recorded) yet the jet is
+// plainly parked at the destination — without it the leg would show an alarming
+// amber "unconfirmed" bar until crew log OOOI block times or the hourly backfill.
+// `la` = the /positions entry for the tail ({lat, lon, onGround, stale?}).
+// `arrLoc` = the scheduled arrival airport coords ({lat, lng}).
+export function landedAtDestination(la, arrLoc, maxNm = ARR_CONFIRM_NM) {
+  if (!la || la.onGround !== true) return false;
+  if (!arrLoc || arrLoc.lat == null || la.lat == null) return false;
+  const d = nmBetween(la.lat, la.lon, arrLoc.lat, arrLoc.lng);
+  return d != null && d <= maxNm;
+}

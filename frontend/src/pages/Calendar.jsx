@@ -7,7 +7,7 @@ import { overnightExtraCols, dayOffsetFromNow, monthOffsetFromNow } from '../lib
 import { easternParts, zuluParts } from '../lib/easternTime';
 import { groupDutiesByStart } from '../lib/dutyGroups';
 import DivertModal from '../components/DivertModal';
-import { STATE_COLORS, STATUS, arrShown, legStateColor, floorDay } from '../lib/calendarLeg';
+import { STATE_COLORS, STATUS, arrShown, legStateColor, floorDay, landedAtDestination } from '../lib/calendarLeg';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import CalendarAgenda from '../components/CalendarAgenda';
 // STATUS, STATE_COLORS, arrShown, legStateColor, and floorDay are imported from
@@ -884,8 +884,14 @@ useEffect(() => {
                     const legId=leg._id?.$oid;
                     const act=(legId&&actuals[legId])||{};
                     const la=live[ac.tail];
+                    // The aircraft's current OR last-known fix is on the ground at the
+                    // SCHEDULED arrival airport ⇒ it has landed there, even if ADS-B never
+                    // logged the exact touchdown (no actual_arr recorded) and crew haven't
+                    // entered block times. Treat as completed so the bar isn't shown as an
+                    // alarming "unconfirmed"/possible-divert while the jet sits at the gate.
+                    const landed=act.actualDep!=null&&landedAtDestination(la,leg._calc?.to?.location);
                     // Block colour by flight STATE: completed=blue, in-flight=green, future=grey.
-                    const color=legStateColor(leg,isAirborne,act,nowTs);
+                    const color=landed?STATE_COLORS.completed:legStateColor(leg,isAirborne,act,nowTs);
                     const darker=darken(color);
                     // Scheduled flight = transparent outer block (the whole planned span);
                     // actual flight = solid inner block, same colour, nested inside; trip #
@@ -910,7 +916,7 @@ useEffect(() => {
                     // is only an ESTIMATE to the scheduled arrival. Render it dashed/amber
                     // "unconfirmed" so a coverage gap — or a diversion — isn't shown as a normal
                     // completed flight (until the arrival backfills or a dispatcher marks a divert).
-                    const unconfirmed=actBlk!=null&&act.actualDep!=null&&!isAirborne&&!arrShown(act.actualDep,act.actualArr);
+                    const unconfirmed=actBlk!=null&&act.actualDep!=null&&!isAirborne&&!landed&&!arrShown(act.actualDep,act.actualArr);
                     const diverted=!!act.divertedTo; // dispatcher marked it landed elsewhere
                     // ADS-B "looks diverted": departed, not confirmed landed, not already
                     // marked, and the last-known (stale) fix's nearest airport ≠ scheduled arrival.

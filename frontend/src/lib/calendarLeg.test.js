@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STATE_COLORS, STATUS, arrShown, legStateColor, floorDay } from './calendarLeg.js';
+import { STATE_COLORS, STATUS, arrShown, legStateColor, floorDay, nmBetween, landedAtDestination } from './calendarLeg.js';
 
 const H = 3600000;
 
@@ -112,4 +112,52 @@ test('STATE_COLORS has expected values', () => {
 test('STATUS labels match Calendar expectations', () => {
   assert.equal(STATUS[0].label, 'Scheduled');
   assert.equal(STATUS[3].label, 'Completed');
+});
+
+// ---------------------------------------------------------------------------
+// nmBetween — great-circle distance in nautical miles
+// ---------------------------------------------------------------------------
+test('nmBetween: 1° of latitude ≈ 60 nm', () => {
+  const d = nmBetween(0, 0, 1, 0);
+  assert.ok(Math.abs(d - 60) < 0.5, `expected ~60, got ${d}`);
+});
+
+test('nmBetween: same point → 0', () => {
+  assert.equal(nmBetween(29.64, -95.27, 29.64, -95.27), 0);
+});
+
+test('nmBetween: missing coord → null', () => {
+  assert.equal(nmBetween(null, 0, 1, 0), null);
+  assert.equal(nmBetween(0, 0, 1, undefined), null);
+});
+
+// ---------------------------------------------------------------------------
+// landedAtDestination — on-ground (live OR last-known) near the scheduled arrival
+// ---------------------------------------------------------------------------
+const KHOU = { lat: 29.6454, lng: -95.2789 }; // Houston Hobby
+
+test('landedAtDestination: on the ground at the destination → true (even when stale)', () => {
+  const la = { lat: 29.646, lon: -95.279, onGround: true, stale: true };
+  assert.equal(landedAtDestination(la, KHOU), true);
+});
+
+test('landedAtDestination: live on-ground at destination → true', () => {
+  const la = { lat: 29.6454, lon: -95.2789, onGround: true, stale: false };
+  assert.equal(landedAtDestination(la, KHOU), true);
+});
+
+test('landedAtDestination: airborne fix → false', () => {
+  const la = { lat: 29.6454, lon: -95.2789, onGround: false };
+  assert.equal(landedAtDestination(la, KHOU), false);
+});
+
+test('landedAtDestination: on ground but far from destination (~12nm) → false', () => {
+  const la = { lat: 29.85, lon: -95.27, onGround: true }; // ~12 nm north
+  assert.equal(landedAtDestination(la, KHOU), false);
+});
+
+test('landedAtDestination: missing fix or arrival coords → false', () => {
+  assert.equal(landedAtDestination(null, KHOU), false);
+  assert.equal(landedAtDestination({ lat: 29.6454, lon: -95.2789, onGround: true }, null), false);
+  assert.equal(landedAtDestination({ onGround: true }, KHOU), false);
 });
