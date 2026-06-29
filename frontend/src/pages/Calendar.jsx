@@ -187,6 +187,8 @@ export default function Calendar({ legsEndpoint = '/api/levelflight/legs', tripB
   const dateRef = useRef(null); // continuous views: the day-date strip above the calendar
   const dayFocusRef = useRef(null); // Day view: which day's 00:00 sits at the left edge (null = today)
   const nowLineRef = useRef(null); // continuous now-line overlay (spans header + body)
+  const syncRafRef = useRef(0);    // rAF id coalescing header/date scroll-sync to one paint-aligned update
+  const scrollSaveRef = useRef(0); // debounce timer for persisting scroll pos (keeps it out of the scroll hot path)
   const drag    = useRef({on:false,startX:0,scrollX:0,moved:false});
 
   // Fullscreen — native Fullscreen API on the calendar wrapper, with a CSS-maximize
@@ -598,7 +600,7 @@ useEffect(() => {
         <div style={{display:'flex',marginBottom:'-4px'}}>
           <div style={{width:LABEL_W,minWidth:LABEL_W,flexShrink:0}}/>
           <div ref={dateRef} style={{flex:1,overflow:'hidden',minWidth:0}}>
-            <div style={{position:'relative',width:totalW,height:18}}>
+            <div style={{position:'relative',width:totalW,height:18,willChange:'transform'}}>
               {cols.filter(c=>c.d.getHours()===0).map(col=>(
                 <span key={col.i} style={{position:'absolute',left:col.i*colW,top:0,transform:'translateX(-50%)',fontSize:'12px',fontWeight:700,color:col.isToday?'var(--accent)':'#dde',whiteSpace:'nowrap',pointerEvents:'none'}}>{col.d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
               ))}
@@ -617,7 +619,7 @@ useEffect(() => {
           </div>
           <div style={{flex:1,overflow:'hidden',minWidth:0}}>
             <div ref={hdrRef} style={{overflowX:'hidden',width:'100%'}}>
-              <div style={{display:'flex',width:totalW,height:HDR_H,position:'relative',backgroundImage:gridBg}}>
+              <div style={{display:'flex',width:totalW,height:HDR_H,position:'relative',backgroundImage:gridBg,willChange:'transform'}}>
                 {/* Header gridlines as absolute divs (same formula as the body) so header
                     and body lines line up exactly; continuous views use the CSS gradient. */}
                 {!continuous && cols.map(col=>(
@@ -673,17 +675,37 @@ useEffect(() => {
 
           <div ref={bodyRef} onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
             onScroll={e=>{
-              if(hdrRef.current)hdrRef.current.scrollLeft=e.target.scrollLeft;
-              if(dateRef.current)dateRef.current.scrollLeft=e.target.scrollLeft;
+              const body=e.currentTarget;
+              // Vertical label sync is cheap (few rows) — do it inline.
               const lbl=document.getElementById('lbl-col');
-              if(lbl)lbl.scrollTop=e.target.scrollTop;
-              if(didRestoreScroll.current) localStorage.setItem('exjet.calendar.scroll', String(e.target.scrollLeft));
-              // Track the continuous now-line as the body scrolls (no React re-render).
-              if(nowLineRef.current){
-                const off=nowPx-e.target.scrollLeft;
-                const vis=showNow&&off>=0&&off<=e.target.clientWidth;
-                nowLineRef.current.style.display=vis?'block':'none';
-                nowLineRef.current.style.left=(e.target.offsetLeft+off)+'px';
+              if(lbl)lbl.scrollTop=body.scrollTop;
+              // Horizontal header/date sync: drive it with a GPU-friendly transform
+              // (no layout reflow, unlike scrollLeft) and coalesce to ONE paint-aligned
+              // update per frame via rAF, so the time axis tracks the body in lockstep
+              // even on slow hardware instead of lagging a frame behind.
+              if(!syncRafRef.current){
+                syncRafRef.current=requestAnimationFrame(()=>{
+                  syncRafRef.current=0;
+                  const b=bodyRef.current; if(!b) return;
+                  const x=b.scrollLeft;
+                  const tx=`translateX(${-x}px)`;
+                  if(hdrRef.current?.firstElementChild)hdrRef.current.firstElementChild.style.transform=tx;
+                  if(dateRef.current?.firstElementChild)dateRef.current.firstElementChild.style.transform=tx;
+                  if(nowLineRef.current){
+                    const off=nowPx-x;
+                    const vis=showNow&&off>=0&&off<=b.clientWidth;
+                    nowLineRef.current.style.display=vis?'block':'none';
+                    nowLineRef.current.style.left=(b.offsetLeft+off)+'px';
+                  }
+                });
+              }
+              // Persist scroll position OUT of the hot path — debounced to scroll-end.
+              // (Writing localStorage on every scroll tick was a major jank source.)
+              if(didRestoreScroll.current){
+                if(scrollSaveRef.current)clearTimeout(scrollSaveRef.current);
+                scrollSaveRef.current=setTimeout(()=>{
+                  localStorage.setItem('exjet.calendar.scroll',String(bodyRef.current?bodyRef.current.scrollLeft:0));
+                },200);
               }
             }}
             style={{flex:1,minWidth:0,overflowX:'scroll',overflowY:'auto',cursor:'grab'}}>
