@@ -44,30 +44,32 @@ const dir = { async getUserIndex() { return new Map(); } };
 const overrides = { async getOverrideMap() { return new Map(); } };
 const config = { opsMembers: ['UOPS'], accountingMembers: ['UACCT'], managementMembers: ['UMGR'], since: '2026-06-23T00:00:00Z' };
 
-test('provisions a new trip: two channels, invites, intro + unmatched note, records row', async () => {
+test('provisions a new trip: one channel, invites (ops+mgmt+crew), intro + unmatched note, records row', async () => {
   const slack = makeSlack();
   const store = makeStore({ candidates: [{ oid: 'disp1', tripId: 25104 }] });
 
   const n = await provisionNewTrips({ slack, store, dir, overrides, config, now: NOW });
   assert.equal(n, 1);
 
-  // Two channels created with the right names.
-  assert.deepEqual(slack.calls.created.map((c) => c.name), ['trip-25104', 'trip-25104-acct']);
+  // Only the trip channel is created — no separate accounting channel.
+  assert.deepEqual(slack.calls.created.map((c) => c.name), ['trip-25104']);
 
-  // Ops invite = fixed ops group + matched PIC; SIC (bob) unmatched.
+  // Invite = fixed ops group + management + matched PIC; accounting (UACCT) dropped; SIC (bob) unmatched.
   const opsInvite = slack.calls.invited.find((i) => i.channelId === 'C_trip-25104');
-  assert.deepEqual(opsInvite.ids.sort(), ['UANN', 'UOPS']);
-  const acctInvite = slack.calls.invited.find((i) => i.channelId === 'C_trip-25104-acct');
-  assert.deepEqual(acctInvite.ids.sort(), ['UACCT', 'UMGR']);
+  assert.deepEqual(opsInvite.ids.sort(), ['UANN', 'UMGR', 'UOPS']);
+  // No acct channel, no acct invite.
+  assert.ok(!slack.calls.created.some((c) => /-acct$/.test(c.name)));
+  assert.ok(!slack.calls.invited.some((i) => i.ids.includes('UACCT')));
 
-  // Unmatched note posted to ops naming Bob.
+  // Unmatched note posted to the trip channel naming Bob.
   const note = slack.calls.posted.find((p) => p.channelId === 'C_trip-25104' && /Couldn't auto-add/i.test(p.text));
   assert.ok(note && /Bob/.test(note.text));
 
-  // Recorded with both channel ids and the union of invited ids.
+  // Recorded with the trip channel id, null acct id, and the invited ids.
   assert.equal(store.recorded.length, 1);
   assert.equal(store.recorded[0].oid, 'disp1');
-  assert.deepEqual(store.recorded[0].invitedSlackIds.sort(), ['UACCT', 'UANN', 'UMGR', 'UOPS']);
+  assert.equal(store.recorded[0].acctChannelId, null);
+  assert.deepEqual(store.recorded[0].invitedSlackIds.sort(), ['UANN', 'UMGR', 'UOPS']);
 });
 
 test('skips trip numbers already provisioned', async () => {
@@ -84,7 +86,7 @@ test('dedupes multiple dispatch oids sharing one trip number into one channel se
   const store = makeStore({ candidates: [{ oid: 'old', tripId: 25107 }, { oid: 'new', tripId: 25107 }] });
   const n = await provisionNewTrips({ slack, store, dir, overrides, config, now: NOW });
   assert.equal(n, 1);
-  assert.deepEqual(slack.calls.created.map((c) => c.name), ['trip-25107', 'trip-25107-acct']);
+  assert.deepEqual(slack.calls.created.map((c) => c.name), ['trip-25107']);
   assert.equal(store.recorded.length, 1);
 });
 

@@ -492,10 +492,13 @@ quoting** project.
 
 ## 11. Slack per-trip channels
 
-Auto-provisions **two private Slack channels per booked trip** — ops/crew (`trip-<n>`) + accounting
-(`trip-<n>-acct`) — pre-populated with crew + fixed groups. Code: `backend/src/slack/` + `services/slack*.js`
+Auto-provisions **one private Slack channel per booked trip** — the ops/crew trip channel (`trip-<n>`),
+pre-populated with crew + fixed groups. Code: `backend/src/slack/` + `services/slack*.js`
 + `tripCrewStore.js`; migration `020`. **PR #8, opt-in, dark until `SLACK_TRIP_CHANNELS=on`** (also needs
 `SLACK_BOT_TOKEN`). Awaiting migration 020 + Slack app rollout.
+> **Accounting channels retired:** the separate `trip-<n>-acct` channel is no longer created (`recordChannels`
+> now stores `acct_channel_id = null`; the column + `channelName(id,'acct')` helper remain for back-compat).
+> `SLACK_MANAGEMENT_MEMBERS` are folded into the single trip channel; `SLACK_ACCOUNTING_MEMBERS` are dropped (unused).
 
 - **Watcher** (`slackWatcher.js`, `startSlackWatcher`, **60s**): defaults the `since` cutoff to **boot time**
   so the first deploy never back-provisions history. **Source = the scheduling mirror, NOT a live LF call**
@@ -504,9 +507,9 @@ Auto-provisions **two private Slack channels per booked trip** — ops/crew (`tr
   Only **booked** trips (with a `trip_number`) get channels.
 - **Members:** crew from leg snapshots (seats 2/3/7), matched **by email** (lowercased) via
   `users.lookupByEmail` → `slack_user_overrides` fallback. Email backfilled from the cached LF user
-  directory (`lfUserDirectory.js`, oid→email, 30-min TTL). Ops = crew + `SLACK_OPS_MEMBERS`; accounting =
-  `SLACK_ACCOUNTING_MEMBERS` + `SLACK_MANAGEMENT_MEMBERS` (no crew, no top-up). **Invite-only, never removes
-  anyone; no archiving.** Passengers/clients are never added.
+  directory (`lfUserDirectory.js`, oid→email, 30-min TTL). Trip channel = crew + `SLACK_OPS_MEMBERS` +
+  `SLACK_MANAGEMENT_MEMBERS`; `SLACK_ACCOUNTING_MEMBERS` are no longer added (acct channel retired).
+  **Invite-only, never removes anyone; no archiving.** Passengers/clients are never added.
 - **Slack client** (`services/slack.js`): minimal Web API client (bot token); `conversations.create`
   (adopts on `name_taken`), `invite`, `lookupByEmail`, `postMessage`; 429 backoff. Required scopes:
   `groups:write`, `channels:manage`, `chat:write`, `users:read.email`.
@@ -604,6 +607,7 @@ hard-coded here) merged with manually-entered `maintenance_events` rows. Endpoin
 - **Backend** (`middleware/requireAuth.js`): reads the bearer token and **verifies it via
   `supabase.auth.getUser(token)`**. **Supabase access tokens are ES256 (asymmetric) — NEVER `jwt.verify`
   with HS256.** Sets `req.user = {id, email, role}` (`role = app_metadata.app_role || 'crew'` — app_metadata is service-role-only via the Admin API, NOT the user-writable user_metadata; audit H2).
+  - **Granting roles:** set `app_metadata.app_role` via `node scripts/setRole.mjs <email> <role>` (§22) or the Admin API/SQL — **never** the Supabase dashboard's metadata field (that writes `user_metadata`, which is ignored, so the user silently stays `crew` and gets 403s on editor routes). Editor roles are in `scheduling/canEdit.js` (`SCHEDULING_EDITOR_ROLES`). Users must sign out/in to refresh their session after a change.
 - **Mounting** (`index.js`): public (pre-guard) = `/health`, the two exact OAuth-redirect routes `/api/finances/callback` and `/api/quotes/auth-callback` (single `app.get` handlers, NOT whole-router mounts — audit C1/C2), **`/quote`**, **`/itinerary`**. Everything else under `/api/*` requires auth (no exemptions; the `/finances/debug/*` bypass was removed — audit H1). The **public quote/itinerary id is the
   bearer token** — don't move the PII-bearing trip sheet to a public route.
 - **Three Supabase clients, different keys/lifecycles:** `services/supabase.js` (service-role, eager),
@@ -825,7 +829,7 @@ objects using CSS variables** (Tailwind is installed but barely used). **Force-d
   resumable via a gitignored checkpoint), `importNtsb.js` (needs `mdbtools`), `ingest-manuals.js` (GOM RAG).
 - **Reference-data generation:** `genAirports.mjs` / `harvestAirports.mjs` / `harvestAirportNames.mjs`
   (regenerate `scheduling/data/airports.json` + `airportNames.json`).
-- **Auth helper:** `fuelGmailAuth.mjs` (mint `GMAIL_OPS_REFRESH_TOKEN`).
+- **Auth helpers:** `fuelGmailAuth.mjs` (mint `GMAIL_OPS_REFRESH_TOKEN`); `setRole.mjs` (`node scripts/setRole.mjs <email> <role> [--dry-run]` — grant/change a user's `app_metadata.app_role`, the only role source the backend reads; see §16).
 - **Probes / smoke tests:** `exjet-api-probe.js`, `test-tools.js`, `test-manuals.js`,
   `test-crew-duty-rest.js`, `ask.js` (agent CLI/REPL), `ntsbProfile.js` (pure, unit-tested).
 
