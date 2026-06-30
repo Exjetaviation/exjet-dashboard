@@ -43,10 +43,6 @@ function opsIntro(d, crew, snaps) {
   return `✈️ *Trip ${d.tripId || d.oid}*${route ? ` — ${route}` : ''}\nOps channel created. ${crewLine}`;
 }
 
-function acctIntro(d) {
-  return `💵 *Trip ${d.tripId || d.oid}* — accounting channel created.`;
-}
-
 function unmatchedNote(unmatched) {
   const lines = unmatched.map((u) => `• ${u.name || u.email || 'unknown'}`).join('\n');
   return `⚠️ Couldn't auto-add (no Slack match):\n${lines}\nPlease add them manually.`;
@@ -70,29 +66,28 @@ async function resolveCrew({ snaps, fixedGroupIds, slack, dir, overrides, now })
 }
 
 async function provisionOne({ d, slack, store, dir, overrides, config, now }) {
+  // One channel per trip — the trip/ops channel. Accounting channels were retired;
+  // management members are folded into this channel, accounting members are dropped.
   const ops = await slack.createChannel(channelName(d.tripId, 'ops'), { isPrivate: true });
-  const acct = await slack.createChannel(channelName(d.tripId, 'acct'), { isPrivate: true });
-  if (!ops || !acct) throw new Error('channel create failed');
+  if (!ops) throw new Error('channel create failed');
 
   const snaps = await store.getTripLegSnapshots(d.oid);
-  const opsRes = await resolveCrew({ snaps, fixedGroupIds: config.opsMembers, slack, dir, overrides, now });
-  const acctRes = resolveMembers({
-    crew: [],
-    fixedGroupIds: [...config.accountingMembers, ...config.managementMembers],
+  const opsRes = await resolveCrew({
+    snaps,
+    fixedGroupIds: [...config.opsMembers, ...config.managementMembers],
+    slack, dir, overrides, now,
   });
 
   await slack.inviteUsers(ops.id, opsRes.inviteIds);
-  await slack.inviteUsers(acct.id, acctRes.inviteIds);
   await slack.postMessage(ops.id, opsIntro(d, opsRes.crew, snaps));
-  await slack.postMessage(acct.id, acctIntro(d));
   if (opsRes.unmatched.length) await slack.postMessage(ops.id, unmatchedNote(opsRes.unmatched));
 
   await store.recordChannels({
     oid: d.oid,
     tripId: d.tripId,
     opsChannelId: ops.id,
-    acctChannelId: acct.id,
-    invitedSlackIds: [...new Set([...opsRes.inviteIds, ...acctRes.inviteIds])],
+    acctChannelId: null,
+    invitedSlackIds: opsRes.inviteIds,
     firstDepAt: firstDepFromSnaps(snaps),
     status: 'ok',
   });

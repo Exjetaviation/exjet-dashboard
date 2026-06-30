@@ -492,10 +492,13 @@ quoting** project.
 
 ## 11. Slack per-trip channels
 
-Auto-provisions **two private Slack channels per booked trip** — ops/crew (`trip-<n>`) + accounting
-(`trip-<n>-acct`) — pre-populated with crew + fixed groups. Code: `backend/src/slack/` + `services/slack*.js`
+Auto-provisions **one private Slack channel per booked trip** — the ops/crew trip channel (`trip-<n>`),
+pre-populated with crew + fixed groups. Code: `backend/src/slack/` + `services/slack*.js`
 + `tripCrewStore.js`; migration `020`. **PR #8, opt-in, dark until `SLACK_TRIP_CHANNELS=on`** (also needs
 `SLACK_BOT_TOKEN`). Awaiting migration 020 + Slack app rollout.
+> **Accounting channels retired:** the separate `trip-<n>-acct` channel is no longer created (`recordChannels`
+> now stores `acct_channel_id = null`; the column + `channelName(id,'acct')` helper remain for back-compat).
+> `SLACK_MANAGEMENT_MEMBERS` are folded into the single trip channel; `SLACK_ACCOUNTING_MEMBERS` are dropped (unused).
 
 - **Watcher** (`slackWatcher.js`, `startSlackWatcher`, **60s**): defaults the `since` cutoff to **boot time**
   so the first deploy never back-provisions history. **Source = the scheduling mirror, NOT a live LF call**
@@ -504,9 +507,9 @@ Auto-provisions **two private Slack channels per booked trip** — ops/crew (`tr
   Only **booked** trips (with a `trip_number`) get channels.
 - **Members:** crew from leg snapshots (seats 2/3/7), matched **by email** (lowercased) via
   `users.lookupByEmail` → `slack_user_overrides` fallback. Email backfilled from the cached LF user
-  directory (`lfUserDirectory.js`, oid→email, 30-min TTL). Ops = crew + `SLACK_OPS_MEMBERS`; accounting =
-  `SLACK_ACCOUNTING_MEMBERS` + `SLACK_MANAGEMENT_MEMBERS` (no crew, no top-up). **Invite-only, never removes
-  anyone; no archiving.** Passengers/clients are never added.
+  directory (`lfUserDirectory.js`, oid→email, 30-min TTL). Trip channel = crew + `SLACK_OPS_MEMBERS` +
+  `SLACK_MANAGEMENT_MEMBERS`; `SLACK_ACCOUNTING_MEMBERS` are no longer added (acct channel retired).
+  **Invite-only, never removes anyone; no archiving.** Passengers/clients are never added.
 - **Slack client** (`services/slack.js`): minimal Web API client (bot token); `conversations.create`
   (adopts on `name_taken`), `invite`, `lookupByEmail`, `postMessage`; 429 backoff. Required scopes:
   `groups:write`, `channels:manage`, `chat:write`, `users:read.email`.
